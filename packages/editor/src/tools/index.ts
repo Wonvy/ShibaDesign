@@ -1,0 +1,19 @@
+import type { Editor } from '../editor';
+import { createHandTool } from './hand';
+import { createPenTool } from './pen';
+import { createSelectTool } from './select';
+import { createShapeTool } from './shape';
+import { registerTextTool } from './text';
+
+/** 注册所有内置工具 */
+export function registerBuiltinTools(editor: Editor): void {
+  editor.tools
+    .register(createSelectTool())
+    .register(createHandTool())
+    .register(createShapeTool('rect'))
+    .register(createShapeTool('ellipse'))
+    .register(createPenTool());
+  registerTextTool(editor);
+}
+
+export type { Tool } from './tool';

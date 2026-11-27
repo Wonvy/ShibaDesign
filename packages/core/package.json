@@ -1,0 +1,12 @@
+{
+  "name": "@shiba/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "fractional-indexing": "^4.0.0"
+  }
+}

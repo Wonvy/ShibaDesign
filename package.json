@@ -1,0 +1,30 @@
+{
+  "name": "shibadesign",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @shiba/web",
+    "build": "npm run build -w @shiba/web",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.11",
+    "prettier": "^3.10.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.2"
+  },
+  "author": "Wonvy",
+  "homepage": "https://github.com/wonvy/ShibaDesign",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wonvy/ShibaDesign.git"
+  },
+  "description": "基于 Web 的跨平台设计工具：矢量绘图、演示、动画、轻量修图合一"
+}

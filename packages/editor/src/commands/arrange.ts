@@ -1,0 +1,108 @@
+import {
+  align,
+  artboardOf,
+  distribute,
+  keyBetween,
+  sortByZOrder,
+  topLevelOnly,
+  unionRects,
+  type AlignMode,
+  type Box,
+  type Delta,
+  type DistributeMode,
+  type Rect,
+  type SceneNode,
+} from '@shiba/core';
+import type { Editor } from '../editor';
+import { translateNode } from '../ops';
+import type { Command } from './command';
+
+function targets(editor: Editor): SceneNode[] {
+  return topLevelOnly(editor.store, editor.selection).map((id) => editor.store.require(id));
+}
+
+function boxesOf(editor: Editor, nodes: readonly SceneNode[]): Box[] {
+  return nodes.map((node) => ({ id: node.id, ...editor.geometry.worldBounds(node) }));
+}
+
+/**
+ * 对齐的参照物：多选时是选区整体；只选一个对象时是它所在的画板，
+ * 也就是幻灯片视图里的"对齐幻灯片"。
+ */
+function alignReference(editor: Editor, nodes: readonly SceneNode[], boxes: readonly Box[]): Rect | null {
+  if (nodes.length > 1) return unionRects(boxes);
+  const only = nodes[0];
+  if (!only || only.type === 'artboard') return null;
+  const board = artboardOf(editor.store, only.id);
+  return board ? editor.geometry.worldBounds(board) : null;
+}
+
+function applyDeltas(editor: Editor, label: string, deltas: readonly Delta[]): void {
+  const { store } = editor;
+  store.transact(label, (tx) => deltas.forEach((d) => translateNode(tx, store, d.id, d.dx, d.dy)));
+  store.sealHistory();
+}
+
+export const alignSelection: Command<AlignMode> = {
+  id: 'arrange.align',
+  enabled(editor) {
+    const nodes = targets(editor);
+    return alignReference(editor, nodes, boxesOf(editor, nodes)) !== null;
+  },
+  run(editor, mode) {
+    const nodes = targets(editor);
+    const boxes = boxesOf(editor, nodes);
+    const reference = alignReference(editor, nodes, boxes);
+    if (reference) applyDeltas(editor, 'align', align(boxes, mode, reference));
+  },
+};
+
+export const distributeSelection: Command<DistributeMode> = {
+  id: 'arrange.distribute',
+  enabled: (editor) => targets(editor).length >= 3,
+  run(editor, mode) {
+    applyDeltas(editor, 'distribute', distribute(boxesOf(editor, targets(editor)), mode));
+  },
+};
+
+export type OrderMode = 'front' | 'forward' | 'backward' | 'back';
+
+export const orderSelection: Command<OrderMode> = {
+  id: 'arrange.order',
+  enabled: (editor) => targets(editor).some((n) => n.type !== 'artboard'),
+  run(editor, mode) {
+    const { store } = editor;
+    const selected = new Set(editor.selection);
+    const ordered = sortByZOrder(
+      store,
+      targets(editor)
+        .filter((n) => n.type !== 'artboard')
+        .map((n) => n.id),
+    );
+    // 往上移时从最上面的开始处理，往下移时从最下面的开始，保持选中对象之间的相对顺序
+    const queue = mode === 'front' || mode === 'backward' ? ordered : [...ordered].reverse();
+
+    store.transact('order', (tx) => {
+      for (const { id } of queue) {
+        const node = tx.get(id);
+        if (!node?.parent) continue;
+        const siblings = store.children(node.parent);
+        const i = siblings.findIndex((s) => s.id === id);
+        let index: string | null = null;
+        if (mode === 'front') {
+          if (i < siblings.length - 1) index = keyBetween(siblings.at(-1)!.index, null);
+        } else if (mode === 'back') {
+          if (i > 0) index = keyBetween(null, siblings[0]!.index);
+        } else if (mode === 'forward') {
+          const above = siblings[i + 1];
+          if (above && !selected.has(above.id)) index = keyBetween(above.index, siblings[i + 2]?.index ?? null);
+        } else {
+          const below = siblings[i - 1];
+          if (below && !selected.has(below.id)) index = keyBetween(siblings[i - 2]?.index ?? null, below.index);
+        }
+        if (index !== null) tx.update(id, { index });
+      }
+    });
+    store.sealHistory();
+  },
+};

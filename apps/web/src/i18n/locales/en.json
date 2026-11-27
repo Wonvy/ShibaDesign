@@ -1,0 +1,206 @@
+{
+  "meta": {
+    "app": "ShibaDesign",
+    "format": 1,
+    "code": "en",
+    "name": "English"
+  },
+  "strings": {
+    "app": {
+      "loading": "Loading the rendering engine…",
+      "loadFailed": "The rendering engine failed to load",
+      "retry": "Retry"
+    },
+    "tool": {
+      "select": "Select",
+      "hand": "Hand",
+      "rect": "Rectangle",
+      "ellipse": "Ellipse",
+      "pen": "Pen",
+      "text": "Text"
+    },
+    "action": {
+      "undo": "Undo",
+      "redo": "Redo",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "zoomToFit": "Zoom to fit",
+      "show": "Show",
+      "hide": "Hide"
+    },
+    "view": {
+      "label": "View",
+      "canvas": "Canvas",
+      "slides": "Slides"
+    },
+    "panel": {
+      "layers": "Layers",
+      "slides": "Slides",
+      "align": "Align & distribute",
+      "order": "Order",
+      "boolean": "Boolean",
+      "transform": "Position & size",
+      "appearance": "Appearance",
+      "text": "Text"
+    },
+    "slide": {
+      "add": "New slide",
+      "duplicate": "Duplicate slide",
+      "delete": "Delete slide",
+      "empty": "No slides yet"
+    },
+    "layers": {
+      "empty": "Nothing here yet",
+      "renameHint": "Double-click to rename"
+    },
+    "align": {
+      "left": "Align left",
+      "hcenter": "Align horizontal centers",
+      "right": "Align right",
+      "top": "Align top",
+      "vcenter": "Align vertical centers",
+      "bottom": "Align bottom"
+    },
+    "distribute": {
+      "hspacing": "Distribute horizontal spacing",
+      "vspacing": "Distribute vertical spacing"
+    },
+    "order": {
+      "front": "Bring to front",
+      "forward": "Bring forward",
+      "backward": "Send backward",
+      "back": "Send to back"
+    },
+    "boolean": {
+      "union": "Union",
+      "subtract": "Subtract",
+      "intersect": "Intersect",
+      "exclude": "Exclude",
+      "release": "Release boolean group"
+    },
+    "prop": {
+      "x": "X",
+      "y": "Y",
+      "width": "W",
+      "height": "H",
+      "radius": "Radius",
+      "fill": "Fill",
+      "stroke": "Stroke",
+      "strokeWidth": "Width",
+      "opacity": "Opacity",
+      "blendMode": "Blend mode",
+      "add": "Add",
+      "remove": "Remove"
+    },
+    "blend": {
+      "normal": "Normal",
+      "multiply": "Multiply",
+      "screen": "Screen",
+      "overlay": "Overlay",
+      "darken": "Darken",
+      "lighten": "Lighten",
+      "color-dodge": "Color dodge",
+      "color-burn": "Color burn",
+      "hard-light": "Hard light",
+      "soft-light": "Soft light",
+      "difference": "Difference",
+      "exclusion": "Exclusion",
+      "hue": "Hue",
+      "saturation": "Saturation",
+      "color": "Color",
+      "luminosity": "Luminosity"
+    },
+    "node": {
+      "page": "Page",
+      "artboard": "Artboard",
+      "rect": "Rectangle",
+      "ellipse": "Ellipse",
+      "path": "Path",
+      "boolean": "Boolean",
+      "text": "Text",
+      "image": "Image"
+    },
+    "inspector": {
+      "empty": "Nothing selected",
+      "emptyHint": "Click an object on the canvas, or draw one with the tools above.",
+      "multiple": "{{count}} objects selected"
+    },
+    "theme": {
+      "label": "Theme",
+      "system": "Match system",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "language": {
+      "label": "Language",
+      "custom": "Custom",
+      "export": "Export current language pack",
+      "import": "Import language pack…",
+      "remove": "Remove this custom language pack",
+      "hint": "After exporting, translate the text under strings, change code and name under meta to the new language, then import the file.",
+      "imported": "Imported “{{name}}”",
+      "importedMissing": "Imported “{{name}}”. {{count}} strings are untranslated and will appear in English",
+      "invalid": "Could not import: {{reason}}",
+      "reason": {
+        "notJson": "the file is not valid JSON",
+        "noMeta": "meta.code or meta.name is missing",
+        "badCode": "meta.code is not a valid language code (for example ja, fr, pt-BR)",
+        "noStrings": "strings is missing or contains no usable text",
+        "tooLarge": "the file is too large"
+      }
+    },
+    "text": {
+      "fontLatin": "Latin font",
+      "fontCjk": "Chinese font",
+      "size": "Size",
+      "bold": "Bold",
+      "lineHeight": "Line height",
+      "letterSpacing": "Letter spacing",
+      "align": "Alignment",
+      "alignLeft": "Align left",
+      "alignCenter": "Align center",
+      "alignRight": "Align right",
+      "alignJustify": "Justify",
+      "sizing": "Text box",
+      "autoWidth": "Auto width",
+      "fixedWidth": "Fixed width"
+    },
+    "file": {
+      "menu": "File",
+      "new": "New",
+      "open": "Open…",
+      "save": "Save",
+      "saveAs": "Save as…",
+      "exportPng": "Export PNG",
+      "exportPng2x": "Export PNG (2×)",
+      "untitled": "Untitled",
+      "unsaved": "Unsaved changes",
+      "discardConfirm": "This document has unsaved changes that will be lost. Continue?",
+      "saved": "Saved to {{name}}",
+      "downloaded": "Downloaded {{name}}",
+      "exported": "Exported {{name}}",
+      "saveFailed": "Could not save",
+      "exportFailed": "Could not export: the object is empty, or the output exceeds 8192 pixels",
+      "openFailed": "Could not open the file: {{reason}}",
+      "reason": {
+        "notZip": "this is not a ShibaDesign file",
+        "noManifest": "this is not a ShibaDesign file",
+        "notShiba": "this is not a ShibaDesign file",
+        "newerVersion": "it was created by a newer version of ShibaDesign; update to open it",
+        "badDocument": "the file is damaged",
+        "tooLarge": "the file is too large"
+      }
+    },
+    "image": {
+      "place": "Place image",
+      "useAsFill": "Fill with image",
+      "replace": "Replace image",
+      "fit": "Fit",
+      "fitCover": "Cover",
+      "fitContain": "Contain",
+      "fitStretch": "Stretch",
+      "unsupported": "Could not read this image: {{name}}",
+      "downscaled": "“{{name}}” is large and was scaled down to {{size}} pixels on its long side"
+    }
+  }
+}

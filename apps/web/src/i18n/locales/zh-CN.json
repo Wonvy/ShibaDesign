@@ -1,0 +1,206 @@
+{
+  "meta": {
+    "app": "ShibaDesign",
+    "format": 1,
+    "code": "zh-CN",
+    "name": "简体中文"
+  },
+  "strings": {
+    "app": {
+      "loading": "正在加载渲染引擎…",
+      "loadFailed": "渲染引擎加载失败",
+      "retry": "重试"
+    },
+    "tool": {
+      "select": "选择",
+      "hand": "抓手",
+      "rect": "矩形",
+      "ellipse": "椭圆",
+      "pen": "钢笔",
+      "text": "文本"
+    },
+    "action": {
+      "undo": "撤销",
+      "redo": "重做",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "zoomToFit": "适应窗口",
+      "show": "显示",
+      "hide": "隐藏"
+    },
+    "view": {
+      "label": "视图",
+      "canvas": "画布",
+      "slides": "幻灯片"
+    },
+    "panel": {
+      "layers": "图层",
+      "slides": "幻灯片",
+      "align": "对齐与分布",
+      "order": "层序",
+      "boolean": "布尔运算",
+      "transform": "位置与大小",
+      "appearance": "外观",
+      "text": "文本"
+    },
+    "slide": {
+      "add": "新建幻灯片",
+      "duplicate": "复制幻灯片",
+      "delete": "删除幻灯片",
+      "empty": "还没有幻灯片"
+    },
+    "layers": {
+      "empty": "这里还没有对象",
+      "renameHint": "双击重命名"
+    },
+    "align": {
+      "left": "左对齐",
+      "hcenter": "水平居中",
+      "right": "右对齐",
+      "top": "顶对齐",
+      "vcenter": "垂直居中",
+      "bottom": "底对齐"
+    },
+    "distribute": {
+      "hspacing": "水平等间距分布",
+      "vspacing": "垂直等间距分布"
+    },
+    "order": {
+      "front": "置于顶层",
+      "forward": "上移一层",
+      "backward": "下移一层",
+      "back": "置于底层"
+    },
+    "boolean": {
+      "union": "联集",
+      "subtract": "减去顶层",
+      "intersect": "交集",
+      "exclude": "排除",
+      "release": "解散布尔组"
+    },
+    "prop": {
+      "x": "X",
+      "y": "Y",
+      "width": "宽",
+      "height": "高",
+      "radius": "圆角",
+      "fill": "填充",
+      "stroke": "描边",
+      "strokeWidth": "粗细",
+      "opacity": "不透明度",
+      "blendMode": "混合模式",
+      "add": "添加",
+      "remove": "移除"
+    },
+    "blend": {
+      "normal": "正常",
+      "multiply": "正片叠底",
+      "screen": "滤色",
+      "overlay": "叠加",
+      "darken": "变暗",
+      "lighten": "变亮",
+      "color-dodge": "颜色减淡",
+      "color-burn": "颜色加深",
+      "hard-light": "强光",
+      "soft-light": "柔光",
+      "difference": "差值",
+      "exclusion": "排除",
+      "hue": "色相",
+      "saturation": "饱和度",
+      "color": "颜色",
+      "luminosity": "明度"
+    },
+    "node": {
+      "page": "页面",
+      "artboard": "画板",
+      "rect": "矩形",
+      "ellipse": "椭圆",
+      "path": "路径",
+      "boolean": "布尔组",
+      "text": "文本",
+      "image": "图片"
+    },
+    "inspector": {
+      "empty": "未选中对象",
+      "emptyHint": "在画布上点选对象，或用上方的工具绘制。",
+      "multiple": "已选中 {{count}} 个对象"
+    },
+    "theme": {
+      "label": "主题",
+      "system": "跟随系统",
+      "light": "亮色",
+      "dark": "暗色"
+    },
+    "language": {
+      "label": "语言",
+      "custom": "自定义",
+      "export": "导出当前语言包",
+      "import": "导入语言包…",
+      "remove": "移除这个自定义语言包",
+      "hint": "导出后翻译 strings 里的文字，把 meta 里的 code 和 name 改成新语言，再导入。",
+      "imported": "已导入「{{name}}」",
+      "importedMissing": "已导入「{{name}}」，其中 {{count}} 条没有翻译，会显示为英文",
+      "invalid": "无法导入：{{reason}}",
+      "reason": {
+        "notJson": "文件不是有效的 JSON",
+        "noMeta": "缺少 meta.code 或 meta.name",
+        "badCode": "meta.code 不是有效的语言代码（例如 ja、fr、pt-BR）",
+        "noStrings": "缺少 strings，或里面没有任何可用的文字",
+        "tooLarge": "文件过大"
+      }
+    },
+    "text": {
+      "fontLatin": "西文字体",
+      "fontCjk": "中文字体",
+      "size": "字号",
+      "bold": "加粗",
+      "lineHeight": "行高",
+      "letterSpacing": "字距",
+      "align": "对齐",
+      "alignLeft": "左对齐",
+      "alignCenter": "居中对齐",
+      "alignRight": "右对齐",
+      "alignJustify": "两端对齐",
+      "sizing": "文本框",
+      "autoWidth": "自动宽度",
+      "fixedWidth": "固定宽度"
+    },
+    "file": {
+      "menu": "文件",
+      "new": "新建",
+      "open": "打开…",
+      "save": "保存",
+      "saveAs": "另存为…",
+      "exportPng": "导出 PNG",
+      "exportPng2x": "导出 PNG（2 倍）",
+      "untitled": "未命名",
+      "unsaved": "有未保存的修改",
+      "discardConfirm": "当前文档有未保存的修改，继续会丢失这些修改。要继续吗？",
+      "saved": "已保存到 {{name}}",
+      "downloaded": "已下载 {{name}}",
+      "exported": "已导出 {{name}}",
+      "saveFailed": "保存失败",
+      "exportFailed": "无法导出：对象为空，或导出尺寸超过 8192 像素",
+      "openFailed": "无法打开文件：{{reason}}",
+      "reason": {
+        "notZip": "这不是 ShibaDesign 文件",
+        "noManifest": "这不是 ShibaDesign 文件",
+        "notShiba": "这不是 ShibaDesign 文件",
+        "newerVersion": "文件由更新版本的 ShibaDesign 创建，请升级后再打开",
+        "badDocument": "文件内容已损坏",
+        "tooLarge": "文件过大"
+      }
+    },
+    "image": {
+      "place": "插入图片",
+      "useAsFill": "用图片填充",
+      "replace": "更换图片",
+      "fit": "铺放方式",
+      "fitCover": "铺满",
+      "fitContain": "适应",
+      "fitStretch": "拉伸",
+      "unsupported": "无法识别这张图片：{{name}}",
+      "downscaled": "「{{name}}」尺寸较大，已缩小到长边 {{size}} 像素"
+    }
+  }
+}
