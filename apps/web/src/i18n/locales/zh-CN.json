@@ -192,7 +192,12 @@
         "notShiba": "这不是 ShibaDesign 文件",
         "newerVersion": "文件由更新版本的 ShibaDesign 创建，请升级后再打开",
         "badDocument": "文件内容已损坏",
-        "tooLarge": "文件过大"
+        "tooLarge": "文件过大",
+        "pdfPassword": "这个 PDF 有密码保护，暂时无法打开",
+        "pdfInvalid": "这不是有效的 PDF 文件",
+        "pdfEmpty": "这个 PDF 里没有页面",
+        "pdfFailed": "PDF 解析失败",
+        "pdfTooLarge": "文件过大"
       },
       "exportHtml": "导出 HTML（可播放）"
     },
@@ -296,6 +301,23 @@
       "loading": "正在准备演示…",
       "empty": "没有可以播放的幻灯片",
       "close": "退出演示（Esc）"
+    },
+    "pdf": {
+      "opening": "正在打开 PDF…",
+      "progress": "正在转换 PDF：第 {{page}} / {{total}} 页",
+      "opened": "已打开「{{name}}」：{{pages}} 页，{{objects}} 个对象",
+      "truncated": "这个 PDF 共 {{total}} 页，内容较多，只转换了前 {{pages}} 页",
+      "lossy": "有些效果暂时无法完全还原：{{items}}",
+      "separator": "，",
+      "issue": {
+        "clips": "裁剪 {{count}} 处",
+        "gradients": "渐变 {{count}} 处（已改成纯色）",
+        "patterns": "图案填充 {{count}} 处",
+        "softMasks": "透明蒙版 {{count}} 处",
+        "dashes": "虚线 {{count}} 处（已改成实线）",
+        "fallbackText": "未内嵌字体的文字 {{count}} 段（已换成默认字体）",
+        "images": "无法读取的图片 {{count}} 张"
+      }
     }
   }
 }

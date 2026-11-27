@@ -1,6 +1,6 @@
 import { useEffect, useRef, type DragEvent, type ReactNode } from 'react';
 import { useEditor } from '../editor/context';
-import { isImageFile, isShibaFile, openDroppedDocument, placeImageFiles } from '../files';
+import { isDocumentFile, isImageFile, openDroppedDocument, placeImageFiles } from '../files';
 
 /** 编辑器画布的容器。编辑器自己在里面创建和管理 canvas 元素 */
 export function CanvasHost(): ReactNode {
@@ -19,12 +19,12 @@ export function CanvasHost(): ReactNode {
     event.dataTransfer.dropEffect = 'copy';
   };
 
-  /** 拖进来的图片放在松手的位置；拖进来的 .shiba 文件直接打开 */
+  /** 拖进来的图片放在松手的位置；拖进来的 .shiba 或 PDF 文件直接打开 */
   const onDrop = (event: DragEvent<HTMLDivElement>): void => {
     const files = [...event.dataTransfer.files];
     if (files.length === 0) return;
     event.preventDefault();
-    const document = files.find(isShibaFile);
+    const document = files.find(isDocumentFile);
     if (document) {
       void openDroppedDocument(editor, document);
       return;

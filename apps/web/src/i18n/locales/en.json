@@ -192,7 +192,12 @@
         "notShiba": "this is not a ShibaDesign file",
         "newerVersion": "it was created by a newer version of ShibaDesign; update to open it",
         "badDocument": "the file is damaged",
-        "tooLarge": "the file is too large"
+        "tooLarge": "the file is too large",
+        "pdfPassword": "this PDF is password-protected, which is not supported yet",
+        "pdfInvalid": "this is not a valid PDF file",
+        "pdfEmpty": "this PDF has no pages",
+        "pdfFailed": "the PDF could not be parsed",
+        "pdfTooLarge": "the file is too large"
       },
       "exportHtml": "Export HTML (playable)"
     },
@@ -296,6 +301,23 @@
       "loading": "Preparing the presentation…",
       "empty": "There are no slides to play",
       "close": "Exit presentation (Esc)"
+    },
+    "pdf": {
+      "opening": "Opening PDF…",
+      "progress": "Converting PDF: page {{page}} of {{total}}",
+      "opened": "Opened “{{name}}” — pages: {{pages}}, objects: {{objects}}",
+      "truncated": "This PDF has {{total}} pages and a lot of content; only the first {{pages}} were converted",
+      "lossy": "Some effects could not be fully reproduced: {{items}}",
+      "separator": "; ",
+      "issue": {
+        "clips": "clipping ×{{count}}",
+        "gradients": "gradients ×{{count}} (now solid colours)",
+        "patterns": "pattern fills ×{{count}}",
+        "softMasks": "soft masks ×{{count}}",
+        "dashes": "dashed strokes ×{{count}} (now solid)",
+        "fallbackText": "text without embedded fonts ×{{count}} (default font used)",
+        "images": "unreadable images ×{{count}}"
+      }
     }
   }
 }

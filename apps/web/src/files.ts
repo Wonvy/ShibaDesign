@@ -1,15 +1,23 @@
 import { useSyncExternalStore } from 'react';
 import { DocStore, createNode, referencedAssetIds, rgba, solid, type DocumentData, type Point } from '@shiba/core';
 import type { Editor } from '@shiba/editor';
-import { SHIBA_EXTENSION, SHIBA_MIME, ShibaFileError, packShiba, unpackShiba } from '@shiba/io';
+import {
+  PdfImportError,
+  SHIBA_EXTENSION,
+  SHIBA_MIME,
+  ShibaFileError,
+  packShiba,
+  unpackShiba,
+  type PdfIssues,
+} from '@shiba/io';
 import { buildPresentationHtml } from '@shiba/player';
 import { i18n } from './i18n';
 import { displayName } from './names';
 import { compilePresentation } from './present/compile';
-import { toast } from './ui/toast';
+import { busyToast, toast } from './ui/toast';
 
 /**
- * 文件操作：新建、打开、保存 .shiba 文件，导出 PNG，导入图片。
+ * 文件操作：新建、打开、保存 .shiba 文件，打开 PDF，导出 PNG，导入图片。
  *
  * 浏览器支持"文件系统访问"接口时（Chrome、Edge），保存会直接写回用户选的那个文件；
  * 不支持时（Safari、Firefox）退回成下载一个文件。
@@ -72,6 +80,13 @@ export function trackChanges(store: DocStore): void {
 // ───────────── 小工具 ─────────────
 
 const SHIBA_TYPES: PickerType[] = [{ description: 'ShibaDesign', accept: { [SHIBA_MIME]: [SHIBA_EXTENSION] } }];
+const PDF_EXTENSION = '.pdf';
+const PDF_MIME = 'application/pdf';
+/** "打开"能打开的文件：自己的格式，以及可以转换成文档的 PDF */
+const OPEN_TYPES: PickerType[] = [
+  { description: 'ShibaDesign / PDF', accept: { [SHIBA_MIME]: [SHIBA_EXTENSION], [PDF_MIME]: [PDF_EXTENSION] } },
+];
+const MAX_PDF_BYTES = 512 * 1024 * 1024;
 const PNG_TYPES: PickerType[] = [{ description: 'PNG', accept: { 'image/png': ['.png'] } }];
 const HTML_TYPES: PickerType[] = [{ description: 'HTML', accept: { 'text/html': ['.html'] } }];
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp';
@@ -166,25 +181,69 @@ async function loadShiba(editor: Editor, file: File, from: SaveHandle | null): P
   }
 }
 
+/**
+ * 把一个 PDF 转成文档装进编辑器：每页一个画板，页面上的内容变成可以编辑的对象。
+ * 转换出来的是一份还没保存的新文档——原来的 PDF 不会被改动，保存时另存为 .shiba。
+ */
+async function loadPdf(editor: Editor, file: File): Promise<void> {
+  const fail = (reason: string): void => toast(t('file.openFailed', { reason: t(`file.reason.${reason}`) }), 'error');
+  if (file.size > MAX_PDF_BYTES) return fail('pdfTooLarge');
+  const progress = busyToast(t('pdf.opening'));
+  try {
+    // 解析库体积不小，用到时才加载
+    const { importPdfBytes } = await import('./pdf');
+    const result = await importPdfBytes(new Uint8Array(await file.arrayBuffer()), (page, total) =>
+      progress.update(t('pdf.progress', { page, total })),
+    );
+    editor.setTool('select');
+    editor.assets.replaceAll(result.assets);
+    editor.store.load(result.document);
+    editor.zoomToFit();
+    handle = null;
+    const name = file.name.replace(/\.pdf$/i, '');
+    setState({ name: `${name}${SHIBA_EXTENSION}`, dirty: true });
+    progress.close();
+
+    const { report } = result;
+    toast(t('pdf.opened', { name: file.name, pages: report.pages, objects: report.objects }));
+    if (report.pages < report.totalPages) toast(t('pdf.truncated', { pages: report.pages, total: report.totalPages }));
+    const issues = (Object.keys(report.issues) as (keyof PdfIssues)[])
+      .filter((key) => report.issues[key] > 0)
+      .map((key) => t(`pdf.issue.${key}`, { count: report.issues[key] }));
+    if (issues.length > 0) toast(t('pdf.lossy', { items: issues.join(t('pdf.separator')) }), 'warning');
+  } catch (error) {
+    progress.close();
+    const reason = error instanceof PdfImportError ? error.reason : 'failed';
+    if (reason === 'failed') console.error(error);
+    fail(`pdf${reason[0]!.toUpperCase()}${reason.slice(1)}`);
+  }
+}
+
+/** 按文件类型打开。from 是文件选择框给的句柄，保存时可以直接写回——只对 .shiba 文件有意义 */
+async function loadFile(editor: Editor, file: File, from: SaveHandle | null): Promise<void> {
+  if (isPdfFile(file)) await loadPdf(editor, file);
+  else await loadShiba(editor, file, from);
+}
+
 export async function openDocument(editor: Editor): Promise<void> {
   if (!confirmDiscard()) return;
   try {
     if (picker.showOpenFilePicker) {
-      const [picked] = await picker.showOpenFilePicker({ types: SHIBA_TYPES, multiple: false });
-      if (picked) await loadShiba(editor, await picked.getFile(), picked);
+      const [picked] = await picker.showOpenFilePicker({ types: OPEN_TYPES, multiple: false });
+      if (picked) await loadFile(editor, await picked.getFile(), picked);
       return;
     }
-    const [file] = await pickFiles(SHIBA_EXTENSION, false);
-    if (file) await loadShiba(editor, file, null);
+    const [file] = await pickFiles(`${SHIBA_EXTENSION},${PDF_EXTENSION}`, false);
+    if (file) await loadFile(editor, file, null);
   } catch (error) {
     if (!isAbort(error)) throw error;
   }
 }
 
-/** 打开一个拖进窗口的 .shiba 文件 */
+/** 打开一个拖进窗口的 .shiba 或 PDF 文件 */
 export async function openDroppedDocument(editor: Editor, file: File): Promise<void> {
   if (!confirmDiscard()) return;
-  await loadShiba(editor, file, null);
+  await loadFile(editor, file, null);
 }
 
 function buildFile(editor: Editor): Uint8Array {
@@ -368,6 +427,15 @@ export async function pickImageFill(editor: Editor): Promise<void> {
 
 export function isShibaFile(file: File): boolean {
   return file.name.toLowerCase().endsWith(SHIBA_EXTENSION);
+}
+
+export function isPdfFile(file: File): boolean {
+  return file.type === PDF_MIME || file.name.toLowerCase().endsWith(PDF_EXTENSION);
+}
+
+/** 可以整个打开的文件（而不是插入到当前文档里的素材） */
+export function isDocumentFile(file: File): boolean {
+  return isShibaFile(file) || isPdfFile(file);
 }
 
 export function isImageFile(file: File): boolean {

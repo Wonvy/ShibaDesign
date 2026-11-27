@@ -11,7 +11,8 @@ import {
  * 本地草稿：把正在编辑的文档自动存在浏览器的 IndexedDB 里，刷新或意外关闭后能接着做。
  * 它不是"保存文件"——真正的保存是文件菜单里的 .shiba 文件。
  *
- * 文档（JSON，很小）每次修改后重写；图片（很大，内容不变）只在第一次出现时写一次。
+ * 文档（JSON，通常很小）每次修改后重写；图片（很大，内容不变）只在第一次出现时写一次。
+ * 文档很大时（比如刚导入了一份几十页的 PDF）写一次要卡住界面零点几秒，这时自动把保存间隔拉长。
  */
 
 export interface Draft {
@@ -26,6 +27,9 @@ const ASSETS = 'assets';
 const DOCUMENT_KEY = 'document';
 const LEGACY_KEY = 'shiba.document';
 const SAVE_DELAY = 500;
+/** 写一次文档花了多久，下次就至少等它的这么多倍再写：保证自动保存最多占用一小部分时间 */
+const SAVE_BACKOFF = 8;
+const MAX_SAVE_DELAY = 20_000;
 
 let opening: Promise<IDBDatabase> | null = null;
 
@@ -109,6 +113,7 @@ export function enableDraftAutosave(store: DocStore, assets: AssetStore): void {
   const persisted = new Set<string>();
   let timer = 0;
   let failed = false;
+  let delay = SAVE_DELAY;
 
   const flush = async (): Promise<void> => {
     try {
@@ -118,7 +123,10 @@ export function enableDraftAutosave(store: DocStore, assets: AssetStore): void {
         await write(ASSETS, asset.meta.id, asset);
         persisted.add(asset.meta.id);
       }
+      // 把文档交给 IndexedDB 时浏览器要在主线程上完整拷贝一遍，文档越大越慢；量一下写入花了多久，据此调整间隔
+      const started = performance.now();
       await write(KV, DOCUMENT_KEY, store.toJSON());
+      delay = Math.min(MAX_SAVE_DELAY, Math.max(SAVE_DELAY, (performance.now() - started) * SAVE_BACKOFF));
       localStorage.removeItem(LEGACY_KEY);
       failed = false;
     } catch (error) {
@@ -130,7 +138,7 @@ export function enableDraftAutosave(store: DocStore, assets: AssetStore): void {
 
   const schedule = (): void => {
     clearTimeout(timer);
-    timer = window.setTimeout(() => void flush(), SAVE_DELAY);
+    timer = window.setTimeout(() => void flush(), delay);
   };
   store.subscribe(schedule);
   assets.subscribe(() => {

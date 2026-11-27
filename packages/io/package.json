@@ -9,5 +9,8 @@
   "dependencies": {
     "@shiba/core": "*",
     "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "^6.5.438"
   }
 }

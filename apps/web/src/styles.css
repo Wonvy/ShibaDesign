@@ -794,6 +794,10 @@ button {
   color: var(--danger);
 }
 
+.toast-warning {
+  border-color: var(--accent);
+}
+
 /* 窗口较窄时收起品牌名和文件名，把位置让给工具 */
 @media (max-width: 1080px) {
   .brand {

@@ -3,7 +3,8 @@ import { useSyncExternalStore, type ReactNode } from 'react';
 interface Toast {
   id: number;
   message: string;
-  kind: 'info' | 'error';
+  /** warning：不是出错，但内容值得多看一会儿 */
+  kind: 'info' | 'error' | 'warning';
 }
 
 let toasts: Toast[] = [];
@@ -24,8 +25,28 @@ export function toast(message: string, kind: Toast['kind'] = 'info'): void {
       toasts = toasts.filter((t) => t.id !== id);
       emit();
     },
-    kind === 'error' ? 6000 : 4000,
+    kind === 'warning' ? 10000 : kind === 'error' ? 6000 : 4000,
   );
+}
+
+/**
+ * 显示一条不会自动消失的提示，用于要等一会儿的操作。
+ * 返回的对象可以更新文字；操作结束后必须调用 close。
+ */
+export function busyToast(message: string): { update(message: string): void; close(): void } {
+  const id = nextId++;
+  toasts = [...toasts, { id, message, kind: 'info' }];
+  emit();
+  return {
+    update(next) {
+      toasts = toasts.map((t) => (t.id === id ? { ...t, message: next } : t));
+      emit();
+    },
+    close() {
+      toasts = toasts.filter((t) => t.id !== id);
+      emit();
+    },
+  };
 }
 
 export function Toasts(): ReactNode {
