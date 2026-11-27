@@ -42,7 +42,8 @@
       "transform": "位置与大小",
       "appearance": "外观",
       "text": "文本",
-      "image": "图片调整"
+      "image": "图片调整",
+      "animation": "动画"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -192,7 +193,8 @@
         "newerVersion": "文件由更新版本的 ShibaDesign 创建，请升级后再打开",
         "badDocument": "文件内容已损坏",
         "tooLarge": "文件过大"
-      }
+      },
+      "exportHtml": "导出 HTML（可播放）"
     },
     "image": {
       "place": "插入图片",
@@ -226,6 +228,74 @@
       "panX": "水平位置",
       "panY": "垂直位置",
       "reset": "全部重置"
+    },
+    "kind": {
+      "entrance": "进入",
+      "emphasis": "强调",
+      "exit": "退出"
+    },
+    "start": {
+      "onClick": "单击时",
+      "withPrevious": "与上一动画同时",
+      "afterPrevious": "上一动画之后"
+    },
+    "direction": {
+      "left": "左侧",
+      "right": "右侧",
+      "top": "上方",
+      "bottom": "下方"
+    },
+    "effect": {
+      "entrance": {
+        "appear": "出现",
+        "fade": "淡入",
+        "fly": "飞入",
+        "float": "浮入",
+        "zoom": "缩放",
+        "wipe": "擦除"
+      },
+      "exit": {
+        "disappear": "消失",
+        "fade": "淡出",
+        "fly": "飞出",
+        "float": "浮出",
+        "zoom": "缩小",
+        "wipe": "擦除"
+      },
+      "emphasis": {
+        "pulse": "脉冲",
+        "spin": "旋转",
+        "shake": "摇晃",
+        "flash": "闪烁"
+      }
+    },
+    "animation": {
+      "add": "添加动画…",
+      "none": "这一页还没有动画。选中一个对象，再从上面的列表里选一个效果。",
+      "start": "开始",
+      "duration": "时长（秒）",
+      "delay": "延迟（秒）",
+      "direction": "方向",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "remove": "删除这条动画",
+      "missing": "对象已不在这一页"
+    },
+    "transition": {
+      "label": "切换效果",
+      "effect": "效果",
+      "none": "无",
+      "fade": "淡入淡出",
+      "push": "推入",
+      "zoom": "缩放",
+      "smooth": "平滑",
+      "smoothHint": "平滑切换会把上一页和这一页里的同一个对象连起来，自动补间位置、大小和旋转。用“复制幻灯片”得到的页面，对象会自动对应上。"
+    },
+    "present": {
+      "play": "从当前页播放",
+      "loading": "正在准备演示…",
+      "empty": "没有可以播放的幻灯片",
+      "close": "退出演示（Esc）"
     }
   }
 }

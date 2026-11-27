@@ -812,3 +812,151 @@ button {
     display: none;
   }
 }
+
+/* ───────── 动画面板 ───────── */
+
+.add-animation {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.anim-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.anim-empty {
+  margin: 0;
+}
+
+.anim-item {
+  border-radius: 6px;
+}
+
+.anim-item.is-related {
+  background: var(--accent-soft);
+}
+
+.anim-item.is-inactive .anim-name,
+.anim-item.is-inactive .anim-target {
+  opacity: 0.5;
+}
+
+.anim-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+
+.anim-row:hover {
+  background: var(--panel-2);
+}
+
+.anim-step {
+  flex: none;
+  width: 14px;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+/* 三类动画用形状而不只是颜色来区分：进入是实心圆，强调是菱形，退出是空心圆 */
+.anim-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.anim-dot.kind-emphasis {
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+.anim-dot.kind-exit {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--text-dim);
+}
+
+.anim-name {
+  flex: none;
+}
+
+.anim-target {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--text-dim);
+}
+
+.anim-detail {
+  padding: 6px 6px 8px 28px;
+}
+
+.anim-actions {
+  grid-column: 1 / -1;
+}
+
+.smooth-hint {
+  margin: 8px 0 0;
+}
+
+/* ───────── 演示模式 ───────── */
+
+.presenter {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000;
+  outline: none;
+}
+
+.presenter-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.presenter-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c9ccd1;
+  pointer-events: none;
+}
+
+.presenter-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  opacity: 0.35;
+}
+
+.presenter-close:hover,
+.presenter-close:focus-visible {
+  opacity: 1;
+}

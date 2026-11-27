@@ -8,6 +8,8 @@
  * 再到渲染器里注册对应的 NodeTypeDef 即可，不需要改这个文件。
  */
 
+import type { SlideAnimation, SlideTransition } from './animation';
+
 export type NodeId = string;
 
 /** 2×3 仿射矩阵 [a, b, c, d, e, f]：x' = a·x + c·y + e，y' = b·x + d·y + f */
@@ -140,11 +142,22 @@ export interface PageNode extends BaseNode {
   type: 'page';
 }
 
+export interface SlideDeck {
+  /** 幻灯片顺序的分数索引 */
+  order: string;
+  /** 演讲者备注 */
+  notes: string;
+  /** 进入这一页时的切换效果。省略表示没有效果 */
+  transition?: SlideTransition;
+  /** 这一页的动画，按播放顺序排列。省略表示没有动画 */
+  animations?: readonly SlideAnimation[];
+}
+
 export interface ArtboardNode extends BaseNode {
   type: 'artboard';
   fill: SolidFill | null;
   /** 有这个字段就是一页幻灯片；order 是幻灯片顺序的分数索引 */
-  deck: { order: string; notes: string } | null;
+  deck: SlideDeck | null;
 }
 
 export interface RectNode extends BaseNode, ShapeStyle {

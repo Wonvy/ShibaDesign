@@ -1,4 +1,5 @@
 import type { Editor } from '../editor';
+import { addAnimation, moveAnimation, removeAnimation, setTransition, updateAnimation } from './animation';
 import { alignSelection, distributeSelection, orderSelection } from './arrange';
 import { addArtboard, deleteArtboard, duplicateActiveArtboard } from './artboard';
 import { createBoolean, releaseBoolean, setBooleanOp } from './boolean';
@@ -38,9 +39,15 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(createGroup)
     .register(releaseGroup)
     .register(rotateSelection)
-    .register(flipSelection);
+    .register(flipSelection)
+    .register(addAnimation)
+    .register(updateAnimation)
+    .register(removeAnimation)
+    .register(moveAnimation)
+    .register(setTransition);
 }
 
 export type { Command } from './command';
 export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
+export { pruneAnimations, slideLayerOf } from './animation';

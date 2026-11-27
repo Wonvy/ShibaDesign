@@ -35,11 +35,12 @@ packages/core       数据模型、文档存储与撤销、矩阵、对齐分布
 packages/renderer   CanvasKit 渲染器、节点类型注册表、几何缓存、布尔运算、命中测试、字体与文本排版
 packages/editor     编辑器内核：工具、命令、快捷键、选区、相机、视图模式
 packages/io         .shiba 文件格式的打包、解包与校验
+packages/player     HTML5 播放器：独立运行时，应用内演示和导出的网页都用它
 apps/web            React 界面：顶栏、图层、幻灯片条、属性面板、多语言、主题
 docs                方案与架构
 ```
 
-依赖方向是单向的：`web → editor → renderer → core`，`io` 只依赖 `core`。除了 `web`，其他包都不依赖 React。
+依赖方向是单向的：`web → editor → renderer → core`，`io` 只依赖 `core`，`player` 不依赖任何包。除了 `web`，其他包都不依赖 React。
 
 ## 怎么扩展
 
@@ -55,6 +56,7 @@ docs                方案与架构
 | 内置语言 | 在 `apps/web/src/i18n/locales/` 加一个 JSON，并加进 `i18n/index.ts` 的 `BUILTIN`           | `locales/en.json`                         |
 | 主题     | 在 `apps/web/src/theme/themes.ts` 的 `THEMES` 里加一项。样式表只用主题变量，不用改         | `themes.ts`                               |
 | 内置字体 | 安装对应的 `@fontsource` 包，在 `apps/web/src/fonts.ts` 里仿照现有写法登记一个家族         | `apps/web/src/fonts.ts`                   |
+| 动画效果 | 写一个 `EffectDef`，调用 `registerEffect(def)`；再到两个语言包的 `effect` 下加上它的名字   | `packages/core/src/animation.ts`          |
 
 用户不改代码也能加语言：在语言菜单里导出当前语言包，翻译 `strings` 里的文字，把 `meta` 里的 `code` 和 `name` 改成新语言，再导入。
 
@@ -67,6 +69,6 @@ docs                方案与架构
 
 ## 当前状态
 
-已经能用的：自由画布与幻灯片双视图、矩形、椭圆、钢笔、文本（中英文混排、输入法输入）、图片（导入、作为任意形状的填充、调色与模糊）、选择与框选、移动、缩放、旋转、翻转、编组、对齐分布、层序、非破坏性布尔运算、填充、描边、不透明度、16 种混合模式、图层面板、撤销重做、保存和打开 .shiba 文件、导出 PNG、中英文界面、语言包导入导出、亮暗主题。
+已经能用的：自由画布与幻灯片双视图、矩形、椭圆、钢笔、文本（中英文混排、输入法输入）、图片（导入、作为任意形状的填充、调色与模糊）、选择与框选、移动、缩放、旋转、翻转、编组、对齐分布、层序、非破坏性布尔运算、填充、描边、不透明度、16 种混合模式、图层面板、撤销重做、幻灯片动画与页面切换、演示模式、导出可播放的 HTML、保存和打开 .shiba 文件、导出 PNG、中英文界面、语言包导入导出、亮暗主题。
 
-还没有的：抠图、字符级文本样式、蒙版、PDF、动画、SVG 导出。
+还没有的：抠图、字符级文本样式、蒙版、PDF、SVG 导出、视频导出。

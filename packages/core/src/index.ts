@@ -7,3 +7,4 @@ export * from './align';
 export * from './color';
 export * from './assets';
 export * from './validate';
+export * from './animation';

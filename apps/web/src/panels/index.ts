@@ -1,4 +1,6 @@
 import { hasShapeStyle } from '@shiba/core';
+import { slideLayerOf } from '@shiba/editor';
+import { AnimationPanel } from './AnimationPanel';
 import { AppearancePanel } from './AppearancePanel';
 import { AlignPanel, BooleanPanel, OrderPanel } from './ArrangePanels';
 import { ImagePanel } from './ImagePanel';
@@ -39,7 +41,15 @@ export function registerBuiltinPanels(): void {
     when: ({ nodes }) => nodes.some((n) => 'fill' in n && n.fill?.type === 'image'),
     component: ImagePanel,
   });
+  registerPanel({
+    id: 'animation',
+    titleKey: 'panel.animation',
+    order: 70,
+    when: ({ editor, nodes }) => nodes.some((n) => slideLayerOf(editor.store, n.id) !== null),
+    component: AnimationPanel,
+  });
 }
 
+export { SlidePanel } from './AnimationPanel';
 export { listPanels, registerPanel } from './registry';
 export type { PanelDef, PanelProps } from './registry';

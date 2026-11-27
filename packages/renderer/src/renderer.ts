@@ -182,12 +182,19 @@ export class Renderer {
   /**
    * 把一个节点导出成 PNG 文件的字节。
    * @param scale 导出倍率，1 表示一个文档单位对应一个像素
+   * @param padding 在几何边界外多留出的一圈，文档单位。描边会画到边界外面，需要靠它容纳
    * @returns 节点为空、或导出尺寸超过上限时返回 null
    */
-  renderToPng(id: NodeId, scale: number): Uint8Array | null {
+  renderToPng(id: NodeId, scale: number, padding = 0): Uint8Array | null {
     const node = this.store.get(id);
     if (!node) return null;
-    const bounds = this.geometry.localBounds(node);
+    const tight = this.geometry.localBounds(node);
+    const bounds = {
+      x: tight.x - padding,
+      y: tight.y - padding,
+      w: tight.w + padding * 2,
+      h: tight.h + padding * 2,
+    };
     if (bounds.w <= 0 || bounds.h <= 0) return null;
     if (bounds.w * scale > MAX_EXPORT_SIZE || bounds.h * scale > MAX_EXPORT_SIZE) return null;
     const raster = this.rasterize(node, bounds, scale);

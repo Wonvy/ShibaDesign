@@ -1,7 +1,9 @@
 import {
   artboards,
   cloneSubtree,
+  createId,
   createNode,
+  descendants,
   keyBetween,
   nextSeq,
   rgba,
@@ -10,6 +12,8 @@ import {
   translation,
   type ArtboardNode,
   type NodeId,
+  type SlideAnimation,
+  type SlideDeck,
   type Transaction,
 } from '@shiba/core';
 import type { Editor } from '../editor';
@@ -61,16 +65,31 @@ export function duplicateArtboard(editor: Editor, tx: Transaction, sourceId: Nod
   const deck = slides(store);
   const next = deck[deck.findIndex((s) => s.id === sourceId) + 1];
   const position = nextPosition(editor, source);
+  const originals = [source, ...descendants(store, sourceId)];
   const [root, ...rest] = cloneSubtree(store, sourceId, { keepLineage: true });
+  // 复制出来的节点和原节点一一对应、顺序相同，据此把动画的目标换成新节点
+  const idMap = new Map(originals.map((node, i) => [node.id, [root, ...rest][i]!.id]));
+  const animations = source.deck?.animations?.flatMap((a) => {
+    const target = idMap.get(a.target);
+    return target ? [{ ...a, id: createId(), target }] : [];
+  });
   tx.create({
     ...(root as ArtboardNode),
     index: store.indexOnTop(store.root.id),
     seq: nextSeq(store, 'artboard'),
     transform: translation(position.x, position.y),
-    deck: source.deck ? { ...source.deck, order: keyBetween(source.deck.order, next?.deck?.order ?? null) } : null,
+    deck: source.deck
+      ? copyDeck(source.deck, keyBetween(source.deck.order, next?.deck?.order ?? null), animations)
+      : null,
   });
   rest.forEach((node) => tx.create(node));
   return root!.id;
+}
+
+/** 复制一页的设置：换上新的顺序，动画换成指向新节点的那一份（原来那份指向的是原页面上的节点） */
+function copyDeck(source: SlideDeck, order: string, animations: SlideAnimation[] | undefined): SlideDeck {
+  const { animations: _original, ...rest } = source;
+  return { ...rest, order, ...(animations && animations.length > 0 ? { animations } : {}) };
 }
 
 export const duplicateActiveArtboard: Command<NodeId | undefined> = {

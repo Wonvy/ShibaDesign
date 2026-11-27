@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useEditor, useSelectedNodes } from '../editor/context';
+import { useEditor, useEditorState, useSelectedNodes } from '../editor/context';
 import { displayName } from '../names';
-import { listPanels } from '../panels';
+import { SlidePanel, listPanels } from '../panels';
 import { Section } from '../ui/controls';
 
 /** 右侧属性栏：按注册表依次渲染对当前选区有意义的面板 */
@@ -10,6 +10,19 @@ export function Inspector(): ReactNode {
   const editor = useEditor();
   const { t } = useTranslation();
   const nodes = useSelectedNodes();
+  const viewMode = useEditorState((s) => s.viewMode);
+  // 订阅这两项是为了在切换幻灯片、修改动画后重新渲染
+  useEditorState((s) => s.activeArtboardId);
+  useEditorState((s) => s.docVersion);
+  const slide = editor.activeArtboard;
+
+  if (nodes.length === 0 && viewMode === 'slides' && slide?.deck) {
+    return (
+      <aside className="inspector">
+        <SlidePanel editor={editor} slide={slide} />
+      </aside>
+    );
+  }
 
   if (nodes.length === 0) {
     return (

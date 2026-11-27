@@ -42,7 +42,8 @@
       "transform": "Position & size",
       "appearance": "Appearance",
       "text": "Text",
-      "image": "Image adjustments"
+      "image": "Image adjustments",
+      "animation": "Animation"
     },
     "slide": {
       "add": "New slide",
@@ -192,7 +193,8 @@
         "newerVersion": "it was created by a newer version of ShibaDesign; update to open it",
         "badDocument": "the file is damaged",
         "tooLarge": "the file is too large"
-      }
+      },
+      "exportHtml": "Export HTML (playable)"
     },
     "image": {
       "place": "Place image",
@@ -226,6 +228,74 @@
       "panX": "Horizontal position",
       "panY": "Vertical position",
       "reset": "Reset all"
+    },
+    "kind": {
+      "entrance": "Entrance",
+      "emphasis": "Emphasis",
+      "exit": "Exit"
+    },
+    "start": {
+      "onClick": "On click",
+      "withPrevious": "With previous",
+      "afterPrevious": "After previous"
+    },
+    "direction": {
+      "left": "Left",
+      "right": "Right",
+      "top": "Top",
+      "bottom": "Bottom"
+    },
+    "effect": {
+      "entrance": {
+        "appear": "Appear",
+        "fade": "Fade in",
+        "fly": "Fly in",
+        "float": "Float in",
+        "zoom": "Zoom in",
+        "wipe": "Wipe in"
+      },
+      "exit": {
+        "disappear": "Disappear",
+        "fade": "Fade out",
+        "fly": "Fly out",
+        "float": "Float out",
+        "zoom": "Zoom out",
+        "wipe": "Wipe out"
+      },
+      "emphasis": {
+        "pulse": "Pulse",
+        "spin": "Spin",
+        "shake": "Shake",
+        "flash": "Flash"
+      }
+    },
+    "animation": {
+      "add": "Add animation…",
+      "none": "No animations on this slide yet. Select an object, then pick an effect from the list above.",
+      "start": "Start",
+      "duration": "Duration (s)",
+      "delay": "Delay (s)",
+      "direction": "Direction",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "remove": "Remove this animation",
+      "missing": "Object is no longer on this slide"
+    },
+    "transition": {
+      "label": "Transition",
+      "effect": "Effect",
+      "none": "None",
+      "fade": "Fade",
+      "push": "Push",
+      "zoom": "Zoom",
+      "smooth": "Smooth",
+      "smoothHint": "Smooth links the same object on the previous slide and this one, and tweens its position, size and rotation. Slides made with “Duplicate slide” are matched automatically."
+    },
+    "present": {
+      "play": "Play from this slide",
+      "loading": "Preparing the presentation…",
+      "empty": "There are no slides to play",
+      "close": "Exit presentation (Esc)"
     }
   }
 }

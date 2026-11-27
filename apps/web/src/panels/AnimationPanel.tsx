@@ -1,0 +1,284 @@
+import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  ANIMATION_KINDS,
+  ANIMATION_STARTS,
+  DEFAULT_TRANSITION,
+  DIRECTIONS,
+  TRANSITION_EFFECTS,
+  getEffect,
+  listEffects,
+  type AnimationStart,
+  type ArtboardNode,
+  type Direction,
+  type NodeId,
+  type SlideAnimation,
+  type SlideTransition,
+  type TransitionEffect,
+} from '@shiba/core';
+import { slideLayerOf, type Editor } from '@shiba/editor';
+import { displayName } from '../names';
+import { IconButton, NumberField, Section } from '../ui/controls';
+import type { PanelProps } from './registry';
+
+const seconds = (ms: number): number => Math.round(ms / 10) / 100;
+const millis = (s: number): number => Math.round(Math.max(0, s) * 1000);
+
+/** 下拉框：选一个效果，给选中的对象加一条动画。效果列表直接来自效果注册表 */
+function AddAnimation({ editor }: { editor: Editor }): ReactNode {
+  const { t } = useTranslation();
+  return (
+    <select
+      className="select add-animation"
+      aria-label={t('animation.add')}
+      value=""
+      onChange={(e) => {
+        if (e.target.value) editor.commands.run('animation.add', { effect: e.target.value });
+      }}
+    >
+      <option value="">{t('animation.add')}</option>
+      {ANIMATION_KINDS.map((kind) => (
+        <optgroup key={kind} label={t(`kind.${kind}`)}>
+          {listEffects(kind).map((def) => (
+            <option key={def.id} value={def.id}>
+              {t(`effect.${def.id}`)}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * 一页幻灯片的动画列表，相当于 PPT 的动画窗格：按播放顺序排列，点一条展开它的设置。
+ * 左边的数字是"第几次单击时播放"；没有数字的和上面那条属于同一次单击。
+ */
+export function AnimationList(props: {
+  editor: Editor;
+  slide: ArtboardNode;
+  /** 这些对象的动画会被标出来 */
+  highlight: ReadonlySet<NodeId>;
+}): ReactNode {
+  const { editor, slide } = props;
+  const { t } = useTranslation();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const animations = slide.deck?.animations ?? [];
+  if (animations.length === 0) return <p className="empty-note anim-empty">{t('animation.none')}</p>;
+
+  const update = (id: string, patch: Partial<SlideAnimation>): void => {
+    editor.commands.run('animation.update', { slideId: slide.id, id, patch });
+  };
+
+  let click = 0;
+  return (
+    <ol className="anim-list">
+      {animations.map((animation, index) => {
+        if (animation.start === 'onClick') click += 1;
+        const def = getEffect(animation.effect);
+        const target = editor.store.get(animation.target);
+        const active =
+          target !== undefined && slideLayerOf(editor.store, animation.target)?.layer.id === animation.target;
+        const open = openId === animation.id;
+        return (
+          <li
+            key={animation.id}
+            className={`anim-item${props.highlight.has(animation.target) ? ' is-related' : ''}${active ? '' : ' is-inactive'}`}
+          >
+            <button
+              type="button"
+              className="anim-row"
+              aria-expanded={open}
+              onClick={() => setOpenId(open ? null : animation.id)}
+            >
+              <span className="anim-step">{animation.start === 'onClick' ? click : ''}</span>
+              <span className={`anim-dot kind-${def?.kind ?? 'unknown'}`} aria-hidden="true" />
+              <span className="anim-name">{t(`effect.${animation.effect}`)}</span>
+              <span className="anim-target">{active && target ? displayName(target, t) : t('animation.missing')}</span>
+            </button>
+            {open && (
+              <div className="anim-detail appearance">
+                <div className="prop-row">
+                  <span className="prop-label">{t('animation.start')}</span>
+                  <div className="prop-controls">
+                    <select
+                      className="select"
+                      aria-label={t('animation.start')}
+                      value={animation.start}
+                      onChange={(e) => update(animation.id, { start: e.target.value as AnimationStart })}
+                    >
+                      {ANIMATION_STARTS.map((start) => (
+                        <option key={start} value={start}>
+                          {t(`start.${start}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {!def?.instant && (
+                  <div className="prop-row">
+                    <span className="prop-label">{t('animation.duration')}</span>
+                    <div className="prop-controls">
+                      <NumberField
+                        label=""
+                        value={seconds(animation.duration)}
+                        min={0}
+                        max={60}
+                        onCommit={(v) => update(animation.id, { duration: millis(v) })}
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="prop-row">
+                  <span className="prop-label">{t('animation.delay')}</span>
+                  <div className="prop-controls">
+                    <NumberField
+                      label=""
+                      value={seconds(animation.delay)}
+                      min={0}
+                      max={60}
+                      onCommit={(v) => update(animation.id, { delay: millis(v) })}
+                    />
+                  </div>
+                </div>
+                {def?.directional && (
+                  <div className="prop-row">
+                    <span className="prop-label">{t('animation.direction')}</span>
+                    <div className="prop-controls">
+                      <select
+                        className="select"
+                        aria-label={t('animation.direction')}
+                        value={animation.direction ?? 'left'}
+                        onChange={(e) => update(animation.id, { direction: e.target.value as Direction })}
+                      >
+                        {DIRECTIONS.map((direction) => (
+                          <option key={direction} value={direction}>
+                            {t(`direction.${direction}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+                <div className="button-row anim-actions">
+                  <IconButton
+                    title={t('animation.moveUp')}
+                    disabled={index === 0}
+                    onClick={() =>
+                      editor.commands.run('animation.move', { slideId: slide.id, id: animation.id, delta: -1 })
+                    }
+                  >
+                    <ArrowUp size={15} />
+                  </IconButton>
+                  <IconButton
+                    title={t('animation.moveDown')}
+                    disabled={index === animations.length - 1}
+                    onClick={() =>
+                      editor.commands.run('animation.move', { slideId: slide.id, id: animation.id, delta: 1 })
+                    }
+                  >
+                    <ArrowDown size={15} />
+                  </IconButton>
+                  <IconButton
+                    title={t('animation.remove')}
+                    onClick={() => editor.commands.run('animation.remove', { slideId: slide.id, id: animation.id })}
+                  >
+                    <Trash2 size={15} />
+                  </IconButton>
+                </div>
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** 选中对象时的动画面板：给它加动画，并显示所在幻灯片的动画列表 */
+export function AnimationPanel({ editor, nodes }: PanelProps): ReactNode {
+  const found = nodes.map((node) => slideLayerOf(editor.store, node.id)).filter((x) => x !== null);
+  const slide = found[0]?.slide;
+  if (!slide) return null;
+  const highlight = new Set(found.filter((f) => f.slide.id === slide.id).map((f) => f.layer.id));
+  return (
+    <>
+      <AddAnimation editor={editor} />
+      <AnimationList editor={editor} slide={slide} highlight={highlight} />
+    </>
+  );
+}
+
+/** 没有选中任何对象时显示的幻灯片设置：这一页的切换效果，以及完整的动画列表 */
+export function SlidePanel({ editor, slide }: { editor: Editor; slide: ArtboardNode }): ReactNode {
+  const { t } = useTranslation();
+  const transition = slide.deck?.transition ?? DEFAULT_TRANSITION;
+  const set = (patch: Partial<SlideTransition>): void => {
+    editor.commands.run('slide.setTransition', { slideId: slide.id, transition: { ...transition, ...patch } });
+  };
+
+  return (
+    <>
+      <div className="inspector-header">{displayName(slide, t)}</div>
+      <Section title={t('transition.label')}>
+        <div className="appearance">
+          <div className="prop-row">
+            <span className="prop-label">{t('transition.effect')}</span>
+            <div className="prop-controls">
+              <select
+                className="select"
+                aria-label={t('transition.effect')}
+                value={transition.effect}
+                onChange={(e) => set({ effect: e.target.value as TransitionEffect })}
+              >
+                {TRANSITION_EFFECTS.map((effect) => (
+                  <option key={effect} value={effect}>
+                    {t(`transition.${effect}`)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {transition.effect !== 'none' && (
+            <div className="prop-row">
+              <span className="prop-label">{t('animation.duration')}</span>
+              <div className="prop-controls">
+                <NumberField
+                  label=""
+                  value={seconds(transition.duration)}
+                  min={0}
+                  max={10}
+                  onCommit={(v) => set({ duration: millis(v) })}
+                />
+              </div>
+            </div>
+          )}
+          {transition.effect === 'push' && (
+            <div className="prop-row">
+              <span className="prop-label">{t('animation.direction')}</span>
+              <div className="prop-controls">
+                <select
+                  className="select"
+                  aria-label={t('animation.direction')}
+                  value={transition.direction ?? 'right'}
+                  onChange={(e) => set({ direction: e.target.value as Direction })}
+                >
+                  {DIRECTIONS.map((direction) => (
+                    <option key={direction} value={direction}>
+                      {t(`direction.${direction}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+        {transition.effect === 'smooth' && <p className="menu-hint smooth-hint">{t('transition.smoothHint')}</p>}
+      </Section>
+      <Section title={t('panel.animation')}>
+        <AnimationList editor={editor} slide={slide} highlight={new Set()} />
+      </Section>
+    </>
+  );
+}

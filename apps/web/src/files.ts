@@ -2,8 +2,10 @@ import { useSyncExternalStore } from 'react';
 import { DocStore, createNode, referencedAssetIds, rgba, solid, type DocumentData, type Point } from '@shiba/core';
 import type { Editor } from '@shiba/editor';
 import { SHIBA_EXTENSION, SHIBA_MIME, ShibaFileError, packShiba, unpackShiba } from '@shiba/io';
+import { buildPresentationHtml } from '@shiba/player';
 import { i18n } from './i18n';
 import { displayName } from './names';
+import { compilePresentation } from './present/compile';
 import { toast } from './ui/toast';
 
 /**
@@ -71,6 +73,7 @@ export function trackChanges(store: DocStore): void {
 
 const SHIBA_TYPES: PickerType[] = [{ description: 'ShibaDesign', accept: { [SHIBA_MIME]: [SHIBA_EXTENSION] } }];
 const PNG_TYPES: PickerType[] = [{ description: 'PNG', accept: { 'image/png': ['.png'] } }];
+const HTML_TYPES: PickerType[] = [{ description: 'HTML', accept: { 'text/html': ['.html'] } }];
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp';
 /** 图片长边超过这个值就在导入时缩小。解码后的图片整张放在内存和显存里，太大会拖垮整个画布 */
 const MAX_IMAGE_SIDE = 4096;
@@ -255,6 +258,35 @@ export async function exportPng(editor: Editor, scale: number): Promise<void> {
       return;
     }
     download(name, bytes, 'image/png');
+    toast(t('file.exported', { name }));
+  } catch (error) {
+    if (isAbort(error)) return;
+    console.error(error);
+    toast(t('file.saveFailed'), 'error');
+  }
+}
+
+/**
+ * 把演示稿导出成一个可以独立播放的 HTML 文件：图片和播放器都内嵌在文件里，
+ * 断网也能播，发给别人双击就能打开。
+ */
+export async function exportHtml(editor: Editor): Promise<void> {
+  const title = (state.name ?? t('file.untitled')).replace(/\.shiba$/i, '');
+  const compiled = await compilePresentation(editor, 'export', title);
+  if (compiled.data.slides.length === 0) {
+    toast(t('present.empty'), 'error');
+    return;
+  }
+  const bytes = new TextEncoder().encode(buildPresentationHtml(compiled.data));
+  const name = `${title}.html`;
+  try {
+    if (picker.showSaveFilePicker) {
+      const out = await picker.showSaveFilePicker({ suggestedName: name, types: HTML_TYPES });
+      await writeTo(out, bytes);
+      toast(t('file.exported', { name: out.name }));
+      return;
+    }
+    download(name, bytes, 'text/html');
     toast(t('file.exported', { name }));
   } catch (error) {
     if (isAbort(error)) return;

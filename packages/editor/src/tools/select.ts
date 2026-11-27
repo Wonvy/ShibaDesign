@@ -12,6 +12,7 @@ import {
   type SceneNode,
   type TextNode,
 } from '@shiba/core';
+import { pruneAnimations } from '../commands/animation';
 import type { Editor } from '../editor';
 import { reparentByPosition, translateFromOriginals } from '../ops';
 import {
@@ -221,9 +222,15 @@ export function createSelectTool(): Tool {
       if (!finished) return;
       if (finished.kind === 'pending' && finished.collapseTo) editor.select([finished.collapseTo]);
       if (finished.kind === 'move') {
-        editor.store.transact('move', (tx) => reparentByPosition(editor, tx, finished.originals.keys()), {
-          mergeKey: finished.key,
-        });
+        editor.store.transact(
+          'move',
+          (tx) => {
+            reparentByPosition(editor, tx, finished.originals.keys());
+            // 对象被拖到别的幻灯片上之后，它在原来那一页的动画就没有意义了
+            pruneAnimations(tx, editor.store);
+          },
+          { mergeKey: finished.key },
+        );
       }
       if (finished.kind !== 'pending' && finished.kind !== 'marquee') editor.store.sealHistory();
       if (finished.kind === 'rotate') editor.setCursor('default');

@@ -14,6 +14,7 @@
     "@shiba/core": "*",
     "@shiba/editor": "*",
     "@shiba/io": "*",
+    "@shiba/player": "*",
     "@shiba/renderer": "*",
     "canvaskit-wasm": "^0.42.0",
     "i18next": "^27.2.10",

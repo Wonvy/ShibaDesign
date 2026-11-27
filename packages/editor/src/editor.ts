@@ -7,6 +7,7 @@ import {
   artboardOf,
   artboards,
   descendants,
+  hasShapeStyle,
   rectContainsPoint,
   slides,
   unionRects,
@@ -579,6 +580,31 @@ export class Editor {
   async exportPng(id: NodeId, scale: number): Promise<Uint8Array | null> {
     await this.fontsReady(id);
     return this.renderer?.renderToPng(id, scale) ?? null;
+  }
+
+  /**
+   * 把一个节点渲染成透明背景的图片，播放器用它作图层的内容。
+   * 图片范围比节点的几何边界大一圈，这样描边不会被切掉；box 是这张图片对应的本地坐标范围。
+   * @param scale 希望的倍率；节点太大时会自动降低，保证图片单边不超过 4096 像素
+   */
+  async snapshot(id: NodeId, scale: number): Promise<{ png: Uint8Array; box: Rect } | null> {
+    await this.fontsReady(id);
+    const node = this.store.get(id);
+    if (!node || !this.renderer) return null;
+    let padding = 1;
+    for (const item of [node, ...descendants(this.store, id)]) {
+      if (hasShapeStyle(item) && item.stroke) padding = Math.max(padding, item.stroke.width / 2 + 1);
+    }
+    const bounds = this.geometry.localBounds(node);
+    const box = {
+      x: bounds.x - padding,
+      y: bounds.y - padding,
+      w: bounds.w + padding * 2,
+      h: bounds.h + padding * 2,
+    };
+    const limited = Math.min(scale, 4096 / Math.max(box.w, box.h, 1));
+    const png = this.renderer.renderToPng(id, limited, padding);
+    return png ? { png, box } : null;
   }
 
   /** 把一个节点画成缩略图；编辑器未挂载时返回 null */

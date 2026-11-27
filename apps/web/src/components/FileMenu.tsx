@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { Editor } from '@shiba/editor';
 import { useEditor } from '../editor/context';
 import {
+  exportHtml,
   exportPng,
   isImageFile,
   newDocument,
@@ -47,6 +48,7 @@ const GROUPS: Item[][] = [
   [
     { labelKey: 'file.exportPng', keys: 'mod+shift+e', run: (editor) => void exportPng(editor, 1) },
     { labelKey: 'file.exportPng2x', run: (editor) => void exportPng(editor, 2) },
+    { labelKey: 'file.exportHtml', run: (editor) => void exportHtml(editor) },
   ],
 ];
 

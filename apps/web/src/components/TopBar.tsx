@@ -1,4 +1,4 @@
-import { ImagePlus, Maximize, Minus, Plus, Redo2, Undo2 } from 'lucide-react';
+import { ImagePlus, Maximize, Minus, Play, Plus, Redo2, Undo2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewMode } from '@shiba/editor';
@@ -11,8 +11,9 @@ import { LanguageMenu } from './LanguageMenu';
 import { ThemeMenu } from './ThemeMenu';
 
 const VIEW_MODES: ViewMode[] = ['canvas', 'slides'];
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
-export function TopBar(): ReactNode {
+export function TopBar(props: { onPlay: () => void }): ReactNode {
   const editor = useEditor();
   const { t } = useTranslation();
   const tool = useEditorState((s) => s.tool);
@@ -80,6 +81,12 @@ export function TopBar(): ReactNode {
       </div>
 
       <div className="spacer" />
+
+      <div className="group">
+        <IconButton title={`${t('present.play')} (${IS_MAC ? '⌘' : 'Ctrl+'}↵)`} onClick={props.onPlay}>
+          <Play size={16} />
+        </IconButton>
+      </div>
 
       <div className="group">
         <IconButton title={t('action.zoomOut')} onClick={() => editor.commands.run('view.zoomOut')}>

@@ -91,7 +91,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       if (typeof node.op !== 'string') fail('op');
       break;
     case 'artboard':
-      if (node.deck !== null && (!isObject(node.deck) || typeof node.deck.order !== 'string')) fail('deck');
+      if (node.deck !== null && !isDeck(node.deck)) fail('deck');
       break;
     case 'text': {
       if (typeof node.text !== 'string' || node.text.length > MAX_TEXT_LENGTH) fail('text');
@@ -142,6 +142,31 @@ function isFill(value: unknown): boolean {
     return isObject(value.adjust) && Object.values(value.adjust).every(isFiniteNumber);
   }
   return false;
+}
+
+function isDeck(value: unknown): boolean {
+  if (!isObject(value) || typeof value.order !== 'string') return false;
+  const { transition, animations } = value;
+  if (transition !== undefined) {
+    if (!isObject(transition) || typeof transition.effect !== 'string' || !isFiniteNumber(transition.duration)) {
+      return false;
+    }
+  }
+  if (animations === undefined) return true;
+  return (
+    Array.isArray(animations) &&
+    animations.length <= 2000 &&
+    animations.every(
+      (a) =>
+        isObject(a) &&
+        typeof a.id === 'string' &&
+        typeof a.target === 'string' &&
+        typeof a.effect === 'string' &&
+        typeof a.start === 'string' &&
+        isFiniteNumber(a.duration) &&
+        isFiniteNumber(a.delay),
+    )
+  );
 }
 
 function isSubpath(value: unknown): boolean {

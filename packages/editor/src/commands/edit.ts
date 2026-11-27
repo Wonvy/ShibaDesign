@@ -1,6 +1,7 @@
 import { cloneSubtree, keyBetween, nextSeq, topLevelOnly, translated, type NodeId, type NodeType } from '@shiba/core';
 import type { Editor } from '../editor';
 import { translateNode } from '../ops';
+import { pruneAnimations } from './animation';
 import { duplicateArtboard } from './artboard';
 import type { Command } from './command';
 
@@ -25,7 +26,10 @@ export const deleteSelection: Command = {
   enabled: hasSelection,
   run(editor) {
     const ids = topLevelOnly(editor.store, editor.selection);
-    editor.store.transact('delete', (tx) => ids.forEach((id) => tx.remove(id)));
+    editor.store.transact('delete', (tx) => {
+      ids.forEach((id) => tx.remove(id));
+      pruneAnimations(tx, editor.store);
+    });
     editor.store.sealHistory();
   },
 };
