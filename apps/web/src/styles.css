@@ -599,6 +599,10 @@ button {
   height: 28px;
 }
 
+.transform-actions {
+  margin-top: 8px;
+}
+
 .row-divider {
   width: 1px;
   height: 18px;

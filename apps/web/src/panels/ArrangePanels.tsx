@@ -10,6 +10,7 @@ import {
   ArrowDown,
   ArrowUp,
   BringToFront,
+  Group,
   SendToBack,
   SquaresExclude,
   SquaresIntersect,
@@ -96,8 +97,37 @@ export function OrderPanel({ editor }: PanelProps): ReactNode {
           <Icon size={16} />
         </IconButton>
       ))}
+      <span className="row-divider" />
+      <IconButton
+        title={withKey(editor, t('group.create'), 'group.create')}
+        disabled={!editor.commands.canRun('group.create')}
+        onClick={() => editor.commands.run('group.create')}
+      >
+        <Group size={16} />
+      </IconButton>
+      <IconButton
+        title={withKey(editor, t('group.release'), 'group.release')}
+        disabled={!editor.commands.canRun('group.release')}
+        onClick={() => editor.commands.run('group.release')}
+      >
+        <Ungroup size={16} />
+      </IconButton>
     </div>
   );
+}
+
+/** 在提示文字后面附上快捷键 */
+function withKey(editor: PanelProps['editor'], label: string, command: string): string {
+  const key = editor.keymap.keyFor(command);
+  if (!key) return label;
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const pretty = key
+    .split('+')
+    .map((part) =>
+      part === 'mod' ? (mac ? '⌘' : 'Ctrl') : part === 'shift' ? (mac ? '⇧' : 'Shift') : part.toUpperCase(),
+    )
+    .join(mac ? '' : '+');
+  return `${label} (${pretty})`;
 }
 
 /**

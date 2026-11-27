@@ -1,4 +1,16 @@
-import { Circle, Eye, EyeOff, Frame, Image, Spline, Square, SquaresUnite, Type, type LucideIcon } from 'lucide-react';
+import {
+  Circle,
+  Eye,
+  EyeOff,
+  Frame,
+  Group,
+  Image,
+  Spline,
+  Square,
+  SquaresUnite,
+  Type,
+  type LucideIcon,
+} from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DocStore, NodeId, SceneNode } from '@shiba/core';
@@ -12,6 +24,7 @@ const ICONS: Record<string, LucideIcon> = {
   path: Spline,
   boolean: SquaresUnite,
   text: Type,
+  group: Group,
 };
 
 interface Row {

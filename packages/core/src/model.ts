@@ -180,6 +180,14 @@ export interface TextNode extends BaseNode {
   fill: SolidFill | null;
 }
 
+/**
+ * 编组：把几个对象当成一个整体来选择、移动、旋转和缩放。
+ * 组自己没有外观，也不裁剪子节点；给组设置不透明度或混合模式时，子节点先合成再整体应用。
+ */
+export interface GroupNode extends BaseNode {
+  type: 'group';
+}
+
 /** 节点类型表。其他模块可以通过声明合并扩展它 */
 export interface NodeTypeMap {
   page: PageNode;
@@ -189,6 +197,7 @@ export interface NodeTypeMap {
   path: PathNode;
   boolean: BooleanNode;
   text: TextNode;
+  group: GroupNode;
 }
 
 export type NodeType = keyof NodeTypeMap;

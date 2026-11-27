@@ -3,14 +3,17 @@ import {
   AssetStore,
   DocStore,
   ancestors,
+  applyToPoint,
   artboardOf,
   artboards,
   descendants,
   rectContainsPoint,
   slides,
   unionRects,
+  worldTransform,
   type ArtboardNode,
   type AssetMeta,
+  type Matrix,
   type NodeId,
   type NodePatch,
   type Point,
@@ -42,6 +45,15 @@ import type { CanvasTheme, EditorState, ViewMode } from './types';
 const MIN_ZOOM = 0.02;
 const MAX_ZOOM = 64;
 const FIT_PADDING = 48;
+
+export interface SelectionFrame {
+  /** 框的四个角，世界坐标，依次是左上、右上、右下、左下（按对象自己的方向） */
+  corners: [Point, Point, Point, Point];
+  /** 只选了一个对象时：它的 id、本地包围盒、本地到世界的变换 */
+  single: { id: NodeId; box: Rect; world: Matrix } | null;
+  /** 是否显示旋转手柄。画板不能旋转 */
+  rotatable: boolean;
+}
 
 export interface EditorOptions {
   ck: CanvasKit;
@@ -196,6 +208,46 @@ export class Editor {
     if (this.state.selection.length > 0) this.setState({ selection: [] });
   }
 
+  /**
+   * 选区框：画在画布上、带控制柄的那个框。
+   * 只选一个对象时，框跟着对象一起倾斜，缩放沿对象自己的方向进行；
+   * 多选时是一个不倾斜的外接矩形。
+   */
+  selectionFrame(): SelectionFrame | null {
+    const nodes = this.selectedNodes();
+    const only = nodes.length === 1 ? nodes[0]! : null;
+    if (only) {
+      const box = this.geometry.localBounds(only);
+      const world = worldTransform(this.store, only.id);
+      const corner = (x: number, y: number): Point => {
+        const [wx, wy] = applyToPoint(world, x, y);
+        return { x: wx, y: wy };
+      };
+      return {
+        corners: [
+          corner(box.x, box.y),
+          corner(box.x + box.w, box.y),
+          corner(box.x + box.w, box.y + box.h),
+          corner(box.x, box.y + box.h),
+        ],
+        single: { id: only.id, box, world },
+        rotatable: only.type !== 'artboard',
+      };
+    }
+    const bounds = this.selectionBounds();
+    if (!bounds) return null;
+    return {
+      corners: [
+        { x: bounds.x, y: bounds.y },
+        { x: bounds.x + bounds.w, y: bounds.y },
+        { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+        { x: bounds.x, y: bounds.y + bounds.h },
+      ],
+      single: null,
+      rotatable: nodes.some((n) => n.type !== 'artboard'),
+    };
+  }
+
   /** 选区在世界坐标下的整体外接矩形 */
   selectionBounds(): Rect | null {
     return unionRects(this.selectedNodes().map((n) => this.geometry.worldBounds(n)));
@@ -341,7 +393,9 @@ export class Editor {
   // ───────────── 命中 ─────────────
 
   /**
-   * 点中的"可选对象"：画板或页面的直接子节点（点中布尔组内部时选中整个布尔组）。
+   * 点中的"可选对象"。默认是画板或页面的直接子节点：点中编组或布尔组内部时，选中的是整个组。
+   * 但如果当前选中的对象本身就在某个组里（说明用户已经"进入"了这个组），
+   * 那么点这个组里的其他成员，选中的是那个成员而不是整个组。
    * artboard 是该点所在的画板，点在画板外时为 null。
    */
   pick(world: Point): { node: SceneNode | null; artboard: ArtboardNode | null } {
@@ -349,16 +403,31 @@ export class Editor {
     const hit = this.geometry.hitTest(world.x, world.y, this.roots(), tolerance);
     if (!hit) return { node: null, artboard: null };
     if (hit.type === 'artboard') return { node: null, artboard: hit };
+    const entered = new Set<NodeId>();
+    for (const selected of this.selectedNodes()) {
+      const parent = selected.parent ? this.store.get(selected.parent) : undefined;
+      if (parent?.type === 'group' || parent?.type === 'boolean') entered.add(parent.id);
+    }
     const chain = [hit, ...ancestors(this.store, hit.id)];
     let node: SceneNode = hit;
     for (const candidate of chain) {
       const parent = candidate.parent ? this.store.get(candidate.parent) : undefined;
-      if (!parent || parent.type === 'page' || parent.type === 'artboard') {
+      if (!parent || parent.type === 'page' || parent.type === 'artboard' || entered.has(parent.id)) {
         node = candidate;
         break;
       }
     }
     return { node, artboard: artboardOf(this.store, node.id) };
+  }
+
+  /**
+   * 某个容器里、位于这个点下面的那个直接子节点。双击编组"进入"它时用。
+   * 这个点下面没有该容器的内容时返回 null。
+   */
+  pickInside(world: Point, containerId: NodeId): SceneNode | null {
+    const hit = this.geometry.hitTest(world.x, world.y, this.roots(), 4 / this.camera.zoom);
+    if (!hit) return null;
+    return [hit, ...ancestors(this.store, hit.id)].find((n) => n.parent === containerId) ?? null;
   }
 
   /** 新建对象时应该放进哪个容器：所在画板，否则是页面 */

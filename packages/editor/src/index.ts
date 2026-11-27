@@ -11,7 +11,7 @@ export function createEditor(options: EditorOptions): Editor {
 }
 
 export { Editor } from './editor';
-export type { EditorOptions } from './editor';
+export type { EditorOptions, SelectionFrame } from './editor';
 export * from './types';
 export * from './registry';
 export * from './keymap';

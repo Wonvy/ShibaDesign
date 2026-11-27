@@ -90,7 +90,8 @@
       "opacity": "Opacity",
       "blendMode": "Blend mode",
       "add": "Add",
-      "remove": "Remove"
+      "remove": "Remove",
+      "rotation": "Rotation"
     },
     "blend": {
       "normal": "Normal",
@@ -118,7 +119,8 @@
       "path": "Path",
       "boolean": "Boolean",
       "text": "Text",
-      "image": "Image"
+      "image": "Image",
+      "group": "Group"
     },
     "inspector": {
       "empty": "Nothing selected",
@@ -201,6 +203,15 @@
       "fitStretch": "Stretch",
       "unsupported": "Could not read this image: {{name}}",
       "downscaled": "“{{name}}” is large and was scaled down to {{size}} pixels on its long side"
+    },
+    "group": {
+      "create": "Group",
+      "release": "Ungroup"
+    },
+    "transform": {
+      "rotate90": "Rotate 90° clockwise",
+      "flipH": "Flip horizontal",
+      "flipV": "Flip vertical"
     }
   }
 }

@@ -90,7 +90,8 @@
       "opacity": "不透明度",
       "blendMode": "混合模式",
       "add": "添加",
-      "remove": "移除"
+      "remove": "移除",
+      "rotation": "旋转"
     },
     "blend": {
       "normal": "正常",
@@ -118,7 +119,8 @@
       "path": "路径",
       "boolean": "布尔组",
       "text": "文本",
-      "image": "图片"
+      "image": "图片",
+      "group": "编组"
     },
     "inspector": {
       "empty": "未选中对象",
@@ -201,6 +203,15 @@
       "fitStretch": "拉伸",
       "unsupported": "无法识别这张图片：{{name}}",
       "downscaled": "「{{name}}」尺寸较大，已缩小到长边 {{size}} 像素"
+    },
+    "group": {
+      "create": "编组",
+      "release": "取消编组"
+    },
+    "transform": {
+      "rotate90": "顺时针旋转 90°",
+      "flipH": "水平翻转",
+      "flipV": "垂直翻转"
     }
   }
 }

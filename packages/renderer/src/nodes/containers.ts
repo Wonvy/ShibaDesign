@@ -1,4 +1,4 @@
-import type { ArtboardNode, PageNode } from '@shiba/core';
+import type { ArtboardNode, GroupNode, PageNode } from '@shiba/core';
 import type { NodeTypeDef } from '../node-types';
 import { toSkColor } from '../skia';
 
@@ -10,6 +10,18 @@ export const pageType: NodeTypeDef<PageNode> = {
   },
   draw() {
     // 页面本身不画任何东西
+  },
+};
+
+/** 编组：自己不画东西，也没有轮廓；边界和命中都来自子节点 */
+export const groupType: NodeTypeDef<GroupNode> = {
+  type: 'group',
+  children: 'draw',
+  outline(_node, { ck }) {
+    return new ck.Path();
+  },
+  draw() {
+    // 组本身没有外观
   },
 };
 

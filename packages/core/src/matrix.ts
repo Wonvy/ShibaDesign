@@ -35,6 +35,23 @@ export function scaling(sx: number, sy: number): Matrix {
   return [sx, 0, 0, sy, 0, 0];
 }
 
+/** 绕原点旋转。角度为弧度，正方向是屏幕上的顺时针（y 轴朝下） */
+export function rotation(radians: number): Matrix {
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return [cos, sin, -sin, cos, 0, 0];
+}
+
+/** 把一个以原点为中心的变换改成以 (cx, cy) 为中心 */
+export function around(m: Matrix, cx: number, cy: number): Matrix {
+  return multiply(translation(cx, cy), multiply(m, translation(-cx, -cy)));
+}
+
+/** 矩阵里包含的旋转角，弧度，范围 (-π, π] */
+export function rotationOf(m: Matrix): number {
+  return Math.atan2(m[1], m[0]);
+}
+
 /** 在父坐标系里把节点平移 (dx, dy) */
 export function translated(m: Matrix, dx: number, dy: number): Matrix {
   return [m[0], m[1], m[2], m[3], m[4] + dx, m[5] + dy];

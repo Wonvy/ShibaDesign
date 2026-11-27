@@ -1,14 +1,39 @@
-import { artboards, type NodeId, type Rect } from '@shiba/core';
+import {
+  applyToPoint,
+  artboards,
+  worldTransform,
+  type NodeId,
+  type Point,
+  type Rect,
+  type SceneNode,
+} from '@shiba/core';
 import type { Editor } from './editor';
 import { HANDLES, handleAnchor, type Handle } from './resize';
 
 const HANDLE_SIZE = 8;
 const HANDLE_HIT = 7;
+/** 旋转手柄离选区框上边的距离，屏幕像素 */
+const ROTATE_OFFSET = 24;
+const ROTATE_RADIUS = 4.5;
+const ROTATE_HIT = 9;
 const LABEL_FONT = '12px system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
 const LABEL_HEIGHT = 18;
 
 interface LabelBox extends Rect {
   id: NodeId;
+}
+
+export type HandleHit = { kind: 'resize'; handle: Handle } | { kind: 'rotate' };
+
+/** 选区框在屏幕上的样子：四个角、旋转手柄的位置、整体转了多少 */
+interface ScreenFrame {
+  /** 左上、右上、右下、左下 */
+  corners: [Point, Point, Point, Point];
+  /** 框转过的角度（弧度），用来让缩放指针的方向跟着转 */
+  angle: number;
+  /** 旋转手柄的位置；不能旋转时为 null */
+  rotate: Point | null;
+  topMiddle: Point;
 }
 
 /**
@@ -51,17 +76,21 @@ export class Overlay {
     return null;
   }
 
-  /** 屏幕上的某个点是否落在选区的某个控制柄上 */
-  hitHandle(x: number, y: number): Handle | null {
-    const rect = this.selectionScreenRect();
-    if (!rect) return null;
+  /** 屏幕上的某个点是否落在选区的缩放控制柄或旋转手柄上 */
+  hitHandle(x: number, y: number): HandleHit | null {
+    const frame = this.screenFrame();
+    if (!frame) return null;
     for (const handle of HANDLES) {
-      const anchor = handleAnchor(handle);
-      const hx = rect.x + rect.w * anchor.x;
-      const hy = rect.y + rect.h * anchor.y;
-      if (Math.abs(x - hx) <= HANDLE_HIT && Math.abs(y - hy) <= HANDLE_HIT) return handle;
+      const p = handlePoint(frame, handle);
+      if (Math.abs(x - p.x) <= HANDLE_HIT && Math.abs(y - p.y) <= HANDLE_HIT) return { kind: 'resize', handle };
     }
+    if (frame.rotate && Math.hypot(x - frame.rotate.x, y - frame.rotate.y) <= ROTATE_HIT) return { kind: 'rotate' };
     return null;
+  }
+
+  /** 选区框当前转过的角度，弧度 */
+  frameAngle(): number {
+    return this.screenFrame()?.angle ?? 0;
   }
 
   private toScreen(rect: Rect): Rect {
@@ -74,9 +103,46 @@ export class Overlay {
     };
   }
 
-  private selectionScreenRect(): Rect | null {
-    const bounds = this.editor.selectionBounds();
-    return bounds ? this.toScreen(bounds) : null;
+  private screenFrame(): ScreenFrame | null {
+    const frame = this.editor.selectionFrame();
+    if (!frame) return null;
+    const corners = frame.corners.map((c) => this.editor.worldToScreen(c.x, c.y)) as ScreenFrame['corners'];
+    const [tl, tr, br] = corners;
+    const topMiddle = { x: (tl.x + tr.x) / 2, y: (tl.y + tr.y) / 2 };
+    const centre = { x: (tl.x + br.x) / 2, y: (tl.y + br.y) / 2 };
+    // 旋转手柄在上边中点的外侧，方向是"从中心指向上边中点"；框被翻转过时它也会跟着到另一侧
+    let nx = topMiddle.x - centre.x;
+    let ny = topMiddle.y - centre.y;
+    const length = Math.hypot(nx, ny);
+    if (length < 0.001) {
+      nx = 0;
+      ny = -1;
+    } else {
+      nx /= length;
+      ny /= length;
+    }
+    return {
+      corners,
+      angle: Math.atan2(tr.y - tl.y, tr.x - tl.x),
+      topMiddle,
+      rotate: frame.rotatable ? { x: topMiddle.x + nx * ROTATE_OFFSET, y: topMiddle.y + ny * ROTATE_OFFSET } : null,
+    };
+  }
+
+  /** 一个节点自己的包围盒在屏幕上的四个角 */
+  private nodeCorners(node: SceneNode): Point[] {
+    const { editor } = this;
+    const box = editor.geometry.localBounds(node);
+    const world = worldTransform(editor.store, node.id);
+    return [
+      [box.x, box.y],
+      [box.x + box.w, box.y],
+      [box.x + box.w, box.y + box.h],
+      [box.x, box.y + box.h],
+    ].map(([x, y]) => {
+      const [wx, wy] = applyToPoint(world, x!, y!);
+      return editor.worldToScreen(wx, wy);
+    });
   }
 
   private drawArtboardLabels(): void {
@@ -105,31 +171,68 @@ export class Overlay {
   private drawSelection(): void {
     const { ctx, editor } = this;
     const nodes = editor.selectedNodes();
-    if (nodes.length === 0) return;
+    const frame = this.screenFrame();
+    if (nodes.length === 0 || !frame) return;
+    ctx.save();
     ctx.strokeStyle = editor.theme.accent;
-    ctx.lineWidth = 1;
 
+    // 多选时先给每个对象各画一个贴合它自己方向的细框
     if (nodes.length > 1) {
-      for (const node of nodes) {
-        const r = this.toScreen(editor.geometry.worldBounds(node));
-        ctx.strokeRect(Math.round(r.x) + 0.5, Math.round(r.y) + 0.5, Math.round(r.w), Math.round(r.h));
+      ctx.lineWidth = 1;
+      for (const node of nodes) strokePolygon(ctx, this.nodeCorners(node));
+    }
+
+    ctx.lineWidth = nodes.length > 1 ? 1 : 1.5;
+    strokePolygon(ctx, frame.corners);
+
+    if (editor.getState().tool === 'select') {
+      if (frame.rotate) {
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(frame.topMiddle.x, frame.topMiddle.y);
+        ctx.lineTo(frame.rotate.x, frame.rotate.y);
+        ctx.stroke();
+        ctx.fillStyle = editor.theme.handleFill;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(frame.rotate.x, frame.rotate.y, ROTATE_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = editor.theme.handleFill;
+      ctx.lineWidth = 1.5;
+      for (const handle of HANDLES) {
+        const p = handlePoint(frame, handle);
+        // 控制柄跟着框一起转，看起来才是贴在框上的
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(frame.angle);
+        ctx.fillRect(-HANDLE_SIZE / 2, -HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
+        ctx.strokeRect(-HANDLE_SIZE / 2 + 0.5, -HANDLE_SIZE / 2 + 0.5, HANDLE_SIZE - 1, HANDLE_SIZE - 1);
+        ctx.restore();
       }
     }
-
-    const rect = this.selectionScreenRect();
-    if (!rect) return;
-    ctx.lineWidth = nodes.length > 1 ? 1 : 1.5;
-    ctx.strokeRect(Math.round(rect.x) + 0.5, Math.round(rect.y) + 0.5, Math.round(rect.w), Math.round(rect.h));
-
-    if (editor.getState().tool !== 'select') return;
-    ctx.fillStyle = editor.theme.handleFill;
-    ctx.lineWidth = 1.5;
-    for (const handle of HANDLES) {
-      const anchor = handleAnchor(handle);
-      const x = Math.round(rect.x + rect.w * anchor.x) - HANDLE_SIZE / 2;
-      const y = Math.round(rect.y + rect.h * anchor.y) - HANDLE_SIZE / 2;
-      ctx.fillRect(x, y, HANDLE_SIZE, HANDLE_SIZE);
-      ctx.strokeRect(x + 0.5, y + 0.5, HANDLE_SIZE - 1, HANDLE_SIZE - 1);
-    }
+    ctx.restore();
   }
+}
+
+/** 某个控制柄在屏幕上的位置。框可能是斜的，所以用四个角插值，而不是按矩形算 */
+function handlePoint(frame: ScreenFrame, handle: Handle): Point {
+  const [tl, tr, , bl] = frame.corners;
+  const anchor = handleAnchor(handle);
+  return {
+    x: tl.x + (tr.x - tl.x) * anchor.x + (bl.x - tl.x) * anchor.y,
+    y: tl.y + (tr.y - tl.y) * anchor.x + (bl.y - tl.y) * anchor.y,
+  };
+}
+
+function strokePolygon(ctx: CanvasRenderingContext2D, points: readonly Point[]): void {
+  const first = points[0];
+  if (!first) return;
+  ctx.beginPath();
+  ctx.moveTo(first.x, first.y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]!.x, points[i]!.y);
+  ctx.closePath();
+  ctx.stroke();
 }
