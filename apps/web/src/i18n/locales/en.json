@@ -41,7 +41,8 @@
       "boolean": "Boolean",
       "transform": "Position & size",
       "appearance": "Appearance",
-      "text": "Text"
+      "text": "Text",
+      "image": "Image adjustments"
     },
     "slide": {
       "add": "New slide",
@@ -212,6 +213,19 @@
       "rotate90": "Rotate 90° clockwise",
       "flipH": "Flip horizontal",
       "flipV": "Flip vertical"
+    },
+    "adjust": {
+      "brightness": "Brightness",
+      "contrast": "Contrast",
+      "saturation": "Saturation",
+      "temperature": "Temperature",
+      "tint": "Tint",
+      "hue": "Hue",
+      "blur": "Blur",
+      "zoom": "Zoom",
+      "panX": "Horizontal position",
+      "panY": "Vertical position",
+      "reset": "Reset all"
     }
   }
 }

@@ -41,7 +41,8 @@
       "boolean": "布尔运算",
       "transform": "位置与大小",
       "appearance": "外观",
-      "text": "文本"
+      "text": "文本",
+      "image": "图片调整"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -212,6 +213,19 @@
       "rotate90": "顺时针旋转 90°",
       "flipH": "水平翻转",
       "flipV": "垂直翻转"
+    },
+    "adjust": {
+      "brightness": "亮度",
+      "contrast": "对比度",
+      "saturation": "饱和度",
+      "temperature": "色温",
+      "tint": "色调",
+      "hue": "色相",
+      "blur": "模糊",
+      "zoom": "缩放",
+      "panX": "水平位置",
+      "panY": "垂直位置",
+      "reset": "全部重置"
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { Canvas, CanvasKit, GrDirectContext, Paint, SkPicture, Surface } from 'canvaskit-wasm';
+import type { Canvas, CanvasKit, GrDirectContext, Image, Paint, SkPicture, Surface } from 'canvaskit-wasm';
 import {
   IDENTITY,
   hasShapeStyle,
@@ -9,11 +9,13 @@ import {
   worldTransform,
   type Color,
   type DocStore,
+  type ImageFill,
   type Matrix,
   type NodeId,
   type Rect,
   type SceneNode,
 } from '@shiba/core';
+import { adjustmentMatrix } from './adjust';
 import type { GeometryCache } from './geometry';
 import { makeImageShader, type ImageCache } from './images';
 import type { DrawContext, NodeTypeDef, NodeTypeRegistry } from './node-types';
@@ -320,6 +322,44 @@ function paintCount(node: SceneNode): number {
   return (node.fill ? 1 : 0) + (node.stroke && node.stroke.width > 0 ? 1 : 0);
 }
 
+/** 用图片填充节点的轮廓，带上调色、模糊和画面内的缩放平移 */
+function drawImageFill(fill: ImageFill, image: Image, ctx: DrawContext): void {
+  const { ck, canvas, outline, paint } = ctx;
+  const bounds = ctx.bounds();
+  // 着色器决定每个点的颜色，画笔的颜色只贡献不透明度
+  const shader = makeImageShader(ck, image, bounds, fill);
+  const matrix = adjustmentMatrix(fill.adjust);
+  const colorFilter = matrix ? ck.ColorFilter.MakeMatrix(matrix) : null;
+  paint.setColor(ck.Color4f(1, 1, 1, ctx.opacity));
+  paint.setShader(shader);
+  paint.setColorFilter(colorFilter);
+
+  const sigma = Math.max(0, fill.adjust?.blur ?? 0) / 2;
+  if (sigma > 0) {
+    // 只模糊图片内容，形状的边缘要保持清晰：
+    // 先按轮廓裁剪，再画一个比形状大一圈的矩形来模糊。如果直接模糊轮廓本身，边缘会一起糊成半透明。
+    const blur = ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Clamp, null);
+    const pad = sigma * 3;
+    canvas.save();
+    canvas.clipPath(outline, ck.ClipOp.Intersect, true);
+    paint.setImageFilter(blur);
+    canvas.drawRect(
+      ck.LTRBRect(bounds.x - pad, bounds.y - pad, bounds.x + bounds.w + pad, bounds.y + bounds.h + pad),
+      paint,
+    );
+    paint.setImageFilter(null);
+    canvas.restore();
+    blur.delete();
+  } else {
+    canvas.drawPath(outline, paint);
+  }
+
+  paint.setShader(null);
+  paint.setColorFilter(null);
+  shader.delete();
+  colorFilter?.delete();
+}
+
 /** 默认绘制：先填充，再描边（描边居中） */
 function drawShape(node: SceneNode, ctx: DrawContext): void {
   if (!hasShapeStyle(node)) return;
@@ -333,13 +373,7 @@ function drawShape(node: SceneNode, ctx: DrawContext): void {
     paint.setStyle(ck.PaintStyle.Fill);
     const image = ctx.images?.get(node.fill.assetId) ?? null;
     if (image) {
-      // 着色器决定每个点的颜色，画笔的颜色只贡献不透明度
-      const shader = makeImageShader(ck, image, ctx.bounds(), node.fill.fit);
-      paint.setColor(ck.Color4f(1, 1, 1, ctx.opacity));
-      paint.setShader(shader);
-      canvas.drawPath(outline, paint);
-      paint.setShader(null);
-      shader.delete();
+      drawImageFill(node.fill, image, ctx);
     } else {
       // 图片还没到，或者文件里缺了这张图：画一块浅灰占位，让用户看得出这里有东西
       paint.setColor(toSkColor(ck, MISSING_IMAGE_COLOR, ctx.opacity));

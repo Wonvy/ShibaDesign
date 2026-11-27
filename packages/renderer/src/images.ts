@@ -1,5 +1,5 @@
 import type { CanvasKit, Image, Shader } from 'canvaskit-wasm';
-import type { AssetStore, ImageFit, Rect } from '@shiba/core';
+import type { AssetStore, ImageFill, Rect } from '@shiba/core';
 
 /**
  * 图片缓存：把资源库里的图片字节解码成 Skia 图片，用到时才解码，之后一直复用。
@@ -69,32 +69,34 @@ export class ImageCache {
 }
 
 /**
- * 用图片铺满一个矩形区域的着色器。调用方用完要 delete。
+ * 把图片铺进一个矩形区域的着色器。调用方用完要 delete。
+ * 铺放方式决定基础的缩放；在此之上还可以再放大（zoom）并移动图片在框里的位置（panX / panY）。
  * @param box 要铺的区域，节点本地坐标
  */
-export function makeImageShader(ck: CanvasKit, image: Image, box: Rect, fit: ImageFit): Shader {
+export function makeImageShader(ck: CanvasKit, image: Image, box: Rect, fill: ImageFill): Shader {
   const iw = image.width();
   const ih = image.height();
   let sx = box.w / iw;
   let sy = box.h / ih;
-  if (fit !== 'stretch') {
-    const uniform = fit === 'cover' ? Math.max(sx, sy) : Math.min(sx, sy);
+  if (fill.fit !== 'stretch') {
+    const uniform = fill.fit === 'cover' ? Math.max(sx, sy) : Math.min(sx, sy);
     sx = uniform;
     sy = uniform;
   }
-  const tx = box.x + (box.w - iw * sx) / 2;
-  const ty = box.y + (box.h - ih * sy) / 2;
+  const zoom = Math.max(1, fill.zoom ?? 1);
+  sx *= zoom;
+  sy *= zoom;
+  // 图片比框大（或小）出来的那部分就是可以移动的余量：pan 为 ±1 时正好移到头
+  const slackX = box.w - iw * sx;
+  const slackY = box.h - ih * sy;
+  const tx = box.x + slackX / 2 + (clampUnit(fill.panX) * Math.abs(slackX)) / 2;
+  const ty = box.y + slackY / 2 + (clampUnit(fill.panY) * Math.abs(slackY)) / 2;
   // contain 模式下图片四周可能留空，留空处应该透明；其余模式用边缘延伸，避免边界出现半透明的缝
-  const tile = fit === 'contain' ? ck.TileMode.Decal : ck.TileMode.Clamp;
-  return image.makeShaderOptions(tile, tile, ck.FilterMode.Linear, ck.MipmapMode.Linear, [
-    sx,
-    0,
-    tx,
-    0,
-    sy,
-    ty,
-    0,
-    0,
-    1,
-  ]);
+  const tile = fill.fit === 'contain' ? ck.TileMode.Decal : ck.TileMode.Clamp;
+  const matrix = [sx, 0, tx, 0, sy, ty, 0, 0, 1];
+  return image.makeShaderOptions(tile, tile, ck.FilterMode.Linear, ck.MipmapMode.Linear, matrix);
+}
+
+function clampUnit(value: number | undefined): number {
+  return Math.max(-1, Math.min(1, value ?? 0));
 }

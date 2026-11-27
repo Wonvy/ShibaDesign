@@ -133,7 +133,14 @@ function isColor(value: unknown): boolean {
 function isFill(value: unknown): boolean {
   if (!isObject(value)) return false;
   if (value.type === 'solid') return isColor(value.color);
-  if (value.type === 'image') return typeof value.assetId === 'string' && typeof value.fit === 'string';
+  if (value.type === 'image') {
+    if (typeof value.assetId !== 'string' || typeof value.fit !== 'string') return false;
+    for (const key of ['zoom', 'panX', 'panY']) {
+      if (value[key] !== undefined && !isFiniteNumber(value[key])) return false;
+    }
+    if (value.adjust === undefined) return true;
+    return isObject(value.adjust) && Object.values(value.adjust).every(isFiniteNumber);
+  }
   return false;
 }
 

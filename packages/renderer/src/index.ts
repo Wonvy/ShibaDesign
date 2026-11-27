@@ -3,6 +3,7 @@ export * from './node-types';
 export * from './geometry';
 export * from './renderer';
 export * from './images';
+export * from './adjust';
 export * from './skia';
 export * from './nodes';
 export * from './nodes/text';

@@ -60,7 +60,47 @@ export interface ImageFill {
   /** 资源库里的图片 id，见 AssetStore */
   assetId: string;
   fit: ImageFit;
+  /** 调色与模糊。省略表示不做任何调整 */
+  adjust?: ImageAdjustments;
+  /** 在形状里把图片再放大多少倍，最小为 1。省略表示 1 */
+  zoom?: number;
+  /** 图片在形状里的水平位置，-1 到 1：0 居中，1 表示把图片推到最右。省略表示 0 */
+  panX?: number;
+  /** 图片在形状里的垂直位置，-1 到 1：0 居中，1 表示把图片推到最下。省略表示 0 */
+  panY?: number;
 }
+
+/**
+ * 图片的非破坏性调整：只是一组参数，原图不动，随时可以改回去。
+ * 亮度、对比度、饱和度、色相的算法与 CSS 滤镜的定义一致，
+ * 这样以后导出成网页时可以直接用 CSS 实现同样的效果。
+ */
+export interface ImageAdjustments {
+  /** 亮度，-100 到 100，0 为不变 */
+  brightness: number;
+  /** 对比度，-100 到 100 */
+  contrast: number;
+  /** 饱和度，-100 到 100；-100 是黑白 */
+  saturation: number;
+  /** 色温，-100（冷，偏蓝）到 100（暖，偏黄） */
+  temperature: number;
+  /** 色调，-100（偏绿）到 100（偏洋红） */
+  tint: number;
+  /** 色相旋转，-180 到 180 度 */
+  hue: number;
+  /** 模糊半径，0 到 100，单位与文档坐标相同 */
+  blur: number;
+}
+
+export const NO_ADJUSTMENTS: ImageAdjustments = {
+  brightness: 0,
+  contrast: 0,
+  saturation: 0,
+  temperature: 0,
+  tint: 0,
+  hue: 0,
+  blur: 0,
+};
 
 export type Fill = SolidFill | ImageFill;
 

@@ -1,6 +1,7 @@
 import { hasShapeStyle } from '@shiba/core';
 import { AppearancePanel } from './AppearancePanel';
 import { AlignPanel, BooleanPanel, OrderPanel } from './ArrangePanels';
+import { ImagePanel } from './ImagePanel';
 import { TextPanel } from './TextPanel';
 import { TransformPanel } from './TransformPanel';
 import { registerPanel } from './registry';
@@ -31,6 +32,13 @@ export function registerBuiltinPanels(): void {
     component: TextPanel,
   });
   registerPanel({ id: 'appearance', titleKey: 'panel.appearance', order: 50, component: AppearancePanel });
+  registerPanel({
+    id: 'image',
+    titleKey: 'panel.image',
+    order: 60,
+    when: ({ nodes }) => nodes.some((n) => 'fill' in n && n.fill?.type === 'image'),
+    component: ImagePanel,
+  });
 }
 
 export { listPanels, registerPanel } from './registry';

@@ -696,6 +696,26 @@ button {
   width: 72px;
 }
 
+.appearance-divider {
+  grid-column: 1 / -1;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+.reset-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: 4px;
+  height: 28px;
+  padding: 0 12px;
+}
+
+.reset-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .prop-label {
   max-width: 110px;
   color: var(--text-dim);
