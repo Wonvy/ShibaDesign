@@ -9,3 +9,4 @@ export * from './nodes';
 export * from './nodes/text';
 export * from './text/fonts';
 export * from './text/layout';
+export * from './text/appearance';

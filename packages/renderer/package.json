@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./pdf": "./src/pdf.ts"
   },
   "dependencies": {
     "@shiba/core": "*",
+    "@shiba/io": "*",
     "canvaskit-wasm": "^0.42.0"
   }
 }

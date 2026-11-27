@@ -1,7 +1,7 @@
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { importPdf, type PdfImportResult } from '@shiba/io';
-import { DEFAULT_FONTS } from './fonts';
+import { PDF_FONTS } from './fonts';
 
 /**
  * 打开 PDF 用到的解析库。这个模块只在用户第一次打开 PDF 时才加载（见 files.ts 里的动态 import），
@@ -30,6 +30,6 @@ export function importPdfBytes(
       iccUrl: assetUrl('iccs'),
     },
     bytes,
-    { fonts: DEFAULT_FONTS, onProgress },
+    { fonts: PDF_FONTS, onProgress },
   );
 }

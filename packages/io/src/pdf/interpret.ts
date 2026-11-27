@@ -1,13 +1,5 @@
 import { BLEND_MODES, IDENTITY, multiply, parseHex, type BlendMode, type Color, type Matrix } from '@shiba/core';
-import {
-  appendTransformed,
-  asAxisRect,
-  boxContains,
-  controlBounds,
-  intersectBoxes,
-  scaleOf,
-  transformPath,
-} from './geometry';
+import { asAxisRect, boxContains, controlBounds, intersectBoxes, scaleOf, transformPath } from './geometry';
 import {
   CLOSE,
   LINE,
@@ -16,11 +8,13 @@ import {
   type Box,
   type PathData,
   type PdfClip,
+  type PdfGlyph,
   type PdfGroupItem,
   type PdfImageSource,
   type PdfItem,
   type PdfPage,
   type PdfStroke,
+  type PdfTextFont,
   type PdfTextItem,
 } from './ir';
 
@@ -50,6 +44,8 @@ export interface PdfFont {
   missing: boolean;
   bold: boolean;
   italic: boolean;
+  serif: boolean;
+  monospace: boolean;
   fontMatrix: Matrix;
   charProc?(id: string): PdfOperatorList | null;
 }
@@ -133,8 +129,15 @@ type Args = any[];
 const BLACK: Paint = { kind: 'color', r: 0, g: 0, b: 0 };
 /** Type3 字形里还可以再用 Type3 字体；限制嵌套层数，防止恶意文件造成无限递归 */
 const MAX_DEPTH = 6;
-/** 合并同一行文字时，一个对象最多攒这么多路径数据，免得一整页密密麻麻的字变成一个巨大的对象 */
-const MAX_RUN_DATA = 120_000;
+/** 合并同一行文字时，一个对象最多攒这么多字，免得一整页密密麻麻的字变成一个巨大的对象 */
+const MAX_RUN_GLYPHS = 4000;
+/** 探测 Type3 字形时用的填充色：字形自己没设颜色的话，画出来就是这个颜色 */
+/** 同一行里相隔超过这么多个字号的两段字不算同一段：多半是表格的两列，或者项目符号和正文 */
+const SPLIT_GAP = 1.2;
+/** 相隔超过这么多个字号就当作中间有个空格 */
+const SPACE_GAP = 0.15;
+const PROBE_COLOR = { r: 0.123, g: 0.456, b: 0.789 };
+const PROBE: Paint = { kind: 'color', ...PROBE_COLOR };
 
 const translation = (x: number, y: number): Matrix => [1, 0, 0, 1, x, y];
 
@@ -241,6 +244,10 @@ class Interpreter {
   private readonly issues = emptyIssues();
   private readonly handlers: (((args: Args) => void) | undefined)[] = [];
   private readonly crops = new WeakMap<PdfImageSource, Map<string, PdfImageSource | null>>();
+  /** Type3 字形的轮廓，按字体和字形缓存；null 表示这个字形不能当普通字形处理 */
+  private readonly type3Outlines = new Map<string, PathData | null>();
+  /** 合并出来的一行文字里，主要字体有多少个字 */
+  private readonly dominance = new WeakMap<PdfTextItem, number>();
 
   constructor(
     private readonly resources: PdfResources,
@@ -690,6 +697,10 @@ class Interpreter {
     s.y = s.lineY += Number(y) || 0;
   }
 
+  private textFont(font: PdfFont): PdfTextFont {
+    return { name: font.name, bold: font.bold, italic: font.italic, serif: font.serif, monospace: font.monospace };
+  }
+
   private showText(glyphs: readonly (Glyph | number)[] | undefined): void {
     const s = this.state;
     const font = s.font;
@@ -718,13 +729,66 @@ class Interpreter {
     const shown = this.visible && mode !== 3;
     if (s.renderMode & 4) this.textClip = true;
 
-    const data: PathData = [];
-    let text = '';
-    let needsFallback = false;
+    // 一次显示的字可能被很大的空隙隔成几段（排版软件常用这种办法对齐表格的列、项目符号和正文），
+    // 每段单独成为一行文字，免得把不相干的内容拼在一起
+    let segment = { glyphs: [] as PdfGlyph[], text: '', start: null as number | null, end: 0, fallback: false };
+    let style: { fill: Color | null; stroke: PdfStroke | null } | null = null;
+    const flush = (): void => {
+      const { glyphs: placed, text, start, end, fallback } = segment;
+      segment = { glyphs: [], text: '', start: null, end: 0, fallback: false };
+      if (!shown || start === null || (placed.length === 0 && !(fallback && text.trim()))) return;
+      style ??= {
+        fill: mode === 0 || mode === 2 ? this.fillColor() : null,
+        stroke: mode === 1 || mode === 2 ? this.strokeStyle() : null,
+      };
+      if (!style.fill && !style.stroke) return;
+      const at = (t: number): [number, number] =>
+        font.vertical ? [base[2] * t + base[4], base[3] * t + base[5]] : [base[0] * t + base[4], base[1] * t + base[5]];
+      const [startX, startY] = at(start);
+      const [endX, endY] = at(end);
+      const length = Math.hypot(endX - startX, endY - startY);
+      const axis = Math.hypot(base[0], base[1]) || 1;
+      this.emitText({
+        kind: 'text',
+        text,
+        glyphs: placed,
+        fill: style.fill,
+        stroke: style.stroke,
+        font: this.textFont(font),
+        size: size * Math.hypot(base[2], base[3]),
+        x: startX,
+        y: startY,
+        // 朝向取文字前进的方向；字号为负或水平缩放为负时前进方向与坐标轴相反
+        dirX: length > 1e-9 ? (endX - startX) / length : base[0] / axis,
+        dirY: length > 1e-9 ? (endY - startY) / length : base[1] / axis,
+        length,
+        vertical: font.vertical,
+        blendMode: s.blendMode,
+        clip: s.clip,
+      });
+    };
+    const place = (fontChar: string, px: number, py: number, text: string, advance: number): void => {
+      const outline = this.resources.glyph(font, fontChar);
+      if (!outline) return;
+      const matrix = multiply(base, [size, 0, 0, -size, px, py]);
+      segment.glyphs.push({ outline, font: font.id, matrix, text, advance });
+    };
+
     let x = 0;
+    // 两个字之间空出了一个词的距离，但文字里没有空格字符：等下一个字出现时补一个空格
+    let pendingSpace = false;
     for (const glyph of glyphs) {
       if (typeof glyph === 'number') {
-        x += (spacingSign * glyph * size) / 1000;
+        const shift = (spacingSign * glyph * size) / 1000;
+        x += shift;
+        if (!font.vertical && segment.start !== null) {
+          if (shift >= size * SPLIT_GAP) {
+            flush();
+            pendingSpace = false;
+          } else if (shift >= size * SPACE_GAP) {
+            pendingSpace = true;
+          }
+        }
         continue;
       }
       const spacing = (glyph.isSpace ? s.wordSpacing : 0) + s.charSpacing;
@@ -736,60 +800,37 @@ class Interpreter {
         gy = x + glyph.vmetric[2]! * advanceScale;
         width = -glyph.vmetric[0]!;
       }
+      const extra = font.vertical ? -spacing * direction : spacing * direction;
       if (shown) {
-        text += glyph.unicode ?? '';
+        segment.start ??= x;
+        if (pendingSpace && !glyph.isSpace && !segment.text.endsWith(' ')) segment.text += ' ';
+        pendingSpace = false;
+        segment.text += glyph.unicode ?? '';
         if (font.missing) {
-          if (!glyph.isSpace) needsFallback = true;
+          if (!glyph.isSpace) segment.fallback = true;
         } else if (glyph.isInFont) {
-          const place = (fontChar: string, px: number, py: number): void => {
-            const outline = this.resources.glyph(font, fontChar);
-            if (outline) appendTransformed(data, outline, multiply(base, [size, 0, 0, -size, px, py]));
-          };
-          place(glyph.fontChar, gx, gy);
+          place(glyph.fontChar, gx, gy, glyph.unicode ?? '', width * font.fontMatrix[0]);
           if (glyph.accent) {
-            place(glyph.accent.fontChar, gx + size * glyph.accent.offset.x, gy - size * glyph.accent.offset.y);
+            const { fontChar, offset } = glyph.accent;
+            place(fontChar, gx + size * offset.x, gy - size * offset.y, '', 0);
           }
         }
+        segment.end = x + width * advanceScale;
       }
-      x += font.vertical ? width * advanceScale - spacing * direction : width * advanceScale + spacing * direction;
+      x += width * advanceScale + extra;
+      // 字距（Tc）也会被用来拉开很大的距离，或者代替空格，处理方式同上
+      if (!font.vertical && shown && !glyph.isSpace) {
+        if (extra >= size * SPLIT_GAP) {
+          flush();
+          pendingSpace = false;
+        } else if (extra >= size * SPACE_GAP) {
+          pendingSpace = true;
+        }
+      }
     }
-
-    const startX = base[4];
-    const startY = base[5];
-    const [endX, endY] = font.vertical
-      ? [base[2] * x + base[4], base[3] * x + base[5]]
-      : [base[0] * x + base[4], base[1] * x + base[5]];
+    flush();
     if (font.vertical) s.y -= x;
     else s.x += x * hScale;
-
-    if (!shown || (data.length === 0 && !(needsFallback && text.trim()))) return;
-    const fill = mode === 0 || mode === 2 ? this.fillColor() : null;
-    const stroke = mode === 1 || mode === 2 ? this.strokeStyle() : null;
-    if (!fill && !stroke) return;
-
-    const length = Math.hypot(endX - startX, endY - startY);
-    const axis = Math.hypot(base[0], base[1]) || 1;
-    this.emitText({
-      kind: 'text',
-      text,
-      data,
-      fill,
-      stroke,
-      fontName: font.name,
-      fontId: font.id,
-      bold: font.bold,
-      italic: font.italic,
-      size: size * Math.hypot(base[2], base[3]),
-      x: startX,
-      y: startY,
-      // 朝向取文字前进的方向；字号为负或水平缩放为负时前进方向与坐标轴相反
-      dirX: length > 1e-9 ? (endX - startX) / length : base[0] / axis,
-      dirY: length > 1e-9 ? (endY - startY) / length : base[1] / axis,
-      length,
-      vertical: font.vertical,
-      blendMode: s.blendMode,
-      clip: s.clip,
-    });
   }
 
   /**
@@ -798,6 +839,7 @@ class Interpreter {
    * 字体不同也照样接：中英文混排的一行字本来就是好几种字体。
    */
   private emitText(item: PdfTextItem): void {
+    const visibleLength = (text: string): number => text.replace(/\s/g, '').length;
     const previous = this.current[this.current.length - 1];
     if (previous?.kind === 'text' && !previous.vertical && !item.vertical) {
       const dx = item.x - previous.x;
@@ -805,23 +847,39 @@ class Interpreter {
       const along = dx * previous.dirX + dy * previous.dirY;
       const across = Math.abs(dx * previous.dirY - dy * previous.dirX);
       const gap = along - previous.length;
-      const size = previous.size;
+      const size = Math.max(previous.size, item.size);
+      const sameSize = Math.abs(previous.size - item.size) <= size * 0.02;
+      // 字号不同的小段也接上：上标、下标、小型大写字母都是这样夹在一行里的，基线可以错开一点
+      const sameLine = sameSize ? across < size * 0.05 : across < size * 0.45 && item.size >= previous.size * 0.5;
       const joinable =
-        Math.abs(size - item.size) < size * 1e-3 &&
+        item.size <= previous.size * 2 &&
         previous.dirX * item.dirX + previous.dirY * item.dirY > 0.9999 &&
-        across < size * 0.05 &&
+        sameLine &&
         gap > -size * 0.5 &&
-        gap < size * 1.5 &&
-        (previous.data.length === 0) === (item.data.length === 0) &&
-        previous.data.length + item.data.length <= MAX_RUN_DATA &&
+        gap < size * SPLIT_GAP &&
+        (previous.glyphs.length === 0) === (item.glyphs.length === 0) &&
+        previous.glyphs.length + item.glyphs.length <= MAX_RUN_GLYPHS &&
         previous.blendMode === item.blendMode &&
         sameColor(previous.fill, item.fill) &&
         sameStroke(previous.stroke, item.stroke) &&
         sameClip(previous.clip, item.clip);
       if (joinable) {
-        const spaced = gap > size * 0.2 && !previous.text.endsWith(' ') && !item.text.startsWith(' ');
+        const spaced = gap > size * SPACE_GAP && !previous.text.endsWith(' ') && !item.text.startsWith(' ');
+        // 这一行主要用哪种字体：看哪种字体的字多
+        const dominant = this.dominance.get(previous) ?? visibleLength(previous.text);
+        const added = visibleLength(item.text);
+        if (added > dominant) {
+          previous.font = item.font;
+          this.dominance.set(previous, added);
+        }
+        if (item.size > previous.size * 1.02) {
+          // 后面接上来的字更大：这一行的字号和基线以大字为准（前面那段可能是上标或小字）
+          previous.size = item.size;
+          previous.x = item.x - previous.dirX * along;
+          previous.y = item.y - previous.dirY * along;
+        }
         previous.text += (spaced ? ' ' : '') + item.text;
-        for (const value of item.data) previous.data.push(value);
+        for (const glyph of item.glyphs) previous.glyphs.push(glyph);
         previous.length = along + item.length;
         return;
       }
@@ -829,7 +887,57 @@ class Interpreter {
     this.emit(item);
   }
 
-  /** Type3 字体：每个字是一小段绘图指令，在字的位置上把它执行一遍 */
+  /**
+   * Type3 字体的一个字形在字形坐标里的轮廓。Type3 字体的每个字是一小段绘图指令，
+   * 用字体矩阵作为坐标变换把它执行一遍，收集画出来的路径。
+   * 只有"只用当前填充色填充路径"的字形才能当作普通字形处理（绝大多数都是）；
+   * 自带颜色、描边或者画图片的字形返回 null，整段文字改按原样执行。
+   */
+  private type3Outline(font: PdfFont, id: string, proc: PdfOperatorList): ArrayLike<number> | null {
+    const key = `${font.id}\u0000${id}`;
+    const cached = this.type3Outlines.get(key);
+    if (cached !== undefined) return cached;
+
+    const depth = this.stack.length;
+    this.save();
+    const s = this.state;
+    s.ctm = font.fontMatrix;
+    s.fill = PROBE;
+    s.fillAlpha = 1;
+    s.stroke = PROBE;
+    s.softMask = false;
+    const clip = s.clip;
+    const blendMode = s.blendMode;
+    const issues = { ...this.issues };
+    this.containers.push([]);
+    this.depth++;
+    this.run(proc);
+    this.depth--;
+    const items = this.containers.pop()!;
+    while (this.stack.length > depth) this.restore();
+    // 探测时记下的问题不算数：真正画的时候会再记一次
+    Object.assign(this.issues, issues);
+
+    const probe = { ...PROBE_COLOR, a: 1 };
+    const uniform = items.every(
+      (item) =>
+        item.kind === 'path' &&
+        !item.stroke &&
+        item.fillRule === 'nonzero' &&
+        item.blendMode === blendMode &&
+        item.clip === clip &&
+        sameColor(item.fill, probe),
+    );
+    let outline: PathData | null = null;
+    if (uniform) {
+      outline = [];
+      for (const item of items) if (item.kind === 'path') for (const value of item.data) outline.push(value);
+    }
+    this.type3Outlines.set(key, outline);
+    return outline;
+  }
+
+  /** Type3 字体：每个字是一小段绘图指令 */
   private showType3Text(font: PdfFont, glyphs: readonly (Glyph | number)[]): void {
     const s = this.state;
     const size = s.fontSize;
@@ -850,7 +958,8 @@ class Interpreter {
     const start = at;
     const { blendMode, clip } = s;
 
-    this.containers.push([]);
+    // 先算好每个字的位置
+    const placements: { proc: PdfOperatorList; at: Matrix; id: string; text: string; advance: number }[] = [];
     let text = '';
     for (const glyph of glyphs) {
       if (typeof glyph === 'number') {
@@ -860,65 +969,68 @@ class Interpreter {
         continue;
       }
       const spacing = (glyph.isSpace ? s.wordSpacing : 0) + s.charSpacing;
-      const proc = glyph.operatorListId !== undefined ? font.charProc?.(glyph.operatorListId) : null;
-      if (proc && shown) {
-        const depth = this.stack.length;
-        this.save();
-        this.state.ctm = multiply(multiply(at, [size, 0, 0, size, 0, 0]), fontMatrix);
-        this.depth++;
-        this.run(proc);
-        this.depth--;
-        while (this.stack.length > depth) this.restore();
+      const id = glyph.operatorListId;
+      const proc = id !== undefined ? font.charProc?.(id) : null;
+      if (proc && shown && id !== undefined) {
+        placements.push({ proc, at, id, text: glyph.unicode ?? '', advance: glyph.width * fontMatrix[0] });
       }
       if (shown) text += glyph.unicode ?? '';
       const width = glyph.width * fontMatrix[0] * size + spacing * direction;
       at = multiply(at, translation(width, 0));
       s.x += width * hScale;
     }
-    const items = this.containers.pop()!;
-    if (items.length === 0) return;
+    if (placements.length === 0) return;
 
-    // 所有字都是同一种填充的路径时，合成一段文字；否则（比如点阵字体，每个字是一张小图）编成一组
-    const first = items[0]!;
-    const uniform =
-      first.kind === 'path' &&
-      items.every(
-        (item) =>
-          item.kind === 'path' &&
-          item.fillRule === 'nonzero' &&
-          item.blendMode === first.blendMode &&
-          sameColor(item.fill, first.fill) &&
-          sameStroke(item.stroke, first.stroke) &&
-          sameClip(item.clip, first.clip),
-      );
-    if (!uniform || first.kind !== 'path') {
-      this.current.push({ kind: 'group', name: text.trim() || undefined, opacity: 1, blendMode, clip, items });
+    // 通常情况：每个字都能当成普通字形，整段就是一行普通文字
+    const outlines = placements.map((p) => this.type3Outline(font, p.id, p.proc));
+    if (outlines.every((outline) => outline !== null)) {
+      const fill = this.fillColor();
+      if (!fill) return;
+      const placed: PdfGlyph[] = [];
+      placements.forEach((p, i) => {
+        const outline = outlines[i]!;
+        if (outline.length === 0) return;
+        const matrix = multiply(p.at, [size, 0, 0, size, 0, 0]);
+        placed.push({ outline, font: font.id, matrix, text: p.text, advance: p.advance });
+      });
+      if (placed.length === 0) return;
+      const length = Math.hypot(at[4] - start[4], at[5] - start[5]);
+      const axis = Math.hypot(start[0], start[1]) || 1;
+      this.emitText({
+        kind: 'text',
+        text,
+        glyphs: placed,
+        fill,
+        stroke: null,
+        font: this.textFont(font),
+        size: size * Math.hypot(start[2], start[3]),
+        x: start[4],
+        y: start[5],
+        dirX: length > 1e-9 ? (at[4] - start[4]) / length : start[0] / axis,
+        dirY: length > 1e-9 ? (at[5] - start[5]) / length : start[1] / axis,
+        length,
+        vertical: font.vertical,
+        blendMode,
+        clip,
+      });
       return;
     }
-    const data: PathData = [];
-    for (const item of items) if (item.kind === 'path') for (const value of item.data) data.push(value);
-    const length = Math.hypot(at[4] - start[4], at[5] - start[5]);
-    const axis = Math.hypot(start[0], start[1]) || 1;
-    this.emitText({
-      kind: 'text',
-      text,
-      data,
-      fill: first.fill,
-      stroke: first.stroke,
-      fontName: font.name,
-      fontId: font.id,
-      bold: font.bold,
-      italic: font.italic,
-      size: size * Math.hypot(start[2], start[3]),
-      x: start[4],
-      y: start[5],
-      dirX: length > 1e-9 ? (at[4] - start[4]) / length : start[0] / axis,
-      dirY: length > 1e-9 ? (at[5] - start[5]) / length : start[1] / axis,
-      length,
-      vertical: font.vertical,
-      blendMode: first.blendMode,
-      clip: first.clip,
-    });
+
+    // 有字自带颜色、描边或者是图片：在每个字的位置上把它原样执行一遍，整段编成一组
+    this.containers.push([]);
+    for (const p of placements) {
+      const depth = this.stack.length;
+      this.save();
+      this.state.ctm = multiply(multiply(p.at, [size, 0, 0, size, 0, 0]), fontMatrix);
+      this.depth++;
+      this.run(p.proc);
+      this.depth--;
+      while (this.stack.length > depth) this.restore();
+    }
+    const items = this.containers.pop()!;
+    if (items.length > 0) {
+      this.current.push({ kind: 'group', name: text.trim() || undefined, opacity: 1, blendMode, clip, items });
+    }
   }
 }
 

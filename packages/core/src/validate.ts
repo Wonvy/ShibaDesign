@@ -109,6 +109,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
         fail('style');
       }
       if (typeof node.align !== 'string' || typeof node.sizing !== 'string') fail('align/sizing');
+      if (node.appearance !== undefined && !isAppearance(node.appearance)) fail('appearance');
       break;
     }
   }
@@ -167,6 +168,29 @@ function isDeck(value: unknown): boolean {
         isFiniteNumber(a.delay),
     )
   );
+}
+
+/** 一段文字的字形个数上限，远超一页能放下的字 */
+const MAX_APPEARANCE_GLYPHS = 200_000;
+
+function isAppearance(value: unknown): boolean {
+  if (!isObject(value) || typeof value.basis !== 'string' || !isFiniteNumber(value.baseline)) return false;
+  if (!Array.isArray(value.runs)) return false;
+  let count = 0;
+  for (const run of value.runs) {
+    if (!isObject(run) || typeof run.library !== 'string' || !isNumberArray(run.matrix, 4)) return false;
+    const glyphs = run.glyphs;
+    if (!Array.isArray(glyphs) || glyphs.length % 3 !== 0) return false;
+    count += glyphs.length / 3;
+    if (count > MAX_APPEARANCE_GLYPHS) return false;
+    for (let i = 0; i < glyphs.length; i += 3) {
+      const index = glyphs[i];
+      if (!Number.isInteger(index) || index < 0 || !isFiniteNumber(glyphs[i + 1]) || !isFiniteNumber(glyphs[i + 2])) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 function isSubpath(value: unknown): boolean {

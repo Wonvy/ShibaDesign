@@ -1,5 +1,16 @@
 import { useSyncExternalStore } from 'react';
-import { DocStore, createNode, referencedAssetIds, rgba, solid, type DocumentData, type Point } from '@shiba/core';
+import {
+  DocStore,
+  artboards,
+  createNode,
+  referencedAssetIds,
+  rgba,
+  slides,
+  solid,
+  type DocumentData,
+  type NodeId,
+  type Point,
+} from '@shiba/core';
 import type { Editor } from '@shiba/editor';
 import {
   PdfImportError,
@@ -89,6 +100,7 @@ const OPEN_TYPES: PickerType[] = [
 const MAX_PDF_BYTES = 512 * 1024 * 1024;
 const PNG_TYPES: PickerType[] = [{ description: 'PNG', accept: { 'image/png': ['.png'] } }];
 const HTML_TYPES: PickerType[] = [{ description: 'HTML', accept: { 'text/html': ['.html'] } }];
+const PDF_TYPES: PickerType[] = [{ description: 'PDF', accept: { [PDF_MIME]: [PDF_EXTENSION] } }];
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp';
 /** 图片长边超过这个值就在导入时缩小。解码后的图片整张放在内存和显存里，太大会拖垮整个画布 */
 const MAX_IMAGE_SIDE = 4096;
@@ -346,6 +358,62 @@ export async function exportHtml(editor: Editor): Promise<void> {
       return;
     }
     download(name, bytes, 'text/html');
+    toast(t('file.exported', { name }));
+  } catch (error) {
+    if (isAbort(error)) return;
+    console.error(error);
+    toast(t('file.saveFailed'), 'error');
+  }
+}
+
+/** 导出 PDF 的页面：先是幻灯片（按播放顺序），再是其余的画板 */
+function pdfPages(store: DocStore): NodeId[] {
+  const ordered = slides(store).map((board) => board.id);
+  const rest = artboards(store)
+    .map((board) => board.id)
+    .filter((id) => !ordered.includes(id));
+  return [...ordered, ...rest];
+}
+
+/**
+ * 导出 PDF：每个画板一页，图形是矢量，文字可以搜索和复制。
+ * 能直接写文件的浏览器先选好保存位置再导出：导出要取字体文件，可能要好几秒，
+ * 而选择保存位置的对话框只能在用户刚点过菜单时弹出。
+ */
+export async function exportPdf(editor: Editor): Promise<void> {
+  const pages = pdfPages(editor.store);
+  if (pages.length === 0) {
+    toast(t('file.noArtboards'), 'error');
+    return;
+  }
+  const title = (state.name ?? t('file.untitled')).replace(/\.(shiba|pdf)$/i, '');
+  const name = `${title}.pdf`;
+  let out: SaveHandle | null = null;
+  try {
+    if (picker.showSaveFilePicker) out = await picker.showSaveFilePicker({ suggestedName: name, types: PDF_TYPES });
+  } catch (error) {
+    if (isAbort(error)) return;
+    console.error(error);
+  }
+
+  const busy = busyToast(t('file.exportingPdf', { count: pages.length }));
+  let bytes: Uint8Array;
+  try {
+    bytes = await editor.exportPdf(pages, { title });
+  } catch (error) {
+    console.error(error);
+    busy.close();
+    toast(t('file.exportPdfFailed'), 'error');
+    return;
+  }
+  busy.close();
+  try {
+    if (out) {
+      await writeTo(out, bytes);
+      toast(t('file.exported', { name: out.name }));
+      return;
+    }
+    download(name, bytes, PDF_MIME);
     toast(t('file.exported', { name }));
   } catch (error) {
     if (isAbort(error)) return;

@@ -68,16 +68,22 @@ export class ImageCache {
   }
 }
 
+/** 图片在形状里的摆放：图片像素坐标 → 节点本地坐标的缩放和平移 */
+export interface ImagePlacement {
+  sx: number;
+  sy: number;
+  tx: number;
+  ty: number;
+}
+
 /**
- * 把图片铺进一个矩形区域的着色器。调用方用完要 delete。
+ * 算出图片铺进一个矩形区域时的摆放。
  * 铺放方式决定基础的缩放；在此之上还可以再放大（zoom）并移动图片在框里的位置（panX / panY）。
  * @param box 要铺的区域，节点本地坐标
  */
-export function makeImageShader(ck: CanvasKit, image: Image, box: Rect, fill: ImageFill): Shader {
-  const iw = image.width();
-  const ih = image.height();
-  let sx = box.w / iw;
-  let sy = box.h / ih;
+export function placeImage(width: number, height: number, box: Rect, fill: ImageFill): ImagePlacement {
+  let sx = box.w / width;
+  let sy = box.h / height;
   if (fill.fit !== 'stretch') {
     const uniform = fill.fit === 'cover' ? Math.max(sx, sy) : Math.min(sx, sy);
     sx = uniform;
@@ -87,10 +93,22 @@ export function makeImageShader(ck: CanvasKit, image: Image, box: Rect, fill: Im
   sx *= zoom;
   sy *= zoom;
   // 图片比框大（或小）出来的那部分就是可以移动的余量：pan 为 ±1 时正好移到头
-  const slackX = box.w - iw * sx;
-  const slackY = box.h - ih * sy;
-  const tx = box.x + slackX / 2 + (clampUnit(fill.panX) * Math.abs(slackX)) / 2;
-  const ty = box.y + slackY / 2 + (clampUnit(fill.panY) * Math.abs(slackY)) / 2;
+  const slackX = box.w - width * sx;
+  const slackY = box.h - height * sy;
+  return {
+    sx,
+    sy,
+    tx: box.x + slackX / 2 + (clampUnit(fill.panX) * Math.abs(slackX)) / 2,
+    ty: box.y + slackY / 2 + (clampUnit(fill.panY) * Math.abs(slackY)) / 2,
+  };
+}
+
+/**
+ * 把图片铺进一个矩形区域的着色器，摆放见 placeImage。调用方用完要 delete。
+ * @param box 要铺的区域，节点本地坐标
+ */
+export function makeImageShader(ck: CanvasKit, image: Image, box: Rect, fill: ImageFill): Shader {
+  const { sx, sy, tx, ty } = placeImage(image.width(), image.height(), box, fill);
   // contain 模式下图片四周可能留空，留空处应该透明；其余模式用边缘延伸，避免边界出现半透明的缝
   const tile = fill.fit === 'contain' ? ck.TileMode.Decal : ck.TileMode.Clamp;
   const matrix = [sx, 0, tx, 0, sy, ty, 0, 0, 1];

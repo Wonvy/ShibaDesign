@@ -1,13 +1,24 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DocStore, createNode, rgba, solid, type TextNode } from '@shiba/core';
+import {
+  AssetStore,
+  DocStore,
+  GLYPH_LIBRARY_MIME,
+  createNode,
+  encodeGlyphLibrary,
+  rgba,
+  solid,
+  textAppearanceBasis,
+  type TextNode,
+} from '@shiba/core';
 import {
   FontManager,
   GeometryCache,
   NodeTypeRegistry,
   TextLayouts,
   createTextNodeType,
+  TextAppearances,
   loadCanvasKit,
   parseUnicodeRange,
   registerBuiltinNodeTypes,
@@ -52,6 +63,7 @@ function fontsourceFaces(pkg: string, prefix: string, loaded: string[]): FontFac
 function setup() {
   const loaded: string[] = [];
   const store = DocStore.create();
+  const assets = new AssetStore();
   const fonts = new FontManager(ck);
   fonts.addFamily({ name: 'Inter', faces: fontsourceFaces('@fontsource/inter', 'inter', loaded) });
   fonts.addFamily({
@@ -59,13 +71,14 @@ function setup() {
     faces: fontsourceFaces('@fontsource/noto-sans-sc', 'noto-sans-sc', loaded),
   });
   const layouts = new TextLayouts(ck, store, fonts);
-  const registry = registerBuiltinNodeTypes(new NodeTypeRegistry()).register(createTextNodeType(layouts));
+  const appearances = new TextAppearances(ck, store, assets);
+  const registry = registerBuiltinNodeTypes(new NodeTypeRegistry()).register(createTextNodeType(layouts, appearances));
   const geometry = new GeometryCache(ck, store, registry);
   fonts.onChange(() => {
     layouts.clear();
     geometry.invalidate((n) => n.type === 'text');
   });
-  return { store, fonts, layouts, geometry, loaded };
+  return { store, assets, fonts, layouts, appearances, geometry, loaded };
 }
 
 const FAMILIES = ['Inter', 'Noto Sans SC'];
@@ -288,5 +301,47 @@ describe('文本节点的几何', () => {
     expect(bounds.h).toBeCloseTo(56, 0);
     expect(geometry.hitTest(bounds.w / 2, 28, [store.root.id], 0)?.id).toBe(node.id);
     expect(geometry.hitTest(bounds.w + 20, 28, [store.root.id], 0)).toBeNull();
+  });
+});
+
+describe('保真外观', () => {
+  /** 把一个 1 × 1 的方块字形放进资源库，返回带保真外观的文本 */
+  async function frozen(env: ReturnType<typeof setup>): Promise<TextNode> {
+    const square = [0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 4];
+    const meta = await env.assets.add(encodeGlyphLibrary([square]), { mime: GLYPH_LIBRARY_MIME, width: 0, height: 0 });
+    const node = addText(env.store, 'AB', { size: [100, 50] });
+    // 字号 10 的两个方块，基线在 y = 30；字形 y 向上，所以纵向乘 -10
+    const appearance = {
+      runs: [{ library: meta.id, matrix: [10, 0, 0, -10] as const, glyphs: [0, 5, 30, 0, 20, 30] }],
+      basis: textAppearanceBasis(node),
+      baseline: 30,
+    };
+    env.store.transact('freeze', (tx) => tx.update(node.id, { appearance }));
+    return env.store.require(node.id) as TextNode;
+  }
+
+  it('按字形库里的轮廓和记录的位置拼出路径', async () => {
+    const env = setup();
+    const node = await frozen(env);
+    const path = env.appearances.path(node)!;
+    expect(Array.from(path.computeTightBounds())).toEqual([5, 20, 30, 30]);
+    // 文本框就是原文件里的范围，和我们的排版结果无关
+    expect(env.geometry.localBounds(node)).toEqual({ x: 0, y: 0, w: 100, h: 50 });
+  });
+
+  it('文字改过之后改用正常排版', async () => {
+    const env = setup();
+    const node = await frozen(env);
+    await env.fonts.ensure(FAMILIES, 'ABC', 400);
+    env.store.transact('type', (tx) => tx.update(node.id, { text: 'ABC' }));
+    const edited = env.store.require(node.id) as TextNode;
+    expect(env.geometry.localBounds(edited).w).toBe(env.layouts.get(edited).width);
+  });
+
+  it('字形库缺失时也改用正常排版', async () => {
+    const env = setup();
+    const node = await frozen(env);
+    env.assets.replaceAll([]);
+    expect(env.appearances.path(node)).toBeNull();
   });
 });

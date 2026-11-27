@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   AssetStore,
   DocStore,
+  GLYPH_LIBRARY_MIME,
   createNode,
+  encodeGlyphLibrary,
   referencedAssetIds,
   rgba,
   solid,
@@ -110,6 +112,15 @@ describe('.shiba 文件', () => {
     expect([...file.assets[0]!.bytes]).toEqual([...PIXELS]);
     // 解出来的文档能直接装进存储
     expect(DocStore.fromJSON(file.document).size).toBe(store.size);
+  });
+
+  it('从 PDF 导入的文字用到的字形库也能存进去再读出来', async () => {
+    const assets = new AssetStore();
+    const bytes = encodeGlyphLibrary([[0, 0, 0, 1, 1, 0, 4]]);
+    const meta = await assets.add(bytes, { mime: GLYPH_LIBRARY_MIME, width: 0, height: 0 });
+    const file = unpackShiba(packShiba({ document: DocStore.create().toJSON(), assets: assets.all() }));
+    expect(file.assets.map((a) => a.meta)).toEqual([meta]);
+    expect([...file.assets[0]!.bytes]).toEqual([...bytes]);
   });
 
   it('是标准的 ZIP：改个扩展名就能用普通工具解开', async () => {

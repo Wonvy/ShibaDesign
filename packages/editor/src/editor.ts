@@ -30,11 +30,13 @@ import {
   Renderer,
   TextLayouts,
   createTextNodeType,
+  TextAppearances,
   registerBuiltinNodeTypes,
   type Bitmap,
   type Camera,
   type FrameStats,
 } from '@shiba/renderer';
+import type { PdfExportOptions } from '@shiba/renderer/pdf';
 import { CommandRegistry } from './commands/command';
 import { InputController } from './input';
 import { DEFAULT_BINDINGS, Keymap } from './keymap';
@@ -77,6 +79,8 @@ export class Editor {
   readonly geometry: GeometryCache;
   readonly fonts: FontManager;
   readonly textLayouts: TextLayouts;
+  /** 从 PDF 导入、还没改过的文字按原字形显示，见 core 的 text-appearance.ts */
+  readonly textAppearances: TextAppearances;
   readonly assets: AssetStore;
   readonly images: ImageCache;
   readonly tools = new Registry<Tool>('工具');
@@ -120,15 +124,16 @@ export class Editor {
       lineHeight: 1.4,
       letterSpacing: 0,
     };
+    this.assets = options.assets ?? new AssetStore();
     this.fonts = new FontManager(this.ck);
     this.textLayouts = new TextLayouts(this.ck, this.store, this.fonts);
+    this.textAppearances = new TextAppearances(this.ck, this.store, this.assets);
     registerBuiltinNodeTypes(this.nodeTypes);
-    this.nodeTypes.register(createTextNodeType(this.textLayouts));
+    this.nodeTypes.register(createTextNodeType(this.textLayouts, this.textAppearances));
     this.geometry = new GeometryCache(this.ck, this.store, this.nodeTypes);
     this.fonts.onChange(() => this.onFontsChange());
-    this.assets = options.assets ?? new AssetStore();
     this.images = new ImageCache(this.ck, this.assets);
-    this.assets.subscribe(() => this.onResourcesReady());
+    this.assets.subscribe(() => this.onAssetsChange());
     this.commands = new CommandRegistry(this);
     this.state = {
       tool: 'select',
@@ -152,6 +157,12 @@ export class Editor {
   }
 
   /** 字体或图片到位了：文档没变，但画面该变 */
+  /** 资源库变了：图片要重新解码，保真文字的字形库可能刚到，文本框的范围也跟着变 */
+  private onAssetsChange(): void {
+    this.geometry.invalidate((node) => node.type === 'text' && node.appearance !== undefined);
+    this.onResourcesReady();
+  }
+
   private onResourcesReady(): void {
     this.renderer?.invalidate();
     this.setState({ resourceEpoch: this.state.resourceEpoch + 1 });
@@ -589,6 +600,40 @@ export class Editor {
    */
   async snapshot(id: NodeId, scale: number): Promise<{ png: Uint8Array; box: Rect } | null> {
     await this.fontsReady(id);
+    return this.rasterize(id, scale);
+  }
+
+  /**
+   * 把一组画板导出成矢量 PDF，每个画板一页。见渲染器的 pdf.ts。
+   * 字体要先加载完，排版结果才是最终的；嵌进 PDF 的字体文件在导出时另取。
+   */
+  async exportPdf(artboards: readonly NodeId[], options: PdfExportOptions = {}): Promise<Uint8Array> {
+    // 导出器只在这里用到，用到时才加载
+    const [{ exportPdf }] = await Promise.all([
+      import('@shiba/renderer/pdf'),
+      ...artboards.map((id) => this.fontsReady(id)),
+    ]);
+    return exportPdf(
+      {
+        ck: this.ck,
+        store: this.store,
+        registry: this.nodeTypes,
+        geometry: this.geometry,
+        layouts: this.textLayouts,
+        fonts: this.fonts,
+        appearances: this.textAppearances,
+        images: this.images,
+        assets: this.assets,
+        // 不知道怎么写成矢量的节点画成两倍图放进去
+        rasterize: (node) => this.rasterize(node.id, 2),
+      },
+      artboards,
+      options,
+    );
+  }
+
+  /** snapshot 的同步部分：字体已经加载好时直接画 */
+  private rasterize(id: NodeId, scale: number): { png: Uint8Array; box: Rect } | null {
     const node = this.store.get(id);
     if (!node || !this.renderer) return null;
     let padding = 1;
@@ -615,6 +660,7 @@ export class Editor {
   dispose(): void {
     this.unmount();
     this.textLayouts.dispose();
+    this.textAppearances.dispose();
     this.images.dispose();
     this.geometry.dispose();
     this.listeners.clear();

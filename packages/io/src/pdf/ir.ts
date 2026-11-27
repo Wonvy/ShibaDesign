@@ -65,23 +65,45 @@ export interface PdfPathItem extends PdfItemBase {
   stroke: PdfStroke | null;
 }
 
+/** 一个字：字形的轮廓，以及把它放到页面上的变换 */
+export interface PdfGlyph {
+  /**
+   * 字形轮廓，以字号为 1 个单位，y 向上，编码和 PathData 相同。
+   * 同一个字体里同一个字形的所有出现共用同一个数组，生成字形库时靠它去重。
+   */
+  outline: ArrayLike<number>;
+  /** 字形所在的字体。同一个字体的字形放进同一个字形库 */
+  font: string;
+  /** 字形坐标 → 页面坐标 */
+  matrix: Matrix;
+  /** 这个字形代表的文字；单独画的重音符号这类附属字形是空串 */
+  text: string;
+  /** 步进宽度，单位和轮廓相同 */
+  advance: number;
+}
+
+/** 一段文字主要用的字体：混排时取字数最多的那种 */
+export interface PdfTextFont {
+  /** PDF 里的字体名，比如 "ABCDEF+Helvetica-Bold" */
+  name: string;
+  bold: boolean;
+  italic: boolean;
+  serif: boolean;
+  monospace: boolean;
+}
+
 /**
- * 一段文字。`data` 是每个字的轮廓合在一起的路径，用来原样显示；
- * 其余字段记录这段文字本来是什么，留给以后把它还原成可编辑文本。
- * 找不到字形轮廓时（PDF 没有内嵌字体）`data` 为空，这时只能用我们自己的字体重排。
+ * 一行文字（同一条基线上紧挨着的几段会合成一个）。
+ * 既记下每个字的字形和位置，用来原样显示；也记下文字内容、字号、基线，用来还原成可以编辑的文本。
  */
 export interface PdfTextItem extends PdfItemBase {
   kind: 'text';
   text: string;
-  data: PathData;
+  /** 每个字的字形。PDF 没有内嵌字体时拿不到字形，这里为空，只能用我们自己的字体重排 */
+  glyphs: PdfGlyph[];
   fill: Color | null;
   stroke: PdfStroke | null;
-  /** PDF 里的字体名，比如 "ABCDEF+Helvetica-Bold" */
-  fontName: string;
-  /** 解析库给字体起的内部标识，同一个字体对象相同 */
-  fontId: string;
-  bold: boolean;
-  italic: boolean;
+  font: PdfTextFont;
   /** 字号，页面单位 */
   size: number;
   /** 基线起点 */

@@ -1,5 +1,12 @@
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
-import { DocumentError, validateDocument, type Asset, type AssetMeta, type DocumentData } from '@shiba/core';
+import {
+  DocumentError,
+  GLYPH_LIBRARY_MIME,
+  validateDocument,
+  type Asset,
+  type AssetMeta,
+  type DocumentData,
+} from '@shiba/core';
 
 /**
  * .shiba 文件格式。
@@ -31,6 +38,8 @@ const EXTENSIONS: Record<string, string> = {
   'image/gif': 'gif',
   'image/bmp': 'bmp',
   'image/webp': 'webp',
+  // 从 PDF 导入的文字用到的字形库
+  [GLYPH_LIBRARY_MIME]: 'json',
 };
 
 export interface ShibaFile {
@@ -144,12 +153,14 @@ function parseAssetMeta(raw: unknown): AssetMeta | null {
   const { id, mime, width, height, name } = raw;
   if (typeof id !== 'string' || !/^[a-f0-9]{8,64}$/.test(id)) return null;
   if (typeof mime !== 'string' || !(mime in EXTENSIONS)) return null;
-  if (!isPositive(width) || !isPositive(height)) return null;
+  // 图片要有尺寸；字形库这类非图片资源的尺寸是 0
+  const image = mime.startsWith('image/');
+  if (image ? !isPositive(width) || !isPositive(height) : width !== 0 || height !== 0) return null;
   return {
     id,
     mime,
-    width,
-    height,
+    width: width as number,
+    height: height as number,
     size: 0,
     ...(typeof name === 'string' ? { name: name.slice(0, 255) } : {}),
   };

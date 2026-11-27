@@ -918,6 +918,12 @@ button {
   margin: 8px 0 0;
 }
 
+.frozen-hint {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  line-height: 1.5;
+}
+
 /* ───────── 演示模式 ───────── */
 
 .presenter {

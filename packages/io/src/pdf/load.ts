@@ -50,8 +50,8 @@ export interface PdfImportOptions extends PdfBuildOptions {
   /** 最多生成多少个对象，超过后不再转换后面的页，默认 60000 */
   maxObjects?: number;
   /**
-   * 路径锚点的总数上限，超过后不再转换后面的页，默认 400000。
-   * 文字目前是按轮廓导入的，密排文字的页面每页就有几万个锚点；不设上限的话一本书能把浏览器撑爆。
+   * 要画的点数上限（路径的锚点加上文字字形的点），超过后不再转换后面的页，默认 1500000，大约三十多页密排的正文。
+   * 文档本身已经很轻（同一个字形只存一份），限制的是画布：几十页的字同时出现在屏幕上时，每一帧都要把它们画一遍。
    */
   maxAnchors?: number;
   /** 每转换完一页调用一次 */
@@ -206,6 +206,8 @@ class DocumentResources {
       missing: Boolean(raw.missingFile),
       bold: Boolean(raw.bold || raw.black),
       italic: Boolean(raw.italic),
+      serif: Boolean(raw.isSerifFont),
+      monospace: Boolean(raw.isMonospace),
       fontMatrix:
         Array.isArray(matrix) && matrix.length === 6 && matrix.every((v) => Number.isFinite(v))
           ? (matrix as unknown as Matrix)
@@ -273,6 +275,8 @@ export async function importPdf(
     iccUrl: environment.iccUrl,
     // 不让 pdf.js 把字体装进浏览器，而是让它把每个字的轮廓算出来给我们
     disableFontFace: true,
+    // 字体名、粗体斜体这些信息只有开了这一项才会交出来，字体匹配要用
+    fontExtraProperties: true,
     useSystemFonts: false,
     // 图片一律要裸像素，不要浏览器的位图对象：这样在哪里跑结果都一样
     isOffscreenCanvasSupported: false,
@@ -292,7 +296,7 @@ export async function importPdf(
     const builder = new PdfDocumentBuilder(options);
     const limit = Math.min(totalPages, options.maxPages ?? 100);
     const maxObjects = options.maxObjects ?? 60_000;
-    const maxAnchors = options.maxAnchors ?? 400_000;
+    const maxAnchors = options.maxAnchors ?? 1_500_000;
 
     for (let number = 1; number <= limit; number++) {
       const page = await pdf.getPage(number);
@@ -313,7 +317,7 @@ export async function importPdf(
       if (builder.objects >= maxObjects || builder.anchors >= maxAnchors) break;
     }
 
-    const { document, assets } = builder.finish();
+    const { document, assets } = await builder.finish();
     return {
       document,
       assets,

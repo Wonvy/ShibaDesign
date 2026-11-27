@@ -9,8 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/arimo": "^5.3.0",
+    "@fontsource/cousine": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/noto-sans-sc": "^5.3.1",
+    "@fontsource/noto-serif-sc": "^5.3.1",
+    "@fontsource/tinos": "^5.3.0",
     "@shiba/core": "*",
     "@shiba/editor": "*",
     "@shiba/io": "*",

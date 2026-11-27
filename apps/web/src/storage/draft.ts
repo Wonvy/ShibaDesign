@@ -1,4 +1,5 @@
 import {
+  assetIdsOf,
   referencedAssetIds,
   validateDocument,
   type Asset,
@@ -88,9 +89,7 @@ export async function loadDraft(): Promise<Draft | null> {
     const document = validateDocument(raw);
 
     const wanted = new Set<string>();
-    for (const node of Object.values(document.nodes)) {
-      if ('fill' in node && node.fill?.type === 'image') wanted.add(node.fill.assetId);
-    }
+    for (const node of Object.values(document.nodes)) for (const id of assetIdsOf(node)) wanted.add(id);
     const assets: Asset[] = [];
     for (const id of await keys(ASSETS)) {
       if (!wanted.has(id)) {

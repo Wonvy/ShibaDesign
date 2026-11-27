@@ -231,6 +231,33 @@ export interface TextNode extends BaseNode {
    */
   sizing: 'auto' | 'fixed';
   fill: SolidFill | null;
+  /**
+   * 保真外观：从别的文件（比如 PDF）导入的文字，在被改动之前按原文件的字形显示，看起来和原来一模一样。
+   * 文字或排版参数一旦改动就不再使用它，改按上面的样式正常排版。见 text-appearance.ts。
+   * 有保真外观时，size 就是原文件里这段文字占的范围（自动宽度也一样）。
+   */
+  appearance?: TextAppearance;
+}
+
+/**
+ * 一组用同一个字形库、同样大小和方向的字形。
+ * 字形库是资源库里的一份字形轮廓（见 text-appearance.ts），同一个字体的所有字形只存一份。
+ */
+export interface GlyphRun {
+  /** 字形库的资源 id */
+  library: string;
+  /** 把字形从字形库的坐标（以字号为 1 个单位，y 向上）放到节点本地坐标的线性部分 [a, b, c, d] */
+  matrix: readonly [number, number, number, number];
+  /** 每 3 个数一组：字形在字形库里的序号、字形原点在节点本地坐标里的 x、y */
+  glyphs: readonly number[];
+}
+
+export interface TextAppearance {
+  runs: readonly GlyphRun[];
+  /** 生成外观时文字和排版参数的指纹。和节点当前的对不上，说明改过了 */
+  basis: string;
+  /** 原文件里第一行基线的位置（本地坐标的 y）。换成正常排版时按它对齐，文字不会上下跳 */
+  baseline: number;
 }
 
 /**

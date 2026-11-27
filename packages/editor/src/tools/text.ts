@@ -1,8 +1,11 @@
 import {
   applyToPoint,
   createNode,
+  hasLiveAppearance,
   invert,
+  multiply,
   nextSeq,
+  textAppearanceBasis,
   rectFromPoints,
   rgba,
   solid,
@@ -11,7 +14,9 @@ import {
   type Color,
   type NodeId,
   type Point,
+  type Matrix,
   type Rect,
+  type TextAppearance,
   type TextNode,
 } from '@shiba/core';
 import type { Command } from '../commands/command';
@@ -30,6 +35,10 @@ import type { Tool } from './tool';
  *
  * 浏览器自带的"上下行移动"按输入框自己的折行来算，和画布上的排版对不上，
  * 所以上下方向键由我们接管，用真实的排版结果计算。
+ *
+ * 从 PDF 导入的文字平时按原文件的字形显示（保真外观）。开始编辑时先换成正常排版（"解冻"），
+ * 并把文本框挪一下，让新排版的第一行基线正好落在原来的位置上；
+ * 如果什么都没改就退出编辑，再换回原样，撤销历史里也不留痕迹。
  */
 
 const DEFAULT_TEXT_COLOR: Color = rgba(0.1, 0.1, 0.1);
@@ -37,6 +46,14 @@ const DRAG_THRESHOLD = 3;
 const MIN_BOX_WIDTH = 20;
 const BLINK_INTERVAL = 530;
 const TYPING_PAUSE = 1000;
+/** 解冻前最多等字体加载这么久；超时就先用已有的字体排版 */
+const FONT_WAIT = 3000;
+
+/** 解冻前的样子，退出编辑时如果什么都没改，就按它换回去 */
+interface Thawed {
+  appearance: TextAppearance;
+  transform: Matrix;
+}
 
 interface Session {
   nodeId: NodeId;
@@ -50,6 +67,12 @@ interface Session {
   dragAnchor: number | null;
   /** 当前这一段连续输入共用的撤销合并键 */
   mergeKey: string;
+  /** 上次封存撤销历史之后有没有输入过 */
+  typed: boolean;
+  /** 这次编辑中改过文字 */
+  changed: boolean;
+  /** 这段文字是开始编辑时从保真外观解冻的 */
+  thawed: Thawed | null;
   idleTimer: number;
   blinkTimer: number;
   blinkOn: boolean;
@@ -82,6 +105,8 @@ function writeSelection(textarea: HTMLTextAreaElement, anchor: number, focus: nu
 export function registerTextTool(editor: Editor): void {
   let session: Session | null = null;
   let pending: Pending | null = null;
+  /** 正在进行的"解冻后开始编辑"的编号。换了工具或者又点了别的文字，之前那次就作废 */
+  let opening = 0;
 
   const nodeOf = (): TextNode | null => {
     const node = session ? editor.store.get(session.nodeId) : undefined;
@@ -111,9 +136,10 @@ export function registerTextTool(editor: Editor): void {
     }, BLINK_INTERVAL);
   };
 
-  /** 结束当前这段连续输入：之后的输入算新的一步撤销 */
+  /** 结束当前这段连续输入：之后的输入算新的一步撤销。没输入过就不用封存 */
   const sealTyping = (): void => {
-    if (!session || session.composing) return;
+    if (!session || session.composing || !session.typed) return;
+    session.typed = false;
     clearTimeout(session.idleTimer);
     editor.store.sealHistory();
     session.mergeKey = editor.newMergeKey('type');
@@ -131,6 +157,8 @@ export function registerTextTool(editor: Editor): void {
     const text = session.textarea.value.replace(/\r\n?/g, '\n');
     if (text !== node.text) {
       editor.store.transact('type', (tx) => tx.update(node.id, { text }), { mergeKey: session.mergeKey });
+      session.typed = true;
+      session.changed = true;
     }
     session.desiredX = null;
     clearTimeout(session.idleTimer);
@@ -142,7 +170,8 @@ export function registerTextTool(editor: Editor): void {
   const syncFromDocument = (): void => {
     const node = nodeOf();
     if (!session) return;
-    if (!node) {
+    // 节点没了，或者撤销到了开始编辑之前（文字又按原样显示了）：退出编辑
+    if (!node || hasLiveAppearance(node)) {
       end();
       editor.setTool('select');
       return;
@@ -195,7 +224,7 @@ export function registerTextTool(editor: Editor): void {
     if (event.key === 'Tab') event.preventDefault();
   };
 
-  const begin = (nodeId: NodeId, caret: number | null, mergeKey?: string): void => {
+  const begin = (nodeId: NodeId, caret: number | null, mergeKey?: string, thawed: Thawed | null = null): void => {
     end();
     const container = editor.container;
     const node = editor.store.get(nodeId);
@@ -227,6 +256,9 @@ export function registerTextTool(editor: Editor): void {
       desiredX: null,
       dragAnchor: null,
       mergeKey: mergeKey ?? editor.newMergeKey('type'),
+      typed: false,
+      changed: false,
+      thawed,
       idleTimer: 0,
       blinkTimer: 0,
       blinkOn: true,
@@ -287,10 +319,67 @@ export function registerTextTool(editor: Editor): void {
     const node = editor.store.get(finished.nodeId);
     if (node?.type === 'text' && node.text.length === 0) {
       editor.store.transact('remove empty text', (tx) => tx.remove(node.id), { mergeKey: finished.mergeKey });
+    } else if (
+      node?.type === 'text' &&
+      finished.thawed &&
+      !finished.changed &&
+      !node.appearance &&
+      textAppearanceBasis(node) === finished.thawed.appearance.basis
+    ) {
+      // 解冻了但什么都没改：换回原样。用同一个合并键，和解冻那一步互相抵消
+      const { appearance, transform } = finished.thawed;
+      editor.store.transact('restore text', (tx) => tx.update(node.id, { appearance, transform }), {
+        mergeKey: finished.mergeKey,
+      });
     }
     editor.store.sealHistory();
     editor.requestRender();
   }
+
+  /**
+   * 把按保真外观显示的文字换成正常排版，返回换之前的样子。
+   * 先等需要的字体加载完，这样量出来的基线才准；然后把文本框沿自己的竖直方向挪一下，
+   * 让新排版的第一行基线和原文件里的重合，文字看起来只是换了字体，不会上下跳。
+   */
+  const thaw = async (id: NodeId, mergeKey: string): Promise<Thawed | null> => {
+    const before = editor.store.get(id);
+    if (before?.type !== 'text' || !hasLiveAppearance(before)) return null;
+    const { style } = before;
+    let timer = 0;
+    await Promise.race([
+      editor.fonts.ensure([style.fontFamily.latin, style.fontFamily.cjk], before.text, style.fontWeight),
+      new Promise((resolve) => (timer = window.setTimeout(resolve, FONT_WAIT))),
+    ]).catch(() => {});
+    clearTimeout(timer);
+
+    const node = editor.store.get(id);
+    if (node?.type !== 'text' || !hasLiveAppearance(node) || !node.appearance) return null;
+    const appearance = node.appearance;
+    const baseline = editor.textLayouts.get(node).lines[0]?.baseline ?? appearance.baseline;
+    const transform = multiply(node.transform, translation(0, appearance.baseline - baseline));
+    editor.store.sealHistory();
+    editor.store.transact('edit text', (tx) => tx.update(id, { appearance: undefined, transform }), { mergeKey });
+    return { appearance, transform: node.transform };
+  };
+
+  /** 开始编辑一段已有的文字。world 是点击位置，光标放到离它最近的字符上；没有就放到末尾 */
+  const open = (id: NodeId, world: Point | null, onReady?: (caret: number) => void): void => {
+    const token = ++opening;
+    const start = (mergeKey?: string, thawed: Thawed | null = null): void => {
+      const node = editor.store.get(id);
+      if (token !== opening || node?.type !== 'text') return;
+      const caret = world ? offsetAt(node, world) : node.text.length;
+      begin(id, caret, mergeKey, thawed);
+      onReady?.(caret);
+    };
+    const node = editor.store.get(id);
+    if (node?.type === 'text' && hasLiveAppearance(node)) {
+      const mergeKey = editor.newMergeKey('type');
+      void thaw(id, mergeKey).then((thawed) => start(mergeKey, thawed));
+    } else {
+      start();
+    }
+  };
 
   /** 新建一个空文本并进入编辑。box 为 null 时是点一下创建的自动宽度文本 */
   const create = (at: Point, box: Rect | null): void => {
@@ -356,6 +445,7 @@ export function registerTextTool(editor: Editor): void {
 
     onDeactivate() {
       pending = null;
+      opening++;
       end();
     },
 
@@ -385,9 +475,9 @@ export function registerTextTool(editor: Editor): void {
 
       const hit = editor.pick(e.world).node;
       if (hit?.type === 'text') {
-        const offset = offsetAt(hit, e.world);
-        begin(hit.id, offset);
-        if (session) (session as Session).dragAnchor = offset;
+        open(hit.id, e.world, (caret) => {
+          if (session) session.dragAnchor = caret;
+        });
         return;
       }
       pending = { start: e.world, current: e.world, x: e.x, y: e.y, dragging: false };
@@ -493,7 +583,7 @@ export function registerTextTool(editor: Editor): void {
       const node = editor.store.get(args.id);
       if (node?.type !== 'text') return;
       editor.setTool('text');
-      begin(node.id, args.world ? offsetAt(node, args.world) : null);
+      open(node.id, args.world ?? null);
     },
   };
 

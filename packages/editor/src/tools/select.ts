@@ -1,4 +1,5 @@
 import {
+  hasLiveAppearance,
   applyToPoint,
   invert,
   isDescendantOf,
@@ -59,7 +60,9 @@ type Drag =
 export function createSelectTool(): Tool {
   let drag: Drag | null = null;
 
-  const textWidth = (editor: Editor) => (node: TextNode) => editor.textLayouts.get(node).width;
+  // 按原文件字形显示的文字，文本框就是原文件里那段字的范围，不看排版结果
+  const textWidth = (editor: Editor) => (node: TextNode) =>
+    hasLiveAppearance(node) ? node.size[0] : editor.textLayouts.get(node).width;
 
   /** 鼠标按在控制柄或旋转手柄上：开始缩放或旋转 */
   const beginTransform = (editor: Editor, world: Point, x: number, y: number): boolean => {

@@ -8,3 +8,4 @@ export * from './color';
 export * from './assets';
 export * from './validate';
 export * from './animation';
+export * from './text-appearance';

@@ -1,7 +1,7 @@
 import { Bold, TextAlignCenter, TextAlignEnd, TextAlignJustify, TextAlignStart, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TextAlign, TextNode, TextStyle } from '@shiba/core';
+import { hasLiveAppearance, type TextAlign, type TextNode, type TextStyle } from '@shiba/core';
 import { IconButton, NumberField } from '../ui/controls';
 import type { PanelProps } from './registry';
 
@@ -51,6 +51,7 @@ export function TextPanel({ editor, nodes }: PanelProps): ReactNode {
 
   return (
     <div className="appearance">
+      {hasLiveAppearance(first) && <p className="menu-hint frozen-hint">{t('text.frozenHint')}</p>}
       {fontSelect('latin', t('text.fontLatin'))}
       {fontSelect('cjk', t('text.fontCjk'))}
 

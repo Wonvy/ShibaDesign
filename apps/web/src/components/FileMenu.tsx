@@ -5,6 +5,7 @@ import type { Editor } from '@shiba/editor';
 import { useEditor } from '../editor/context';
 import {
   exportHtml,
+  exportPdf,
   exportPng,
   isImageFile,
   newDocument,
@@ -46,6 +47,7 @@ const GROUPS: Item[][] = [
     { labelKey: 'file.saveAs', keys: 'mod+shift+s', run: (editor) => void saveDocumentAs(editor) },
   ],
   [
+    { labelKey: 'file.exportPdf', run: (editor) => void exportPdf(editor) },
     { labelKey: 'file.exportPng', keys: 'mod+shift+e', run: (editor) => void exportPng(editor, 1) },
     { labelKey: 'file.exportPng2x', run: (editor) => void exportPng(editor, 2) },
     { labelKey: 'file.exportHtml', run: (editor) => void exportHtml(editor) },

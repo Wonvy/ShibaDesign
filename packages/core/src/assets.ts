@@ -1,7 +1,8 @@
+import type { SceneNode } from './model';
 import type { DocStore } from './store';
 
 /**
- * 资源库：文档引用的二进制资源，目前只有图片。
+ * 资源库：文档引用的二进制资源——图片，以及从 PDF 导入的文字用到的字形库。
  *
  * 资源按内容寻址：id 是文件内容的 SHA-256，所以同一张图片导入多次只存一份，
  * 也不需要撤销重做——节点引用哪个 id 记在文档里，资源本身只增不改。
@@ -73,12 +74,18 @@ export class AssetStore {
   }
 }
 
+/** 一个节点用到的资源 id：图片填充的图片，文字保真外观的字形库 */
+export function assetIdsOf(node: SceneNode): string[] {
+  const ids: string[] = [];
+  if ('fill' in node && node.fill?.type === 'image') ids.push(node.fill.assetId);
+  if (node.type === 'text' && node.appearance) for (const run of node.appearance.runs) ids.push(run.library);
+  return ids;
+}
+
 /** 文档里实际用到的资源 id */
 export function referencedAssetIds(store: DocStore): Set<string> {
   const ids = new Set<string>();
-  for (const node of store.all()) {
-    if ('fill' in node && node.fill?.type === 'image') ids.add(node.fill.assetId);
-  }
+  for (const node of store.all()) for (const id of assetIdsOf(node)) ids.add(id);
   return ids;
 }
 

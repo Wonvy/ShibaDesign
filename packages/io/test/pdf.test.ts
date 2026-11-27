@@ -1,7 +1,24 @@
 import { unzlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { rotationOf, validateDocument, type Asset, type SceneNode } from '@shiba/core';
-import { PdfImportError, encodePng, importPdf, type PdfImportOptions, type PdfImportResult } from '../src';
+import {
+  GLYPH_LIBRARY_MIME,
+  decodeGlyphLibrary,
+  hasLiveAppearance,
+  rotationOf,
+  validateDocument,
+  type Asset,
+  type SceneNode,
+  type TextNode,
+} from '@shiba/core';
+import {
+  PdfImportError,
+  encodePng,
+  fontCategory,
+  fontWeight,
+  importPdf,
+  type PdfImportOptions,
+  type PdfImportResult,
+} from '../src';
 import { asEllipse, asRectangle, asRoundedRect, tightBounds, toSubpaths } from '../src/pdf/geometry';
 import { CLOSE, CUBIC, LINE, MOVE, QUAD } from '../src/pdf/ir';
 import { environment, makePdf, stream, type PageSpec } from './pdf-fixtures';
@@ -102,6 +119,8 @@ function roundedRect(x: number, y: number, w: number, h: number, r: number): str
 
 const OBJECTS: Record<string, string | Uint8Array> = {
   helvetica: '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  helveticaBold: '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
+  times: '<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>',
   // 2 × 2 的图片：红 绿 / 蓝 黄
   image: stream(
     '/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8',
@@ -151,7 +170,7 @@ const OBJECTS: Record<string, string | Uint8Array> = {
 };
 
 const RESOURCES =
-  '/Font << /F1 {helvetica} /T3 {type3} /Song {song} >> ' +
+  '/Font << /F1 {helvetica} /HB {helveticaBold} /TR {times} /T3 {type3} /Song {song} >> ' +
   '/XObject << /Im {image} /Wide {wide} /Mask {mask} /Pair {pair} /Single {single} >> ' +
   '/ExtGState << /Half {half} /Multiply {multiply} >> /Shading << /Sh {shading} >> /Properties << /Layer {layer} >>';
 
@@ -174,6 +193,22 @@ describe('PDF 导入：页面', () => {
     const orders = result.boards.map((b) => (b.type === 'artboard' ? b.deck?.order : undefined));
     expect(orders[0]! < orders[1]!).toBe(true);
     expect(result.report).toMatchObject({ pages: 2, totalPages: 2, objects: 2 });
+  });
+
+  it('铺满整页的不透明底色矩形变成画板的背景色，不再是一个对象', async () => {
+    const result = await convert('0.2 0.4 0.6 rg -1 -1 202 102 re f 1 0 0 rg 10 10 50 30 re f');
+    expect(result.boards[0]).toMatchObject({ fill: { type: 'solid', color: { r: 0.2, g: 0.4, b: 0.6, a: 1 } } });
+    expect(result.on()).toHaveLength(1);
+    // 只盖住一部分、半透明、或者不是第一个画的，都还是普通的矩形
+    for (const content of [
+      '0 0 1 rg 0 0 200 90 re f',
+      '/Half gs 0 0 1 rg 0 0 200 100 re f',
+      '1 0 0 rg 10 10 50 30 re f 0 0 1 rg 0 0 200 100 re f',
+    ]) {
+      const other = await convert(content);
+      expect(other.boards[0]).toMatchObject({ fill: { color: { r: 1, g: 1, b: 1 } } });
+      expect(other.on().length).toBeGreaterThan(0);
+    }
   });
 
   it('坐标换成以左上角为原点', async () => {
@@ -366,21 +401,132 @@ describe('PDF 导入：图片', () => {
 
 // ───────────── 文字 ─────────────
 
+/** 文本节点的保真外观里一共有多少个字形 */
+function glyphCount(node: SceneNode | undefined): number {
+  if (node?.type !== 'text' || !node.appearance) return 0;
+  return node.appearance.runs.reduce((sum, run) => sum + run.glyphs.length / 3, 0);
+}
+
+function asText(node: SceneNode | undefined): TextNode {
+  if (node?.type !== 'text') throw new Error(`expected a text node, got ${node?.type}`);
+  return node;
+}
+
+const FONTS = {
+  sans: { latin: 'Sans', cjk: 'SansCJK' },
+  serif: { latin: 'Serif', cjk: 'SerifCJK' },
+  mono: { latin: 'Mono', cjk: 'SansCJK' },
+};
+
 describe('PDF 导入：文字', () => {
-  it('文字变成轮廓，同一行的几段合成一个对象，名字就是那行字', async () => {
-    const result = await convert('BT /F1 18 Tf 20 60 Td (Hello) Tj ( PDF) Tj 0 -30 Td (Second) Tj ET');
-    const [first, second] = result.on();
-    expect(result.on()).toHaveLength(2);
-    expect(first).toMatchObject({ type: 'path', name: 'Hello PDF', fillRule: 'nonzero', stroke: null });
-    expect(second).toMatchObject({ type: 'path', name: 'Second' });
-    // 基线在页面的 y = 40，字在基线上方；字号 18，大写字母高度大约 13
-    const [x, y] = position(first!);
-    expect(x).toBeGreaterThan(20);
-    expect(x).toBeLessThan(24);
-    expect(y).toBeGreaterThan(24);
-    expect(y + first!.size[1]).toBeCloseTo(40, 0);
-    expect(first!.size[0]).toBeGreaterThan(70);
-    expect(position(second!)[1]).toBeGreaterThan(y + 25);
+  it('一行字变成可以编辑的文本，带着原文件的字形', async () => {
+    const result = await convert('BT /F1 18 Tf 20 60 Td (Hello) Tj ( PDF) Tj ET', {}, { fonts: FONTS });
+    expect(result.on()).toHaveLength(1);
+    const text = asText(result.on()[0]);
+    expect(text).toMatchObject({ text: 'Hello PDF', sizing: 'auto', align: 'left' });
+    expect(text.style).toMatchObject({ fontSize: 18, fontWeight: 400, fontFamily: FONTS.sans });
+    // 按原字形显示，没改过
+    expect(hasLiveAppearance(text)).toBe(true);
+    // 基线在页面的 y = 40：文本框的上边加上"顶边到基线"的距离正好落在基线上
+    expect(position(text)[0]).toBe(20);
+    expect(text.transform[5] + text.appearance!.baseline).toBeCloseTo(40, 3);
+
+    // 字形库：H e l o P D F 七个字形，l 出现两次只存一份
+    const [run] = text.appearance!.runs;
+    expect(glyphCount(text)).toBe(8);
+    expect(run!.matrix).toEqual([18, 0, 0, -18]);
+    // 第一个字形的原点在文本框的左边、第一行的基线上
+    expect(run!.glyphs[1]).toBeCloseTo(0, 3);
+    expect(run!.glyphs[2]).toBeCloseTo(text.appearance!.baseline, 3);
+    const library = result.assets.find((a) => a.meta.id === run!.library)!;
+    expect(library.meta.mime).toBe(GLYPH_LIBRARY_MIME);
+    // 同一个字形只存一份；每个字形还记着它代表的字和步进宽度，导出 PDF 时靠它们让文字能被搜索
+    const decoded = decodeGlyphLibrary(library.bytes)!;
+    expect(decoded.glyphs).toHaveLength(7);
+    expect(decoded.text).toEqual(['H', 'e', 'l', 'o', 'P', 'D', 'F']);
+    expect(decoded.advances![0]).toBeCloseTo(0.722, 3);
+  });
+
+  it('几行字拼成一段：行距、对齐方式和宽度都从原文件里来', async () => {
+    const result = await convert(
+      'BT /F1 10 Tf 14 TL 20 80 Td (First line of a) Tj T* (paragraph that goes) Tj T* (on.) Tj ET',
+    );
+    expect(result.on()).toHaveLength(1);
+    const text = asText(result.on()[0]);
+    expect(text).toMatchObject({ text: 'First line of a paragraph that goes on.', sizing: 'fixed', align: 'left' });
+    expect(text.style.lineHeight).toBeCloseTo(1.4, 3);
+    // 宽度是最长那一行的长度
+    expect(text.size[0]).toBeGreaterThan(85);
+    expect(text.size[0]).toBeLessThan(100);
+    expect(glyphCount(text)).toBe(32);
+  });
+
+  it('两端对齐的段落：没顶到右边的行是一段的结尾', async () => {
+    // Type3 字体里每个字正好 10 宽，行长可以精确控制
+    const result = await convert(
+      'BT /T3 10 Tf 14 TL 20 90 Td (aaaa) Tj T* (aaaa) Tj T* (aa) Tj T* (aaaa) Tj T* (aaaa) Tj ET',
+    );
+    const text = asText(result.on()[0]);
+    expect(result.on()).toHaveLength(1);
+    expect(text).toMatchObject({ text: 'aaaa aaaa aa\naaaa aaaa', align: 'justify', sizing: 'fixed', size: [40, 70] });
+  });
+
+  it('居中的几行保留原来的断行', async () => {
+    const result = await convert('BT /T3 10 Tf 14 TL 40 80 Td (aa) Tj -10 -14 Td (aaaa) Tj ET');
+    expect(asText(result.on()[0])).toMatchObject({ text: 'aa\naaaa', align: 'center', sizing: 'fixed' });
+  });
+
+  it('中文段落：行与行之间不加空格，段首缩进变成全角空格', async () => {
+    const result = await convert(
+      'BT /Song 10 Tf 14 TL 40 80 Td <4F60597D4F60597D> Tj -20 -14 Td <4F60597D4F60597D4F60> Tj T* <597D> Tj ET',
+    );
+    expect(result.on()).toHaveLength(1);
+    expect(asText(result.on()[0]).text).toBe('\u3000\u3000你好你好你好你好你好');
+    expect(result.report.issues.fallbackText).toBe(1);
+  });
+
+  it('字号或颜色不同的行不拼在一起', async () => {
+    const result = await convert('BT /F1 18 Tf 20 80 Td (Title) Tj /F1 10 Tf 0 -24 Td (Body) Tj ET');
+    expect(result.on().map((n) => asText(n).text)).toEqual(['Title', 'Body']);
+  });
+
+  it('用字距调出来的词间距补成空格；隔得很远的两段分开', async () => {
+    const result = await convert(
+      'BT /F1 10 Tf 20 80 Td [(Hello) -300 (World) -40 (!)] TJ 0 -40 Td [(Name) -3000 (Value)] TJ ET',
+    );
+    expect(result.on().map((n) => asText(n).text)).toEqual(['Hello World!', 'Name', 'Value']);
+  });
+
+  it('上标和正文接成一行', async () => {
+    const result = await convert('BT /F1 10 Tf 20 80 Td (E = mc) Tj /F1 6 Tf 4 Ts (2) Tj ET');
+    expect(result.on().map((n) => asText(n).text)).toEqual(['E = mc2']);
+    expect(asText(result.on()[0]).style.fontSize).toBe(10);
+  });
+
+  it('按字体名匹配字体类别和粗细', async () => {
+    const result = await convert(
+      'BT /TR 12 Tf 20 80 Td (Serif) Tj /HB 12 Tf 0 -30 Td (Bold) Tj ET',
+      {},
+      { fonts: FONTS },
+    );
+    const [serif, bold] = result.on().map(asText);
+    expect(serif!.style).toMatchObject({ fontFamily: FONTS.serif, fontWeight: 400 });
+    expect(bold!.style).toMatchObject({ fontFamily: FONTS.sans, fontWeight: 700 });
+  });
+
+  it('Type3 字体的字也变成可以编辑的文本', async () => {
+    const result = await convert('BT /T3 10 Tf 20 60 Td (ab) Tj ET');
+    const text = asText(result.on()[0]);
+    expect(text).toMatchObject({ text: 'ab' });
+    expect(hasLiveAppearance(text)).toBe(true);
+    const [run] = text.appearance!.runs;
+    expect(run!.matrix).toEqual([10, 0, 0, -10]);
+    // a 是 0.8 见方的方块，b 是里面 0.6 见方的方块
+    const decoded = decodeGlyphLibrary(result.assets.find((a) => a.meta.id === run!.library)!.bytes)!;
+    const glyphs = decoded.glyphs;
+    expect(glyphs).toHaveLength(2);
+    expect(decoded.text).toEqual(['a', 'b']);
+    expect(Math.max(...glyphs[0]!.filter((_, i) => i % 3 !== 0))).toBeCloseTo(0.8, 3);
   });
 
   it('看不见的文字（比如扫描件的识别层）不导入', async () => {
@@ -388,7 +534,7 @@ describe('PDF 导入：文字', () => {
     expect(result.on()).toHaveLength(0);
   });
 
-  it('同时填充和描边的文字', async () => {
+  it('描边的文字还不能编辑，按原样变成轮廓', async () => {
     const result = await convert('BT /F1 18 Tf 2 Tr 0.5 w 1 0 0 RG 0 0 1 rg 20 60 Td (AB) Tj ET');
     expect(result.on()[0]).toMatchObject({
       type: 'path',
@@ -398,25 +544,64 @@ describe('PDF 导入：文字', () => {
     });
   });
 
-  it('Type3 字体的字也合成一段文字', async () => {
-    const result = await convert('BT /T3 10 Tf 20 60 Td (ab) Tj ET');
-    const [text] = result.on();
-    expect(result.on()).toHaveLength(1);
-    expect(text).toMatchObject({ type: 'path', name: 'ab' });
-    // 两个字各占 10 宽：a 是 8 × 8 的方块，b 是里面 6 × 6 的方块
-    expect(position(text!)).toEqual([20, 32]);
-    expect(text!.size).toEqual([17, 8]);
+  it('没有内嵌字体的文字改用匹配的字体重排，并记进报告', async () => {
+    const result = await convert('BT /Song 20 Tf 30 50 Td <4F60597D> Tj ET', {}, { fonts: FONTS });
+    const text = asText(result.on()[0]);
+    expect(text).toMatchObject({ text: '你好', sizing: 'auto' });
+    // 宋体是衬线一类
+    expect(text.style).toMatchObject({ fontSize: 20, fontFamily: FONTS.serif });
+    expect(text.appearance).toBeUndefined();
+    // 基线在页面的 y = 50，文本框的上边在它上方大约一个字号处
+    expect(position(text)[0]).toBe(30);
+    expect(position(text)[1]).toBeCloseTo(31, 0);
+    expect(result.report.issues.fallbackText).toBe(1);
+  });
+});
+
+describe('字体匹配', () => {
+  const font = (name: string, flags: { serif?: boolean; monospace?: boolean; bold?: boolean } = {}) => ({
+    name,
+    bold: flags.bold ?? false,
+    italic: false,
+    serif: flags.serif ?? false,
+    monospace: flags.monospace ?? false,
   });
 
-  it('没有内嵌字体的文字改用默认字体重排，并记进报告', async () => {
-    const result = await convert('BT /Song 20 Tf 30 50 Td <4F60597D> Tj ET', {}, { fonts: { latin: 'A', cjk: 'B' } });
-    const [text] = result.on();
-    expect(text).toMatchObject({ type: 'text', text: '你好', sizing: 'auto' });
-    expect(text).toMatchObject({ style: { fontSize: 20, fontFamily: { latin: 'A', cjk: 'B' } } });
-    // 基线在页面的 y = 50，文本框的上边在它上方大约一个字号处
-    expect(position(text!)[0]).toBe(30);
-    expect(position(text!)[1]).toBeCloseTo(31, 0);
-    expect(result.report.issues.fallbackText).toBe(1);
+  it('按名字认出类别', () => {
+    const cases: [string, string][] = [
+      ['ABCDEF+Times-Roman', 'serif'],
+      ['Helvetica-Bold', 'sans'],
+      ['Courier', 'mono'],
+      ['SimSun', 'serif'],
+      ['MicrosoftYaHei', 'sans'],
+      ['ABCDEF+PingFangSC-Semibold', 'sans'],
+      ['CMR10', 'serif'],
+      ['CMTT10', 'mono'],
+      ['NotoSerifCJKsc-Regular', 'serif'],
+      ['SourceHanSansSC-Medium', 'sans'],
+    ];
+    for (const [name, category] of cases) expect([name, fontCategory(font(name))]).toEqual([name, category]);
+  });
+
+  it('名字看不出来时用字体描述里的标志', () => {
+    expect(fontCategory(font('XYZ123', { serif: true }))).toBe('serif');
+    expect(fontCategory(font('XYZ123', { monospace: true }))).toBe('mono');
+    expect(fontCategory(font('XYZ123'))).toBe('sans');
+  });
+
+  it('按名字认出粗细', () => {
+    const cases: [string, number][] = [
+      ['Helvetica', 400],
+      ['Helvetica-Bold', 700],
+      ['Inter-SemiBold', 600],
+      ['Roboto-Light', 300],
+      ['Roboto-ExtraLight', 200],
+      ['Montserrat-Black', 900],
+      ['HiraginoSans-W6', 600],
+      ['SourceHanSansSC-Medium', 500],
+    ];
+    for (const [name, weight] of cases) expect([name, fontWeight(font(name))]).toEqual([name, weight]);
+    expect(fontWeight(font('XYZ', { bold: true }))).toBe(700);
   });
 });
 

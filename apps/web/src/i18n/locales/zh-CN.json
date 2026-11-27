@@ -167,7 +167,8 @@
       "alignJustify": "两端对齐",
       "sizing": "文本框",
       "autoWidth": "自动宽度",
-      "fixedWidth": "固定宽度"
+      "fixedWidth": "固定宽度",
+      "frozenHint": "这段文字来自 PDF，现在按原文件的字形显示。修改文字或下面的格式后，会换成所选字体重新排版。"
     },
     "file": {
       "menu": "文件",
@@ -175,6 +176,7 @@
       "open": "打开…",
       "save": "保存",
       "saveAs": "另存为…",
+      "exportPdf": "导出 PDF",
       "exportPng": "导出 PNG",
       "exportPng2x": "导出 PNG（2 倍）",
       "untitled": "未命名",
@@ -185,6 +187,9 @@
       "exported": "已导出 {{name}}",
       "saveFailed": "保存失败",
       "exportFailed": "无法导出：对象为空，或导出尺寸超过 8192 像素",
+      "exportingPdf": "正在导出 PDF（{{count}} 页）…",
+      "exportPdfFailed": "导出 PDF 失败",
+      "noArtboards": "没有可以导出的画板",
       "openFailed": "无法打开文件：{{reason}}",
       "reason": {
         "notZip": "这不是 ShibaDesign 文件",

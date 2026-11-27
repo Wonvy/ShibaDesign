@@ -1,7 +1,14 @@
 import {
   AssetStore,
   DOCUMENT_VERSION,
+  GLYPH_LIBRARY_MIME,
+  GLYPH_PATH_ARITY,
   createNode,
+  encodeGlyphLibrary,
+  invert,
+  isGlyphPath,
+  multiply,
+  textAppearanceBasis,
   keyBetween,
   keysBetween,
   rgba,
@@ -11,12 +18,16 @@ import {
   type Color,
   type DocumentData,
   type Fill,
+  type GlyphRun,
   type ImageFill,
   type Matrix,
   type NodeId,
   type SceneNode,
   type Stroke,
+  type TextNode,
 } from '@shiba/core';
+import { fontCategory, fontWeight, type FontChoices } from './fonts';
+import { appendTransformed } from './geometry';
 import {
   asAxisRect,
   asEllipse,
@@ -38,6 +49,7 @@ import {
   type Box,
   type PathData,
   type PdfClip,
+  type PdfGlyph,
   type PdfGroupItem,
   type PdfImageItem,
   type PdfImageSource,
@@ -47,18 +59,19 @@ import {
   type PdfPathItem,
   type PdfTextItem,
 } from './ir';
+import { cleanText, groupLines, plainHanzi, type TextBlock } from './paragraphs';
 import { encodePng } from './png';
 
 /**
  * 第二步：把页面上的对象变成文档节点。
  *
  * 每页一个画板；能认出来的形状还原成矩形和椭圆，其余的是钢笔路径；图片是带图片填充的矩形；
- * 文字目前是轮廓路径（看起来和原文件一样，但不能改字），节点名就是那段文字。
+ * 文字拼回段落，变成可以编辑的文本，同时带上原文件的字形（保真外观），改动之前看起来和原文件一样。
  */
 
 export interface PdfBuildOptions {
-  /** 没有内嵌字体的文字改用这组字体重排 */
-  fonts?: { latin: string; cjk: string };
+  /** 文字换用的字体，按无衬线、衬线、等宽分类。省略的类别用无衬线那组 */
+  fonts?: Partial<FontChoices>;
   /** 画板之间的间距 */
   gap?: number;
   /** 图片长边超过这个值就缩小 */
@@ -73,16 +86,26 @@ const MAX_NAME = 80;
 type Draft = SceneNode;
 
 const round = (v: number): number => Math.round(v * 1000) / 1000;
+/** 方向这类单位长度的量多留几位小数 */
+const fine = (v: number): number => Math.round(v * 1e6) / 1e6;
 
 /**
- * 整理从 PDF 里读出来的文字：合并空白；把"部首"字符换回普通汉字。
- * 有些字体把「小」「一」这样的字映射到了外形相同的康熙部首码位（⼩、⼀），看着一样，搜索和输入时却对不上。
+ * 估算文本框顶边到第一行基线的距离用的字体上下沿（以字号为单位），接近大多数字体的平均值。
+ * 只影响文字还按原样显示时文本框的位置；换成正常排版的那一刻，编辑器会按真实的排版结果把基线对齐。
  */
-function cleanText(text: string): string {
-  return text
-    .replace(/[\u2e80-\u2fdf]/g, (char) => char.normalize('NFKC'))
-    .replace(/\s+/g, ' ')
-    .trim();
+/** 判断"铺满整页"时允许差多少：页面尺寸是取整过的 */
+const PAGE_SLACK = 0.5;
+const ASCENT = 0.93;
+const DESCENT = 0.23;
+const DEFAULT_PAIR = { latin: 'Inter', cjk: 'Noto Sans SC' };
+
+/** 一个字体的字形库：字形轮廓按第一次出现的顺序编号，同时记下每个字形代表的文字和步进宽度 */
+interface Library {
+  key: string;
+  index: Map<ArrayLike<number>, number>;
+  outlines: ArrayLike<number>[];
+  text: string[];
+  advances: number[];
 }
 
 function isFiniteData(data: ArrayLike<number>): boolean {
@@ -126,6 +149,26 @@ function placeInBox(image: Box, box: Box): Pick<ImageFill, 'fit' | 'zoom' | 'pan
     panX: round(pan(image.x0, box.x0, width, boxWidth)),
     panY: round(pan(image.y0, box.y0, height, boxHeight)),
   };
+}
+
+const pointCounts = new WeakMap<ArrayLike<number>, number>();
+
+/** 一个字形轮廓有多少个点（每条命令算一个） */
+function pointCount(outline: ArrayLike<number>): number {
+  let count = pointCounts.get(outline);
+  if (count === undefined) {
+    count = 0;
+    for (let i = 0; i < outline.length; i += 1 + (GLYPH_PATH_ARITY[outline[i]!] ?? outline.length)) count++;
+    pointCounts.set(outline, count);
+  }
+  return count;
+}
+
+/** 把一串字形的轮廓摆到页面上，合成一条路径 */
+function composeGlyphs(glyphs: readonly PdfGlyph[]): PathData {
+  const data: PathData = [];
+  for (const glyph of glyphs) appendTransformed(data, glyph.outline, glyph.matrix);
+  return data;
 }
 
 /** 把各种格式的像素统一成 PNG 编码器要的样子，并在需要时上色、缩小 */
@@ -206,7 +249,9 @@ export class PdfDocumentBuilder {
   private readonly assets = new AssetStore();
   private readonly encoded = new WeakMap<PdfImageSource, Map<string, Promise<string | null>>>();
   private readonly seq = new Map<string, number>();
-  private readonly fonts: { latin: string; cjk: string };
+  private readonly fonts: FontChoices;
+  /** 按字体分的字形库，键是解析库给字体的标识 */
+  private readonly libraries = new Map<string, Library>();
   private readonly gap: number;
   private readonly maxImageSide: number;
   private nextX = 0;
@@ -215,12 +260,13 @@ export class PdfDocumentBuilder {
   private pages = 0;
   /** 画板之外的节点数 */
   objects = 0;
-  /** 所有路径的锚点总数。文档有多重主要看它：一页密排的文字轮廓就有好几万个锚点 */
+  /** 画布上要画的点数：路径的锚点，加上文字里每个字形的点。一页密排的正文就有好几万个 */
   anchors = 0;
   readonly issues: PdfIssues = emptyIssues();
 
   constructor(options: PdfBuildOptions = {}) {
-    this.fonts = options.fonts ?? { latin: 'Inter', cjk: 'Noto Sans SC' };
+    const sans = options.fonts?.sans ?? DEFAULT_PAIR;
+    this.fonts = { sans, serif: options.fonts?.serif ?? sans, mono: options.fonts?.mono ?? sans };
     this.gap = options.gap ?? 80;
     this.maxImageSide = options.maxImageSide ?? 4096;
     const root = createNode('page', { parent: null, index: 'a0', seq: 1 });
@@ -233,23 +279,54 @@ export class PdfDocumentBuilder {
     const height = Math.min(Math.max(1, round(page.height)), MAX_COORDINATE);
     this.lastIndex = keyBetween(this.lastIndex, null);
     this.lastOrder = keyBetween(this.lastOrder, null);
+    // 很多 PDF（演示软件导出的尤其如此）先画一个铺满整页的矩形当底色：把它变成画板的背景色，
+    // 而不是一个盖住整页、一点就选中的大矩形。我们自己导出的 PDF 也是这样写画板背景的
+    let items = page.items;
+    let background = rgba(1, 1, 1);
+    const first = items[0];
+    if (first?.kind === 'path' && this.isBackground(first, width, height)) {
+      background = first.fill!;
+      items = items.slice(1);
+    }
     const board = createNode('artboard', {
       parent: this.rootId,
       index: this.lastIndex,
       seq: ++this.pages,
       transform: [1, 0, 0, 1, this.nextX, 0],
       size: [width, height],
-      fill: solid(rgba(1, 1, 1)),
+      fill: solid(background),
       deck: { order: this.lastOrder, notes: '' },
     });
     this.nodes[board.id] = board;
     this.nextX = round(this.nextX + width + this.gap);
 
     for (const key of Object.keys(page.issues) as (keyof PdfIssues)[]) this.issues[key] += page.issues[key];
-    await this.addItems(page.items, board.id);
+    await this.addItems(items, board.id);
   }
 
-  finish(): { document: DocumentData; assets: Asset[] } {
+  /** 不透明、没有描边、正常混合、铺满整页的矩形 */
+  private isBackground(item: PdfPathItem, width: number, height: number): boolean {
+    if (!item.fill || item.fill.a < 1 || item.stroke || item.blendMode !== 'normal') return false;
+    const covers = (box: Box): boolean =>
+      box.x0 <= PAGE_SLACK && box.y0 <= PAGE_SLACK && box.x1 >= width - PAGE_SLACK && box.y1 >= height - PAGE_SLACK;
+    if (item.clip && !(item.clip.exact && covers(item.clip))) return false;
+    const box = asAxisRect(item.data);
+    return box !== null && covers(box);
+  }
+
+  async finish(): Promise<{ document: DocumentData; assets: Asset[] }> {
+    // 字形库要等所有页都转换完才完整，这时才编码成资源，再把文字里的临时标识换成资源 id
+    const ids = new Map<string, string>();
+    for (const library of this.libraries.values()) {
+      const bytes = encodeGlyphLibrary(library.outlines, { text: library.text, advances: library.advances });
+      const meta = await this.assets.add(bytes, { mime: GLYPH_LIBRARY_MIME, width: 0, height: 0 });
+      ids.set(library.key, meta.id);
+    }
+    for (const [id, node] of Object.entries(this.nodes)) {
+      if (node.type !== 'text' || !node.appearance) continue;
+      const runs = node.appearance.runs.map((run) => ({ ...run, library: ids.get(run.library) ?? run.library }));
+      this.nodes[id] = { ...node, appearance: { ...node.appearance, runs } };
+    }
     return {
       document: { version: DOCUMENT_VERSION, rootId: this.rootId, nodes: this.nodes },
       assets: this.assets.all(),
@@ -265,10 +342,25 @@ export class PdfDocumentBuilder {
   /** 把一组对象放进 parent，返回实际生成了几个节点 */
   private async addItems(items: readonly PdfItem[], parent: NodeId): Promise<number> {
     const drafts: Draft[] = [];
+    // 连续的几行文字先攒起来，一起拼成段落
+    let lines: PdfTextItem[] = [];
+    const flush = (): void => {
+      for (const block of groupLines(lines, this.styleOf)) {
+        const draft = this.textNode(block, parent);
+        if (draft) drafts.push(draft);
+      }
+      lines = [];
+    };
     for (const item of items) {
+      if (item.kind === 'text' && this.editable(item)) {
+        lines.push(item);
+        continue;
+      }
+      flush();
       const draft = await this.convert(item, parent);
       if (draft) drafts.push(draft);
     }
+    flush();
     const indices = keysBetween(null, null, drafts.length);
     drafts.forEach((draft, i) => {
       this.nodes[draft.id] = { ...draft, index: indices[i]! };
@@ -286,9 +378,12 @@ export class PdfDocumentBuilder {
   private async convert(item: PdfItem, parent: NodeId): Promise<Draft | null> {
     switch (item.kind) {
       case 'path':
-        return this.pathNode(item, parent, undefined);
+        return this.pathNode(item.data, item.fillRule, item, parent);
       case 'text':
-        return item.data.length > 0 ? this.pathNode(item, parent, item.text) : this.fallbackText(item, parent);
+        // 竖排、描边、没有填充的文字还没法变成可编辑的文本，按原样变成轮廓，节点名就是那段文字
+        if (item.glyphs.length > 0)
+          return this.pathNode(composeGlyphs(item.glyphs), 'nonzero', item, parent, item.text);
+        return this.textNode(groupLines([item], this.styleOf)[0]!, parent);
       case 'image':
         return this.imageNode(item, parent);
       case 'group':
@@ -306,13 +401,18 @@ export class PdfDocumentBuilder {
     return clip.exact && boxContains(clip, bounds, 0.01) ? 'inside' : 'cut';
   }
 
-  private pathNode(item: PdfPathItem | PdfTextItem, parent: NodeId, text: string | undefined): Draft | null {
-    let data = item.data;
+  private pathNode(
+    data: PathData,
+    rule: 'nonzero' | 'evenodd',
+    item: PdfPathItem | PdfTextItem,
+    parent: NodeId,
+    text?: string,
+  ): Draft | null {
     if (!isFiniteData(data)) return null;
     const rough = controlBounds(data);
     if (!rough) return null;
     const stroke = toStroke(item.stroke);
-    let fillRule = item.kind === 'path' ? item.fillRule : 'nonzero';
+    let fillRule = rule;
 
     const { clip } = item;
     const verdict = this.clipVerdict(clip, grow(rough, stroke ? stroke.width / 2 : 0));
@@ -397,44 +497,141 @@ export class PdfDocumentBuilder {
     });
   }
 
-  /** PDF 没有内嵌字体时拿不到字形轮廓：用我们自己的字体按原来的位置和字号重排，样子会有出入 */
-  private fallbackText(item: PdfTextItem, parent: NodeId): Draft | null {
-    const text = cleanText(item.text);
-    const size = round(item.size);
-    if (!text || !(size > 0) || !isFiniteData([item.x, item.y, item.dirX, item.dirY, size])) return null;
-    const reach = Math.max(item.length, size);
-    const bounds: Box = {
-      x0: Math.min(item.x, item.x + item.dirX * reach) - size,
-      y0: Math.min(item.y, item.y + item.dirY * reach) - size,
-      x1: Math.max(item.x, item.x + item.dirX * reach) + size,
-      y1: Math.max(item.y, item.y + item.dirY * reach) + size,
-    };
-    if (this.clipVerdict(item.clip, bounds) === 'outside') return null;
-    this.issues.fallbackText++;
+  // ───────────── 文字 ─────────────
 
-    const lineHeight = 1.2;
-    // 文本框的左上角在基线上方大约 0.95 个字号处（行高 1.2 时基线的位置）
-    const rise = size * 0.95;
-    const { dirX, dirY } = item;
-    return createNode('text', {
+  /** 能变成可编辑文本的行：横排或者斜着排，只有填充 */
+  private editable(item: PdfTextItem): boolean {
+    return !item.vertical && item.fill !== null && item.stroke === null;
+  }
+
+  /** 字体的类别和粗细：不同的不拼成一段 */
+  private readonly styleOf = (item: PdfTextItem): string =>
+    `${fontCategory(item.font)}/${fontWeight(item.font) >= 600 ? 'bold' : 'regular'}`;
+
+  private library(font: string): Library {
+    let library = this.libraries.get(font);
+    if (!library) {
+      library = { key: `font:${font}`, index: new Map(), outlines: [], text: [], advances: [] };
+      this.libraries.set(font, library);
+    }
+    return library;
+  }
+
+  /**
+   * 一段文字 → 文本节点。
+   * 节点的本地坐标系跟着文字方向走（斜着排的文字就是转过角度的文本框），左上角是文本框的左上角。
+   * 有字形的时候带上保真外观：每个字形在本地坐标里的位置，改动之前按它们画。
+   */
+  private textNode(block: TextBlock, parent: NodeId): Draft | null {
+    const first = block.lines[0]!;
+    const size = round(first.size);
+    const { text, dirX, dirY } = block;
+    const numbers = [block.originX, block.originY, dirX, dirY, block.left, block.right, block.spacing, size];
+    if (!text || !(size > 0) || !isFiniteData(numbers)) return null;
+
+    const count = block.lines.length;
+    const lineHeight = count > 1 ? Math.min(4, Math.max(0.8, round(block.spacing / size))) : 1.2;
+    const width = round(Math.max(block.right - block.left, size * 0.5));
+    const height = round(count > 1 ? block.spacing * (count - 1) + lineHeight * size : lineHeight * size);
+    const baseline = round(size * ((lineHeight - (ASCENT + DESCENT)) / 2 + ASCENT));
+    // 文本框左上角：从第一行基线的起点沿文字方向走到最左边，再往上退一个"顶边到基线"的距离
+    const transform: Matrix = [
+      fine(dirX),
+      fine(dirY),
+      fine(-dirY),
+      fine(dirX),
+      round(block.originX + dirX * block.left + dirY * baseline),
+      round(block.originY + dirY * block.left - dirX * baseline),
+    ];
+
+    const corners = [
+      [0, 0],
+      [width, 0],
+      [0, height],
+      [width, height],
+    ].map(([x, y]) => [
+      transform[0] * x! + transform[2] * y! + transform[4],
+      transform[1] * x! + transform[3] * y! + transform[5],
+    ]);
+    const bounds: Box = {
+      x0: Math.min(...corners.map((c) => c[0]!)),
+      y0: Math.min(...corners.map((c) => c[1]!)),
+      x1: Math.max(...corners.map((c) => c[0]!)),
+      y1: Math.max(...corners.map((c) => c[1]!)),
+    };
+    const verdict = this.clipVerdict(first.clip, bounds);
+    if (verdict === 'outside') return null;
+    if (verdict === 'cut') this.issues.clips++;
+
+    const font = first.font;
+    const node: TextNode = createNode('text', {
       parent,
       index: '',
       seq: this.nextSeq('text'),
-      transform: [dirX, dirY, -dirY, dirX, round(item.x + dirY * rise), round(item.y - dirX * rise)],
-      size: [round(Math.max(item.length, size)), round(size * lineHeight)],
-      blendMode: item.blendMode,
+      transform,
+      size: [width, height],
+      blendMode: first.blendMode,
       text,
       style: {
-        fontFamily: this.fonts,
+        fontFamily: this.fonts[fontCategory(font)],
         fontSize: size,
-        fontWeight: item.bold ? 700 : 400,
+        fontWeight: fontWeight(font),
         lineHeight,
         letterSpacing: 0,
       },
-      align: 'left',
-      sizing: 'auto',
-      fill: solid(item.fill ?? item.stroke?.color ?? rgba(0, 0, 0)),
+      align: block.align,
+      sizing: count > 1 ? 'fixed' : 'auto',
+      fill: solid(first.fill ?? rgba(0, 0, 0)),
     });
+
+    const runs = this.glyphRuns(block, transform);
+    if (!runs) {
+      // PDF 没有内嵌字体，拿不到字形：只能用我们的字体重排，样子会有出入
+      this.issues.fallbackText++;
+      return node;
+    }
+    return { ...node, appearance: { runs, basis: textAppearanceBasis(node), baseline } };
+  }
+
+  /**
+   * 把一段文字里每个字形的位置换算到文本框的本地坐标，按字形库和大小方向分组。
+   * 只把前后紧挨着的字形分进同一组，组的先后就是原文件里画字的顺序：
+   * 导出 PDF 时按这个顺序写，复制出来的文字才不会乱（中英文混排的一行字就是好几组交替出现）。
+   */
+  private glyphRuns(block: TextBlock, transform: Matrix): GlyphRun[] | null {
+    const inverse = invert(transform);
+    if (!inverse) return null;
+    const runs: { key: string; library: string; matrix: [number, number, number, number]; glyphs: number[] }[] = [];
+    for (const line of block.lines) {
+      for (const glyph of line.glyphs) {
+        const library = this.library(glyph.font);
+        let index = library.index.get(glyph.outline);
+        if (index === undefined) {
+          if (!isGlyphPath(glyph.outline)) continue;
+          index = library.outlines.length;
+          library.outlines.push(glyph.outline);
+          // 和文本内容一样把部首码位换回普通汉字，导出的 PDF 里才搜得到"小""页"这样的字
+          library.text.push(plainHanzi(glyph.text).slice(0, 32));
+          library.advances.push(Number.isFinite(glyph.advance) ? glyph.advance : 0);
+          library.index.set(glyph.outline, index);
+        }
+        const local = multiply(inverse, glyph.matrix);
+        if (!isFiniteData(local)) continue;
+        const matrix: [number, number, number, number] = [
+          fine(local[0]),
+          fine(local[1]),
+          fine(local[2]),
+          fine(local[3]),
+        ];
+        const key = `${library.key}|${matrix.join(',')}`;
+        let run = runs[runs.length - 1];
+        if (run?.key !== key) runs.push((run = { key, library: library.key, matrix, glyphs: [] }));
+        run.glyphs.push(index, round(local[4]), round(local[5]));
+        // 画的时候每个字形的每个点都要算一遍，按点数记进总量
+        this.anchors += pointCount(glyph.outline);
+      }
+    }
+    return runs.length > 0 ? runs.map(({ library, matrix, glyphs }) => ({ library, matrix, glyphs })) : null;
   }
 
   private async imageNode(item: PdfImageItem, parent: NodeId): Promise<Draft | null> {

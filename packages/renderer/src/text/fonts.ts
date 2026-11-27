@@ -17,6 +17,23 @@ export interface FontFaceSource {
   /** 这个文件覆盖的码点区间（闭区间）。省略表示不清楚覆盖范围，任何文字都会加载它 */
   ranges?: readonly (readonly [number, number])[];
   load(): Promise<ArrayBuffer>;
+  /**
+   * 同一个字体文件的另一种封装，用于嵌进导出的 PDF：TrueType、OpenType 或 WOFF（不能是 WOFF2）。
+   * 字形编号必须和 load() 的完全一样。load() 本来就不是 WOFF2 时可以省略。
+   */
+  loadEmbeddable?(): Promise<ArrayBuffer>;
+}
+
+/** 一个已经加载的字体文件。导出 PDF 时用它找到排版实际用了哪个文件 */
+export interface LoadedFace {
+  /** 在所有字体文件里唯一，比如 "Inter#latin@400" */
+  key: string;
+  family: string;
+  weight: number;
+  /** 加载时拿到的字节，交给排版引擎的就是它 */
+  bytes: ArrayBuffer;
+  /** 可以嵌进 PDF 的字节，见 FontFaceSource.loadEmbeddable */
+  embeddable(): Promise<ArrayBuffer>;
 }
 
 export interface FontFamilySource {
@@ -29,6 +46,8 @@ interface Face {
   source: FontFaceSource;
   status: 'idle' | 'loading' | 'loaded' | 'failed';
   promise: Promise<void> | null;
+  bytes: ArrayBuffer | null;
+  embeddable: Promise<ArrayBuffer> | null;
 }
 
 interface Chunk {
@@ -40,6 +59,8 @@ interface Chunk {
 
 interface Family {
   name: string;
+  /** 交给排版引擎的内部家族名 → 分片 */
+  bySkFamily: Map<string, Chunk>;
   chunks: Chunk[];
   /** 按起点排序的区间表，用来二分查找某个码点在哪个分片 */
   starts: number[];
@@ -60,6 +81,8 @@ export interface FontResolution {
 export class FontManager {
   readonly provider: TypefaceFontProvider;
   private families = new Map<string, Family>();
+  /** 内部家族名 → 对外的家族名 */
+  private chunkFamilies = new Map<string, string>();
   private listeners = new Set<() => void>();
   private notifyQueued = false;
   private _epoch = 0;
@@ -81,7 +104,7 @@ export class FontManager {
         chunk = { skFamily: `${source.name}#${face.chunk}`, ranges: face.ranges ?? null, faces: new Map() };
         chunks.set(face.chunk, chunk);
       }
-      chunk.faces.set(face.weight, { source: face, status: 'idle', promise: null });
+      chunk.faces.set(face.weight, { source: face, status: 'idle', promise: null, bytes: null, embeddable: null });
     }
 
     const spans: { start: number; end: number; owner: Chunk }[] = [];
@@ -92,8 +115,11 @@ export class FontManager {
     }
     spans.sort((a, b) => a.start - b.start);
 
+    const bySkFamily = new Map([...chunks.values()].map((chunk) => [chunk.skFamily, chunk]));
+    for (const skFamily of bySkFamily.keys()) this.chunkFamilies.set(skFamily, source.name);
     this.families.set(source.name, {
       name: source.name,
+      bySkFamily,
       chunks: [...chunks.values()],
       starts: spans.map((s) => s.start),
       ends: spans.map((s) => s.end),
@@ -141,6 +167,32 @@ export class FontManager {
     await Promise.all(waits);
   }
 
+  /**
+   * 排版时某个内部家族名（resolve 返回的 names 之一）在这个字重下实际用的是哪个文件。
+   * 排版引擎在同一个家族的几个字重里挑最接近的，这里用同样的规则。还没加载时返回 null。
+   */
+  loadedFace(skFamily: string, weight: number): LoadedFace | null {
+    const familyName = this.chunkFamilies.get(skFamily);
+    const chunk = familyName ? this.families.get(familyName)?.bySkFamily.get(skFamily) : undefined;
+    if (!chunk || !familyName) return null;
+    const loaded = new Map([...chunk.faces].filter(([, face]) => face.status === 'loaded'));
+    const face = pickWeight({ ...chunk, faces: loaded }, weight);
+    if (!face?.bytes) return null;
+    const bytes = face.bytes;
+    return {
+      key: `${skFamily}@${face.source.weight}`,
+      family: familyName,
+      weight: face.source.weight,
+      bytes,
+      embeddable: () => {
+        face.embeddable ??= face.source.loadEmbeddable?.() ?? Promise.resolve(bytes);
+        // 失败了下次重试，不要把失败缓存起来
+        face.embeddable.catch(() => (face.embeddable = null));
+        return face.embeddable;
+      },
+    };
+  }
+
   /** 字体文件加载完成时通知。同一时刻完成的多个文件只通知一次 */
   onChange(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -186,6 +238,7 @@ export class FontManager {
       .load()
       .then((bytes) => {
         this.provider.registerFont(bytes, chunk.skFamily);
+        face.bytes = bytes;
         face.status = 'loaded';
         this._epoch += 1;
         this.notify();
