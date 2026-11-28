@@ -1,5 +1,6 @@
 import {
   hasBoxCorners,
+  isShadow,
   type NodeId,
   type NodePatch,
   type ParagraphOverride,
@@ -9,6 +10,7 @@ import {
   type Stroke,
   type Transaction,
   type DocStore,
+  type Effect,
 } from '@shiba/core';
 import { resizeInWorld } from './resize';
 
@@ -22,6 +24,7 @@ import { resizeInWorld } from './resize';
 export function scaledParams(current: SceneNode, original: SceneNode, k: number): NodePatch | null {
   const patch: Record<string, unknown> = {};
   if ('stroke' in original && original.stroke) patch.stroke = scaleStroke(original.stroke, k);
+  if (original.effects) patch.effects = original.effects.map((e) => scaleEffect(e, k));
   if (hasBoxCorners(original)) {
     patch.cornerRadius = original.cornerRadius * k;
     if (original.cornerRadii) patch.cornerRadii = original.cornerRadii.map((r) => r * k);
@@ -55,6 +58,14 @@ export function scaledParams(current: SceneNode, original: SceneNode, k: number)
     if (original.paragraphs) patch.paragraphs = original.paragraphs.map((p) => (p ? scaleParagraph(p, k) : p));
   }
   return Object.keys(patch).length > 0 ? (patch as NodePatch) : null;
+}
+
+/** 阴影的偏移、模糊、扩展，模糊的半径都按比例变 */
+function scaleEffect(effect: Effect, k: number): Effect {
+  if (isShadow(effect)) {
+    return { ...effect, x: effect.x * k, y: effect.y * k, blur: effect.blur * k, spread: effect.spread * k };
+  }
+  return { ...effect, radius: effect.radius * k };
 }
 
 function scaleStroke(stroke: Stroke, k: number): Stroke {

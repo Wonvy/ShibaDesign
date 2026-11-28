@@ -1,6 +1,8 @@
 import type { CanvasKit, Image } from 'canvaskit-wasm';
 import { arrowPaths } from './arrows';
+import type { EffectPart } from './effects';
 import {
+  activeEffects,
   dashPattern,
   gradientGeometry,
   hasShapeStyle,
@@ -80,6 +82,11 @@ export interface PdfExportContext {
    * 返回 PNG 和它对应的本地坐标范围；不提供或返回 null 时跳过这个节点
    */
   rasterize?(node: SceneNode): { png: Uint8Array; box: Rect } | null;
+  /**
+   * 把节点的效果画成图片（PDF 里没有模糊）：below 只有投影，above 只有内阴影，all 是带着全部效果的整个节点。
+   * 都不含节点自己的不透明度和混合模式。不提供时效果不画
+   */
+  rasterizeEffects?(node: SceneNode, part: EffectPart): { png: Uint8Array; box: Rect } | null;
 }
 
 export interface PdfExportOptions {
@@ -233,12 +240,23 @@ class PdfExporter {
     const toPage = multiply(parentToPage, own);
     const isContainer = def.children === 'draw' || def.children === 'clip';
     const special = node.opacity < 1 || node.blendMode !== 'normal';
+    const effects = activeEffects(node);
+    // 图层模糊、背景模糊没法写成矢量：整个节点连同效果画成图片（背景模糊模糊不到下面的东西，只剩对象本身）
+    if (effects.some((e) => e.type === 'layerBlur' || e.type === 'backgroundBlur')) {
+      content.save();
+      content.transform(own);
+      this.drawEffectImage(content, node, 'all', { opacity: node.opacity, blend: node.blendMode });
+      content.restore();
+      return;
+    }
     // 和渲染器的离屏层条件一致：要先合成再整体透明或混合的，写成透明组
     const { mask } = maskParts(this.c.store, node);
     const masked = mask?.visible ? mask : null;
     // 和渲染器一样：按透明度或亮度遮的蒙版组要先合成成一个整体
     const maskLayer = masked !== null && !this.clipsByOutline(node, masked);
-    const layered = (special && (isContainer || def.draw !== undefined || paintCount(node) > 1)) || maskLayer;
+    // 有阴影时阴影和对象先合成再整体透明，和画布上一样
+    const layered =
+      (special && (isContainer || def.draw !== undefined || paintCount(node) > 1 || effects.length > 0)) || maskLayer;
 
     content.save();
     content.transform(own);
@@ -265,6 +283,9 @@ class PdfExporter {
     page: readonly [number, number, number, number],
     toPage: Matrix,
   ): void {
+    const effects = activeEffects(node);
+    // 投影烤成图片垫在矢量内容下面，内阴影烤成图片盖在上面
+    if (effects.some((e) => e.type === 'dropShadow')) this.drawEffectImage(content, node, 'below', paint);
     switch (node.type) {
       case 'page':
       case 'group':
@@ -298,6 +319,18 @@ class PdfExporter {
     }
     // 画框的描边画在里面的东西上面
     if (def.strokeOver && !def.draw) this.drawShape(content, node, paint, 'stroke');
+    if (effects.some((e) => e.type === 'innerShadow')) this.drawEffectImage(content, node, 'above', paint);
+  }
+
+  /** 把节点的效果（或者带着效果的整个节点）画成图片放进去，按 paint 的不透明度和混合模式 */
+  private drawEffectImage(content: ContentStream, node: SceneNode, part: EffectPart, paint: Paint): void {
+    const raster = this.c.rasterizeEffects?.(node, part);
+    if (!raster) return;
+    content.save();
+    const state = this.state(paint.opacity, paint.opacity, paint.blend);
+    if (state) content.graphicsState(state);
+    this.placePng(content, raster.png, raster.box);
+    content.restore();
   }
 
   /** 一段内容写成透明组，返回它的资源名 */
@@ -619,8 +652,13 @@ class PdfExporter {
   private drawRaster(content: ContentStream, node: SceneNode): void {
     const raster = this.c.rasterize?.(node);
     if (!raster) return;
+    this.placePng(content, raster.png, raster.box);
+  }
+
+  /** 一张 PNG 放在本地坐标的 box 里 */
+  private placePng(content: ContentStream, png: Uint8Array, box: Rect): void {
     const { ck } = this.c;
-    const image = ck.MakeImageFromEncoded(raster.png);
+    const image = ck.MakeImageFromEncoded(png);
     if (!image) return;
     const width = image.width();
     const height = image.height();
@@ -636,7 +674,6 @@ class PdfExporter {
     const name = `I${this.imageNames.size + 1}`;
     this.imageNames.set(`raster:${name}`, name);
     this.xobjects[name] = writeRgbaImage(this.writer, { width, height, pixels: pixels as Uint8Array });
-    const { box } = raster;
     content
       .save()
       .transform([box.w, 0, 0, -box.h, box.x, box.y + box.h])

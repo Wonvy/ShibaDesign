@@ -43,6 +43,7 @@ import {
   renderImagePreview,
   type Bitmap,
   type Camera,
+  type EffectPart,
   type FrameStats,
 } from '@shiba/renderer';
 import type { PdfExportContext, PdfExportOptions } from '@shiba/renderer/pdf';
@@ -1050,26 +1051,31 @@ export class Editor {
       assets: this.assets,
       // 不知道怎么写成矢量的节点画成两倍图放进去
       rasterize: (node) => this.rasterize(node.id, 2),
+      // 效果（PDF 里没有模糊）也画成两倍图
+      rasterizeEffects: (node, part) => this.rasterizeEffects(node.id, part, 2),
     };
+  }
+
+  /** 把节点的效果画成图片，范围是画出来的范围（含投影、模糊）再多一像素 */
+  private rasterizeEffects(id: NodeId, part: EffectPart, scale: number): { png: Uint8Array; box: Rect } | null {
+    const node = this.store.get(id);
+    if (!node || !this.renderer) return null;
+    const drawn = this.geometry.drawnBounds(node);
+    const box = { x: drawn.x - 1, y: drawn.y - 1, w: drawn.w + 2, h: drawn.h + 2 };
+    const limited = Math.min(scale, 4096 / Math.max(box.w, box.h, 1));
+    const png = this.renderer.renderEffectsToPng(id, part, limited, box);
+    return png ? { png, box } : null;
   }
 
   /** snapshot 的同步部分：字体已经加载好时直接画 */
   private rasterize(id: NodeId, scale: number): { png: Uint8Array; box: Rect } | null {
     const node = this.store.get(id);
     if (!node || !this.renderer) return null;
-    let padding = 1;
-    for (const item of [node, ...descendants(this.store, id)]) {
-      if (hasShapeStyle(item) && item.stroke) padding = Math.max(padding, item.stroke.width / 2 + 1);
-    }
-    const bounds = this.geometry.localBounds(node);
-    const box = {
-      x: bounds.x - padding,
-      y: bounds.y - padding,
-      w: bounds.w + padding * 2,
-      h: bounds.h + padding * 2,
-    };
+    // 画出来的范围：描边、箭头、投影、模糊都算在内，再多留一像素给抗锯齿
+    const drawn = this.geometry.drawnBounds(node);
+    const box = { x: drawn.x - 1, y: drawn.y - 1, w: drawn.w + 2, h: drawn.h + 2 };
     const limited = Math.min(scale, 4096 / Math.max(box.w, box.h, 1));
-    const png = this.renderer.renderToPng(id, limited, padding);
+    const png = this.renderer.renderToPng(id, limited, box);
     return png ? { png, box } : null;
   }
 

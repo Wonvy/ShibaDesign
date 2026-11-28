@@ -14,3 +14,4 @@ export * from './text/appearance';
 export * from './path-ops';
 export * from './image-look';
 export { arrowPaths } from './arrows';
+export { buildEffectFilter, type EffectFilter, type EffectPart } from './effects';

@@ -326,3 +326,31 @@ describe('吸管和视图缩放', () => {
     expect(s.editor.camera.zoom).toBeCloseTo(1, 9);
   });
 });
+
+describe('效果跟着等比缩放和复制属性', () => {
+  it('等比缩放时阴影的偏移、模糊、扩展和模糊半径按比例变；复制属性带上效果', () => {
+    const s = scene(ck, [
+      [100, 100, 100, 100],
+      [300, 100, 100, 100],
+    ]);
+    s.store.transact('fx', (tx) =>
+      tx.update(s.rects[0]!, {
+        effects: [
+          { type: 'dropShadow', color: rgba(0, 0, 0, 0.3), x: 2, y: 4, blur: 8, spread: 1 },
+          { type: 'layerBlur', radius: 6 },
+        ],
+      }),
+    );
+    s.store.sealHistory();
+    s.editor.select([s.rects[0]!]);
+    s.editor.commands.run('arrange.scale', 200);
+    expect((s.store.get(s.rects[0]!) as RectNode).effects).toEqual([
+      { type: 'dropShadow', color: rgba(0, 0, 0, 0.3), x: 4, y: 8, blur: 16, spread: 2 },
+      { type: 'layerBlur', radius: 12 },
+    ]);
+    s.editor.commands.run('edit.copyProperties');
+    s.editor.select([s.rects[1]!]);
+    s.editor.commands.run('edit.pasteProperties');
+    expect((s.store.get(s.rects[1]!) as RectNode).effects).toHaveLength(2);
+  });
+});

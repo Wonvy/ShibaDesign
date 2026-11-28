@@ -1,7 +1,10 @@
 import type { Canvas, CanvasKit, GrDirectContext, Image, Paint, PathEffect, SkPicture, Surface } from 'canvaskit-wasm';
 import {
   IDENTITY,
+  activeEffects,
+  blurSigma,
   dashPattern,
+  effectOutset,
   hasShapeStyle,
   invert,
   maskParts,
@@ -24,6 +27,7 @@ import type { GeometryCache } from './geometry';
 import { drawGradient } from './gradient';
 import { makeImageShader, type ImageCache } from './images';
 import { arrowPaths } from './arrows';
+import { buildEffectFilter, type EffectPart } from './effects';
 import {
   clipsChildren,
   isPlainShape,
@@ -76,6 +80,8 @@ export class Renderer {
   private readonly layerPaint: Paint;
   private drawn = 0;
   private cache: { version: number; roots: string; picture: SkPicture; count: number } | null = null;
+  /** 只画某个节点的一部分效果（导出 PDF 时把投影、内阴影烤成图片用）；这个节点自己的不透明度和混合模式也不算 */
+  private isolated: { id: NodeId; part: EffectPart } | null = null;
   private lastVersion = -1;
   private lastRoots = '';
   stats: FrameStats = { drawn: 0, ms: 0, cached: false };
@@ -221,6 +227,19 @@ export class Renderer {
     return bytes ? bytes.slice() : null;
   }
 
+  /**
+   * 把一个节点的效果画成 PNG（导出 PDF 时用）：below 只有投影，above 只有内阴影，all 是带着全部效果的整个节点
+   * （背景模糊除外，它要模糊下面的东西）。都不算这个节点自己的不透明度和混合模式，由调用方另外处理
+   */
+  renderEffectsToPng(id: NodeId, part: EffectPart, scale: number, area: Rect): Uint8Array | null {
+    this.isolated = { id, part };
+    try {
+      return this.renderToPng(id, scale, area);
+    } finally {
+      this.isolated = null;
+    }
+  }
+
   private rasterize(
     node: SceneNode,
     bounds: Rect,
@@ -331,12 +350,20 @@ export class Renderer {
     const world = multiply(parentWorld, node.transform);
     const isContainer = def.children === 'draw' || def.children === 'clip';
 
+    const isolated = this.isolated?.id === node.id ? this.isolated.part : null;
+    const effects = activeEffects(node);
     // 不裁剪的容器（编组、关了裁剪的画框）里的东西可以伸出自己的范围，不按自己的范围剔除
     const culls = def.children === 'none' || def.children === 'consume' || clipsChildren(def, node);
     if (viewport && culls) {
       const local = this.geometry.localBounds(node);
       const pad = hasShapeStyle(node) && node.stroke ? node.stroke.width : 0;
-      const padded = { x: local.x - pad, y: local.y - pad, w: local.w + pad * 2, h: local.h + pad * 2 };
+      const out = effectOutset(effects);
+      const padded = {
+        x: local.x - pad - out.left,
+        y: local.y - pad - out.top,
+        w: local.w + pad * 2 + out.left + out.right,
+        h: local.h + pad * 2 + out.top + out.bottom,
+      };
       if (!rectsIntersect(transformRect(world, padded), viewport)) return;
     }
 
@@ -344,16 +371,29 @@ export class Renderer {
     canvas.save();
     canvas.concat(toSkMatrix(node.transform));
 
-    const special = node.opacity < 1 || node.blendMode !== 'normal';
+    const opacity = isolated ? 1 : node.opacity;
+    const blendMode = isolated ? 'normal' : node.blendMode;
+    // 背景模糊：先把对象轮廓里、已经画好的下面的东西模糊掉
+    const backdrop = isolated ? undefined : effects.find((e) => e.type === 'backgroundBlur');
+    if (backdrop?.type === 'backgroundBlur' && backdrop.radius > 0) this.blurBackdrop(canvas, node, backdrop.radius);
+    const effectFilter = effects.length > 0 ? buildEffectFilter(ck, effects, isolated ?? 'all') : null;
+
+    const special = opacity < 1 || blendMode !== 'normal';
     const { mask, contents } = maskParts(this.store, node);
     const masked = mask?.visible ? mask : null;
     // 按透明度或亮度遮的蒙版要在一个单独的层里做，免得把下面的东西也遮掉
     const maskLayer = masked !== null && !this.clipsByOutline(node, masked);
-    const layered = (special && (isContainer || def.draw !== undefined || paintCount(node) > 1)) || maskLayer;
+    const layered =
+      (special && (isContainer || def.draw !== undefined || paintCount(node) > 1)) ||
+      maskLayer ||
+      effectFilter !== null;
     if (layered) {
-      this.layerPaint.setAlphaf(node.opacity);
-      this.layerPaint.setBlendMode(toSkBlendMode(ck, node.blendMode));
+      this.layerPaint.setAlphaf(opacity);
+      this.layerPaint.setBlendMode(toSkBlendMode(ck, blendMode));
+      // 投影、内阴影、图层模糊：层里画对象本身，合回去的时候经过滤镜
+      this.layerPaint.setImageFilter(effectFilter?.filter ?? null);
       canvas.saveLayer(this.layerPaint);
+      this.layerPaint.setImageFilter(null);
     }
 
     const outline = this.geometry.outlineOf(node);
@@ -362,8 +402,8 @@ export class Renderer {
       canvas,
       outline,
       paint: this.paint,
-      opacity: layered ? 1 : node.opacity,
-      blendMode: layered ? ck.BlendMode.SrcOver : toSkBlendMode(ck, node.blendMode),
+      opacity: layered ? 1 : opacity,
+      blendMode: layered ? ck.BlendMode.SrcOver : toSkBlendMode(ck, blendMode),
       images: this.images,
       bounds: () => this.geometry.localBounds(node),
     };
@@ -385,6 +425,25 @@ export class Renderer {
 
     if (layered) canvas.restore();
     canvas.restore();
+    effectFilter?.dispose();
+  }
+
+  /** 背景模糊：按对象的轮廓裁剪（没有轮廓的编组、文字按范围），开一个带背景滤镜的空层，下面画好的东西就被模糊了 */
+  private blurBackdrop(canvas: Canvas, node: SceneNode, radius: number): void {
+    const { ck } = this;
+    const outline = this.geometry.outlineOf(node);
+    const empty = outline.isEmpty();
+    canvas.save();
+    if (empty) {
+      const b = this.geometry.localBounds(node);
+      canvas.clipRect(ck.XYWHRect(b.x, b.y, b.w, b.h), ck.ClipOp.Intersect, true);
+    } else canvas.clipPath(outline, ck.ClipOp.Intersect, true);
+    const sigma = blurSigma(radius);
+    const blur = ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Clamp, null);
+    canvas.saveLayer(undefined, null, blur);
+    canvas.restore();
+    canvas.restore();
+    blur.delete();
   }
 }
 

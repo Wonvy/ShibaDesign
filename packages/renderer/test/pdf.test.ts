@@ -33,6 +33,7 @@ import {
   TextLayouts,
   createTextNodeType,
   ensureTextFonts,
+  Renderer,
   loadCanvasKit,
   parseUnicodeRange,
   registerBuiltinNodeTypes,
@@ -123,7 +124,7 @@ function setup() {
   const context: PdfExportContext = { ck, store, registry, geometry, layouts, fonts, appearances, images, assets };
   const add = <T extends SceneNode>(node: T): T => store.transact('add', (tx) => tx.create(node)) as T;
   const on = (parent = board.id) => ({ parent, index: store.indexOnTop(parent), seq: 1 });
-  return { store, assets, fonts, layouts, context, board, add, on };
+  return { store, assets, fonts, layouts, context, board, add, on, registry, geometry, images };
 }
 
 type Env = ReturnType<typeof setup>;
@@ -727,5 +728,50 @@ describe('导出 PDF：画框', () => {
     });
     expect(inner).toMatchObject({ transform: [1, 0, 0, 1, 190, 60], size: [50, 40], fill: solid(rgba(1, 0, 0)) });
     expect(stroke).toMatchObject({ size: [200, 120], fill: null, stroke: { color: rgba(0, 0, 0), width: 2 } });
+  });
+});
+
+describe('导出 PDF：效果', () => {
+  it('投影烤成图片垫在矢量形状下面，形状还是矢量；有图层模糊时整个对象画成图片', async () => {
+    const env = setup();
+    const renderer = new Renderer(ck, {} as HTMLCanvasElement, env.store, env.registry, env.geometry, env.images);
+    env.context.rasterizeEffects = (node, part) => {
+      const drawn = env.geometry.drawnBounds(node);
+      const box = { x: drawn.x - 1, y: drawn.y - 1, w: drawn.w + 2, h: drawn.h + 2 };
+      const png = renderer.renderEffectsToPng(node.id, part, 2, box);
+      return png ? { png, box } : null;
+    };
+    env.add(
+      createNode('rect', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 40, 40],
+        size: [100, 60],
+        cornerRadius: 0,
+        fill: solid(rgba(1, 0, 0)),
+        stroke: null,
+        effects: [{ type: 'dropShadow', color: rgba(0, 0, 0, 0.5), x: 0, y: 8, blur: 12, spread: 0 }],
+      }),
+    );
+    env.add(
+      createNode('ellipse', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 200, 40],
+        size: [100, 100],
+        fill: solid(rgba(0, 0, 1)),
+        stroke: null,
+        effects: [{ type: 'layerBlur', radius: 10 }],
+      }),
+    );
+    const { bytes, ops } = await exportAndOpen(env);
+    // 两张图：矩形的投影、模糊的椭圆
+    expect(ops.fnArray.filter((f) => f === pdfjs.OPS.paintImageXObject)).toHaveLength(2);
+    const back = await reimport(bytes);
+    const [shadow, rect, blurred] = back.items;
+    expect(shadow!.type).toBe('rect');
+    expect((shadow as { fill: { type: string } }).fill.type).toBe('image');
+    // 投影的图片比矩形大（往四周扩了模糊的范围，往下多偏移了 8）
+    expect(shadow!.size[1]).toBeGreaterThan(60 + 8);
+    expect(rect).toMatchObject({ type: 'rect', size: [100, 60], fill: solid(rgba(1, 0, 0)) });
+    expect((blurred as { fill: { type: string } }).fill.type).toBe('image');
   });
 });

@@ -61,7 +61,8 @@
       "properties": "Properties",
       "notes": "Notes",
       "polygon": "Polygon",
-      "frame": "Frame"
+      "frame": "Frame",
+      "effects": "Effects"
     },
     "slide": {
       "add": "New slide",
@@ -895,6 +896,21 @@
     },
     "frame": {
       "wrap": "Wrap in frame"
+    },
+    "effects": {
+      "dropShadow": "Drop shadow",
+      "innerShadow": "Inner shadow",
+      "layerBlur": "Layer blur",
+      "backgroundBlur": "Background blur",
+      "type": "Effect type",
+      "show": "Show this effect",
+      "hide": "Hide this effect",
+      "color": "Shadow color",
+      "blur": "Blur",
+      "spread": "Spread",
+      "radius": "Radius",
+      "add": "Add effect",
+      "mixed": "The selected objects have different effects; editing applies this set to all of them."
     }
   }
 }

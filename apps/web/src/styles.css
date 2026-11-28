@@ -2980,3 +2980,63 @@ button.template-card:hover,
   flex: 1;
   min-width: 0;
 }
+
+/* ───────── 效果 ───────── */
+
+.effects {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.effect {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.effect-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.effect-head .select {
+  flex: 1;
+  min-width: 0;
+}
+
+.effect-color {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  gap: 6px;
+}
+
+.effect-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.effect-add:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.panel-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}

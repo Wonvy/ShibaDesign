@@ -1,5 +1,6 @@
 import type { Constraints } from './constraints';
 import type { CornerStyle } from './corners';
+import type { Effect } from './effects';
 import type { ArrowHead } from './stroke';
 /**
  * 文档数据模型。
@@ -223,6 +224,8 @@ export interface BaseNode {
   overrides?: readonly string[];
   /** 在画框、画板里时：容器改大小时自己怎么跟着变。省略是靠左靠上（不动）。见 constraints.ts */
   constraints?: Constraints;
+  /** 投影、内阴影、模糊，按列表的顺序叠。省略表示没有。画板和页面不画。见 effects.ts */
+  effects?: readonly Effect[];
 }
 
 export interface ShapeStyle {

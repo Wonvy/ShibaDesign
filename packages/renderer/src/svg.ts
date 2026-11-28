@@ -1,6 +1,8 @@
 import type { Image } from 'canvaskit-wasm';
 import { arrowPaths } from './arrows';
 import {
+  activeEffects,
+  blurSigma,
   IDENTITY,
   dashPattern,
   gradientGeometry,
@@ -395,8 +397,95 @@ class SvgExporter {
       transform: svgMatrix(own),
       opacity: node.opacity < 1 ? svgNumber(Math.max(0, node.opacity)) : null,
       style: options.blend && node.blendMode !== 'normal' ? `mix-blend-mode:${node.blendMode}` : null,
+      filter: this.effectFilter(node),
     };
     return wrap(content, attrs);
+  }
+
+  /**
+   * 投影、内阴影、图层模糊写成一个 <filter>，返回 url(#id)；没有这些效果时返回 null。
+   * 投影：透明度通道（扩展用 feMorphology 先扩或缩）偏移、模糊、上色；内阴影：透明度反过来再偏移、模糊、上色，
+   * 只留形状里面的部分；最后按"投影、对象本身、内阴影"的顺序合起来，有图层模糊时整体再模糊一次。
+   * 背景模糊 SVG 做不了（浏览器不支持取下面的画面），不写
+   */
+  private effectFilter(node: SceneNode): string | null {
+    const effects = activeEffects(node).filter((e) => e.type !== 'backgroundBlur');
+    if (effects.length === 0) return null;
+    const id = this.id('f');
+    const steps: SvgElement[] = [];
+    const below: string[] = [];
+    const above: string[] = [];
+    effects.forEach((e, i) => {
+      if (e.type !== 'dropShadow' && e.type !== 'innerShadow') return;
+      const key = `e${i}`;
+      const sigma = blurSigma(e.blur);
+      let source = 'SourceAlpha';
+      const spread = e.type === 'dropShadow' ? e.spread : Math.max(0, e.spread);
+      if (spread !== 0) {
+        // 投影的扩展往外扩，内阴影的扩展让形状往里缩（阴影伸得更进去）
+        const dilate = e.type === 'dropShadow' && spread > 0;
+        steps.push(
+          svgEl('feMorphology', {
+            in: source,
+            operator: dilate ? 'dilate' : 'erode',
+            radius: svgNumber(Math.abs(spread)),
+            result: `${key}s`,
+          }),
+        );
+        source = `${key}s`;
+      }
+      if (e.type === 'innerShadow') {
+        steps.push(
+          svgEl('feComponentTransfer', { in: source, result: `${key}v` }, [
+            svgEl('feFuncA', { type: 'table', tableValues: '1 0' }),
+          ]),
+        );
+        source = `${key}v`;
+      }
+      steps.push(svgEl('feOffset', { in: source, dx: svgNumber(e.x), dy: svgNumber(e.y), result: `${key}o` }));
+      source = `${key}o`;
+      if (sigma > 0) {
+        steps.push(svgEl('feGaussianBlur', { in: source, stdDeviation: svgNumber(sigma), result: `${key}b` }));
+        source = `${key}b`;
+      }
+      steps.push(svgEl('feFlood', { 'flood-color': svgColor(e.color), 'flood-opacity': svgOpacity(e.color.a) ?? 1 }));
+      const colored = e.type === 'dropShadow' ? key : `${key}c`;
+      steps.push(svgEl('feComposite', { in2: source, operator: 'in', result: colored }));
+      if (e.type === 'innerShadow') {
+        steps.push(svgEl('feComposite', { in: colored, in2: 'SourceAlpha', operator: 'in', result: key }));
+        above.push(key);
+      } else below.push(key);
+    });
+    const merged = [...below, 'SourceGraphic', ...above];
+    steps.push(
+      svgEl(
+        'feMerge',
+        { result: 'merged' },
+        merged.map((name) => svgEl('feMergeNode', { in: name })),
+      ),
+    );
+    const blur = effects.find((e) => e.type === 'layerBlur');
+    if (blur?.type === 'layerBlur' && blur.radius > 0) {
+      steps.push(svgEl('feGaussianBlur', { in: 'merged', stdDeviation: svgNumber(blurSigma(blur.radius)) }));
+    }
+    // 滤镜的范围按画出来的范围（含投影、模糊）写，免得默认的 10% 留边把阴影切掉
+    const region = this.context.geometry.drawnBounds(node);
+    this.defs.push(
+      svgEl(
+        'filter',
+        {
+          id,
+          filterUnits: 'userSpaceOnUse',
+          x: svgNumber(region.x - 1),
+          y: svgNumber(region.y - 1),
+          width: svgNumber(region.w + 2),
+          height: svgNumber(region.h + 2),
+          'color-interpolation-filters': 'sRGB',
+        },
+        steps,
+      ),
+    );
+    return `url(#${id})`;
   }
 
   private children(nodes: readonly SceneNode[]): SvgElement[] {
@@ -965,16 +1054,10 @@ function cssFamily(name: string): string {
   return `'${name.replace(/[\u0000-\u001f<>]/g, '').replace(/['\\]/g, '\\$&')}'`;
 }
 
-/** 节点的外框，四周留出描边的一半和一点余量。和渲染成图层图片时的范围一致 */
+/** 节点画出来的范围（描边、箭头、投影、模糊都算在内），四周再留一像素。和渲染成图层图片时的范围一致 */
 function paddedBounds(context: SvgExportContext, node: SceneNode): Rect {
-  let padding = 1;
-  const visit = (item: SceneNode): void => {
-    if (hasShapeStyle(item) && item.stroke) padding = Math.max(padding, item.stroke.width / 2 + 1);
-    for (const child of context.store.children(item.id)) visit(child);
-  };
-  visit(node);
-  const bounds = context.geometry.localBounds(node);
-  return { x: bounds.x - padding, y: bounds.y - padding, w: bounds.w + padding * 2, h: bounds.h + padding * 2 };
+  const drawn = context.geometry.drawnBounds(node);
+  return { x: drawn.x - 1, y: drawn.y - 1, w: drawn.w + 2, h: drawn.h + 2 };
 }
 
 /**

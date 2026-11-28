@@ -61,7 +61,8 @@
       "properties": "属性",
       "notes": "备注",
       "polygon": "多边形",
-      "frame": "画框"
+      "frame": "画框",
+      "effects": "效果"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -895,6 +896,21 @@
     },
     "frame": {
       "wrap": "用画框包起来"
+    },
+    "effects": {
+      "dropShadow": "投影",
+      "innerShadow": "内阴影",
+      "layerBlur": "图层模糊",
+      "backgroundBlur": "背景模糊",
+      "type": "效果类型",
+      "show": "显示这个效果",
+      "hide": "暂时关掉这个效果",
+      "color": "阴影颜色",
+      "blur": "模糊",
+      "spread": "扩展",
+      "radius": "半径",
+      "add": "添加效果",
+      "mixed": "选中的对象效果不一样，改了会统一成这一套。"
     }
   }
 }

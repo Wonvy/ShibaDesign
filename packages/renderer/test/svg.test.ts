@@ -816,3 +816,44 @@ describe('导出 SVG：画框', () => {
     expect(open).not.toContain('<clipPath');
   });
 });
+
+describe('导出 SVG：效果', () => {
+  it('投影、内阴影、图层模糊写成一个 <filter>：投影在下、对象本身、内阴影在上，最后整体模糊；背景模糊不写', async () => {
+    const env = setup();
+    env.add(
+      createNode('rect', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 40, 40],
+        size: [100, 60],
+        cornerRadius: 0,
+        fill: solid(rgba(1, 0, 0)),
+        stroke: null,
+        effects: [
+          { type: 'dropShadow', color: rgba(0, 0, 0, 0.5), x: 0, y: 8, blur: 12, spread: 2 },
+          { type: 'innerShadow', color: rgba(1, 1, 1, 1), x: 2, y: 2, blur: 4, spread: 0 },
+          { type: 'layerBlur', radius: 6 },
+          { type: 'backgroundBlur', radius: 20 },
+          { type: 'dropShadow', color: rgba(0, 1, 0, 1), x: 50, y: 50, blur: 0, spread: 0, hidden: true },
+        ],
+      }),
+    );
+    const svg = await exportBoard(env);
+    const filter = elements(svg, 'filter')[0]!;
+    expect(filter['filterUnits']).toBe('userSpaceOnUse');
+    // 范围包括往下偏移的投影：下边 = 60 + 8 + 2 + 3σ(18) + 图层模糊 3σ(9) + 1
+    expect(Number(filter['y']) + Number(filter['height'])).toBeCloseTo(60 + 8 + 2 + 18 + 9 + 1, 5);
+    const rect = elements(svg, 'rect').find((r) => r['fill'] === '#ff0000')!;
+    expect(rect['filter']).toBe(`url(#${filter['id']})`);
+    expect(elements(svg, 'feMorphology')[0]).toMatchObject({ operator: 'dilate', radius: '2' });
+    expect(elements(svg, 'feOffset').map((o) => [o['dx'], o['dy']])).toEqual([
+      ['0', '8'],
+      ['2', '2'],
+    ]);
+    expect(elements(svg, 'feFlood').map((f) => f['flood-color'])).toEqual(['#000000', '#ffffff']);
+    expect(elements(svg, 'feMergeNode').map((n) => n['in'])).toEqual(['e0', 'SourceGraphic', 'e1']);
+    // 关掉的投影不写；最后一步是图层模糊
+    const blurs = elements(svg, 'feGaussianBlur');
+    expect(blurs.at(-1)).toMatchObject({ in: 'merged', stdDeviation: '3' });
+    expect(svg).not.toContain('#00ff00');
+  });
+});

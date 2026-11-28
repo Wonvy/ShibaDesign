@@ -4,6 +4,7 @@ import { AnimationPanel } from './AnimationPanel';
 import { AppearancePanel } from './AppearancePanel';
 import { AlignPanel, BooleanPanel, MaskPanel, OrderPanel } from './ArrangePanels';
 import { ComponentPanel, showComponentPanel } from './ComponentPanel';
+import { EffectsPanel } from './EffectsPanel';
 import { FramePanel } from './FramePanel';
 import { ImagePanel } from './ImagePanel';
 import { PathPanel } from './PathPanel';
@@ -75,6 +76,13 @@ export function registerBuiltinPanels(): void {
     component: TextPanel,
   });
   registerPanel({ id: 'appearance', titleKey: 'panel.appearance', order: 50, component: AppearancePanel });
+  registerPanel({
+    id: 'effects',
+    titleKey: 'panel.effects',
+    order: 55,
+    when: ({ nodes }) => nodes.some((n) => n.type !== 'artboard'),
+    component: EffectsPanel,
+  });
   registerPanel({
     id: 'image',
     titleKey: 'panel.image',

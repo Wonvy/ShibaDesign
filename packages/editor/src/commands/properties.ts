@@ -1,6 +1,7 @@
 import {
   hasBoxCorners,
   type BlendMode,
+  type Effect,
   type Fill,
   type NodePatch,
   type RectNode,
@@ -25,6 +26,9 @@ interface PropertySet {
   cornerRadius?: number;
   corners?: Pick<RectNode, 'cornerRadii' | 'cornerStyle' | 'cornerSmoothing'>;
   text?: { style: TextStyle; align: TextAlign; textStyle?: string };
+  /** 投影、模糊；来源是画板时省略 */
+  effects?: readonly Effect[] | undefined;
+  hasEffects?: boolean;
 }
 
 const copied = new WeakMap<Editor, PropertySet>();
@@ -42,6 +46,10 @@ function propertiesOf(node: SceneNode): PropertySet {
     };
   }
   if (node.type === 'text') props.text = { style: node.style, align: node.align, textStyle: node.textStyle };
+  if (node.type !== 'artboard') {
+    props.hasEffects = true;
+    props.effects = node.effects;
+  }
   return props;
 }
 
@@ -51,6 +59,8 @@ function patchFor(node: SceneNode, props: PropertySet): NodePatch | null {
   if (node.type !== 'artboard') {
     patch.opacity = props.opacity;
     patch.blendMode = props.blendMode;
+    // 来源没有效果时把目标的效果也去掉（和填充、描边一样整套换过去）
+    if (props.hasEffects) patch.effects = props.effects;
   }
   if ('fill' in node && props.fill !== undefined) {
     const fill = props.fill;

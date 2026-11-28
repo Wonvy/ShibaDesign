@@ -1,7 +1,9 @@
 import type { CanvasKit, Path } from 'canvaskit-wasm';
 import { arrowPaths } from './arrows';
 import {
+  activeEffects,
   applyToPoint,
+  effectOutset,
   hasShapeStyle,
   invert,
   maskParts,
@@ -82,6 +84,20 @@ export class GeometryCache {
    * 编组是子节点画出来的范围合起来；蒙版组只露出蒙版范围里的东西。布尔组的运算对象自己的描边不画，不算
    */
   drawnBounds(node: SceneNode): Rect {
+    const bounds = this.contentDrawnBounds(node);
+    const effects = activeEffects(node);
+    if (effects.length === 0) return bounds;
+    // 投影、图层模糊让画出来的范围往外扩
+    const out = effectOutset(effects);
+    return {
+      x: bounds.x - out.left,
+      y: bounds.y - out.top,
+      w: bounds.w + out.left + out.right,
+      h: bounds.h + out.top + out.bottom,
+    };
+  }
+
+  private contentDrawnBounds(node: SceneNode): Rect {
     const def = this.registry.get(node.type);
     if (def?.children === 'draw') {
       const { mask } = maskParts(this.store, node);
