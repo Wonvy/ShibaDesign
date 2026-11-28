@@ -30,9 +30,20 @@ export interface PathDrawingOptions {
 
 const corner = (p: Point): Anchor => ({ x: p.x, y: p.y, inX: p.x, inY: p.y, outX: p.x, outY: p.y });
 
+/** 按住 Shift：从 from 到 to 的方向锁定在 45° 的倍数上，长度取在这个方向上的投影 */
+function constrain45(from: Point, to: Point): Point {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+  const length = dx * Math.cos(angle) + dy * Math.sin(angle);
+  return { x: from.x + Math.cos(angle) * length, y: from.y + Math.sin(angle) * length };
+}
+
 /**
  * 用钢笔的方式画一条路径，钢笔工具和画动作路径的工具共用：
  * - 单击：添加直线锚点；按住拖动：拉出对称的曲线控制柄
+ * - 按住 Shift：新锚点相对上一个锚点、控制柄相对锚点锁定在 45° 的倍数上；按住 Alt 拖控制柄只动出去的那根（断开对称）；
+ *   拖控制柄时按住空格挪动正在放的这个锚点；按着 ⌘ 时不吸附
  * - 点回第一个锚点：闭合路径；点最后一个锚点或按回车 / Esc：结束开放路径
  * - 退格：删掉最后一个锚点（开始时定下的第一个锚点删不掉）
  * 画的过程中锚点只存在工具里，结束时才交给 finish 写进文档，所以整条路径是一步撤销
@@ -43,6 +54,8 @@ export function createPathDrawingTool(options: PathDrawingOptions): Tool {
   let fixed = 0;
   let dragging = false;
   let hover: Point | null = null;
+  /** 上一次的鼠标位置，按住空格挪动锚点时用 */
+  let lastPointer: Point | null = null;
 
   const reset = (): void => {
     anchors = [];
@@ -99,9 +112,11 @@ export function createPathDrawingTool(options: PathDrawingOptions): Tool {
         end(editor, false);
         return;
       }
-      // 新放的锚点吸附到附近的边和中线（按着 ⌘ 时不吸）
+      // 新放的锚点吸附到附近的边和中线（按着 ⌘ 时不吸）；按住 Shift 时相对上一个锚点锁定 45°
       let at = e.world;
-      if (editor.snapping && !e.mod) {
+      if (e.shift && last) {
+        at = constrain45(last, e.world);
+      } else if (editor.snapping && !e.mod) {
         at = snapPoint(editor.snapTargets([]), e.world, {
           threshold: editor.snapThreshold,
           pixels: editor.view.snapPixels,
@@ -109,6 +124,7 @@ export function createPathDrawingTool(options: PathDrawingOptions): Tool {
       }
       anchors.push(corner(at));
       dragging = true;
+      lastPointer = e.world;
     },
 
     onPointerMove(e, editor) {
@@ -118,10 +134,27 @@ export function createPathDrawingTool(options: PathDrawingOptions): Tool {
       hover = e.world;
       const last = anchors[anchors.length - 1];
       if (dragging && e.down && last) {
-        last.outX = e.world.x;
-        last.outY = e.world.y;
-        last.inX = 2 * last.x - e.world.x;
-        last.inY = 2 * last.y - e.world.y;
+        if (e.space && lastPointer) {
+          // 按住空格：整个锚点连同控制柄一起挪
+          const dx = e.world.x - lastPointer.x;
+          const dy = e.world.y - lastPointer.y;
+          last.x += dx;
+          last.y += dy;
+          last.inX += dx;
+          last.inY += dy;
+          last.outX += dx;
+          last.outY += dy;
+        } else {
+          const handle = e.shift ? constrain45(last, e.world) : e.world;
+          last.outX = handle.x;
+          last.outY = handle.y;
+          // 按住 Alt：只动出去的那根控制柄，进来的那根留在原处
+          if (!e.alt) {
+            last.inX = 2 * last.x - handle.x;
+            last.inY = 2 * last.y - handle.y;
+          }
+        }
+        lastPointer = e.world;
       }
       if (anchors.length > 0) editor.requestRender();
     },

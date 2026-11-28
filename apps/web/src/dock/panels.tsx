@@ -1,5 +1,5 @@
 import { Pin, PinOff } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ImageFill, NodeId, SceneNode } from '@shiba/core';
 import { AssetsPanel } from '../components/AssetsPanel';
@@ -92,9 +92,6 @@ function ImageDockPanel(): ReactNode {
 
   const pinnedNode = pinned ? editor.store.get(pinned) : undefined;
   const nodes = pinnedNode && imageFillOf(pinnedNode) ? [pinnedNode] : selected.filter((n) => imageFillOf(n));
-  if (nodes.length === 0) {
-    return <p className="empty-note dock-empty">{t('dock.imageEmpty')}</p>;
-  }
 
   /** 按住"原图"：用一个合并键临时去掉调整，松开时整个放弃（不进撤销历史） */
   const showOriginal = (): void => {
@@ -119,6 +116,34 @@ function ImageDockPanel(): ReactNode {
     preview.current = null;
     if (key) editor.store.abandon(key);
   };
+
+  // 按住 \ 键也是看原图（Photoshop 的习惯）；输入框里打字时不管，⌘\ 是隐藏界面
+  const showRef = useRef(showOriginal);
+  const hideRef = useRef(hideOriginal);
+  showRef.current = showOriginal;
+  hideRef.current = hideOriginal;
+  useEffect(() => {
+    const typing = (target: EventTarget | null) =>
+      target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+    const down = (event: KeyboardEvent): void => {
+      if (event.code !== 'Backslash' || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
+      event.preventDefault();
+      showRef.current();
+    };
+    const up = (event: KeyboardEvent): void => {
+      if (event.code === 'Backslash') hideRef.current();
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
+
+  if (nodes.length === 0) {
+    return <p className="empty-note dock-empty">{t('dock.imageEmpty')}</p>;
+  }
 
   return (
     <div className="image-dock">

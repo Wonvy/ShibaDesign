@@ -1,6 +1,7 @@
 import {
   hasBoxCorners,
   hasLiveAppearance,
+  isEnterable,
   applyToPoint,
   isInstanceCopy,
   rotationOf,
@@ -197,6 +198,7 @@ function imageSize(editor: Editor, fill: ImageFill): { width: number; height: nu
 
 /** 选择工具：点选、加选、框选、拖动移动、拖控制柄缩放、拖旋转手柄旋转、双击进入编组 */
 export function createSelectTool(): Tool {
+  let selectionBeforeClick: NodeId[] = [];
   let drag: Drag | null = null;
 
   // 按原文件字形显示的文字，文本框就是原文件里那段字的范围，不看排版结果
@@ -320,6 +322,8 @@ export function createSelectTool(): Tool {
     },
 
     onPointerDown(e, editor) {
+      // 记下按下之前的选区：双击空白处时（第一下已经把选区清掉了）靠它知道刚才在哪个组里
+      selectionBeforeClick = [...editor.selection];
       if (beginFillEdit(editor, e.world, e.x, e.y)) return;
       // 圆角控件在形状里面，离控制柄远，先看它
       const corner = hitCornerWidget(editor, e.x, e.y);
@@ -521,8 +525,15 @@ export function createSelectTool(): Tool {
         drag.current = e.world;
         const rect = rectFromPoints(drag.start.x, drag.start.y, e.world.x, e.world.y);
         const candidates = drag.deep ? groupMembersOf(editor, editor.selectableNodes()) : editor.selectableNodes();
+        // 偏好"框选要整个框住"：对象整个在框里才选，否则框到一部分就选
+        const contain = editor.view.marqueeContain;
         const hits = candidates
-          .filter((node) => rectsIntersect(editor.geometry.worldBounds(node), rect))
+          .filter((node) => {
+            const b = editor.geometry.worldBounds(node);
+            return contain
+              ? b.x >= rect.x && b.y >= rect.y && b.x + b.w <= rect.x + rect.w && b.y + b.h <= rect.y + rect.h
+              : rectsIntersect(b, rect);
+          })
           .map((node) => node.id);
         if (drag.remove) {
           // 按着 Alt 框选：从原来的选区里减掉框到的
@@ -657,6 +668,12 @@ export function createSelectTool(): Tool {
     onDoubleClick(e, editor) {
       const picked = editor.pick(e.world);
       const hit = picked.node;
+      // 在组（画框）里双击空白处：退回上一层，选中这个组
+      const outer = enteredContainer(editor, selectionBeforeClick);
+      if (outer && (!hit || !isDescendantOf(editor.store, hit.id, outer.id))) {
+        editor.select([outer.id]);
+        return;
+      }
       if (!hit) {
         // 双击画板的空白处：画板背景是渐变时，在画布上调整它
         const board = picked.artboard;
@@ -777,6 +794,15 @@ function copyOriginals(
     if (original) out.set(copy, { ...original, id: copy } as SceneNode);
   }
   return out;
+}
+
+/** 选中的东西都在同一个"进去了"的组（画框）里时，返回这个组 */
+function enteredContainer(editor: Editor, ids: readonly NodeId[]): SceneNode | null {
+  if (ids.length === 0) return null;
+  const parents = new Set(ids.map((id) => editor.store.get(id)?.parent ?? null));
+  if (parents.size !== 1) return null;
+  const parent = editor.store.get([...parents][0] ?? '');
+  return parent && isEnterable(parent) ? parent : null;
 }
 
 /** ⌘ 框选的候选：编组展开成里面的成员（一层层展开到不是编组为止），看不见、锁定的不算 */

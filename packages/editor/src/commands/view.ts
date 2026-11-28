@@ -51,7 +51,8 @@ export type ViewToggle =
   | 'snapObjects'
   | 'snapGuides'
   | 'snapPixels'
-  | 'alignToContainer';
+  | 'alignToContainer'
+  | 'marqueeContain';
 
 /** 打开或关掉一个视图选项（标尺 ⇧R、辅助线 ⌘;、锁定辅助线 ⌥⌘;、像素网格 ⌘'、版面网格 ⇧G、吸附的几项） */
 export const toggleView: Command<ViewToggle> = {

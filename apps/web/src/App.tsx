@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { slides } from '@shiba/core';
 import { playableSlides, type Editor } from '@shiba/editor';
 import { DockHost } from './dock/DockHost';
+import { pickAndPlaceImages } from './files';
 import { TopBar } from './components/TopBar';
 import { installClipboard } from './clipboard';
 import { GuideDialog } from './components/GuideDialog';
@@ -51,6 +52,11 @@ function Workspace(): ReactNode {
       },
     });
   }, [editor, play]);
+
+  // 放图片（⇧⌘K）：要打开选文件的对话框，在界面层注册
+  useEffect(() => {
+    editor.commands.register({ id: 'image.pick', run: (e) => void pickAndPlaceImages(e) });
+  }, [editor]);
 
   return (
     <div className="app">

@@ -917,7 +917,8 @@
       "layoutGrids": "版面网格",
       "copyAsCss": "复制为 CSS",
       "undoAction": "撤销{{action}}",
-      "redoAction": "重做{{action}}"
+      "redoAction": "重做{{action}}",
+      "marqueeContain": "框选要整个框住"
     },
     "guide": {
       "vertical": "竖辅助线",

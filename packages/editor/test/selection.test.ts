@@ -241,6 +241,7 @@ describe('快捷键表', () => {
       'help.shortcuts',
       'dock.show',
       'dock.toggleHidden',
+      'image.pick',
     ]);
     const missing = DEFAULT_BINDINGS.filter((b) => !fromWeb.has(b.command) && !s.editor.commands.has(b.command));
     expect(missing).toEqual([]);

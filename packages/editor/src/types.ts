@@ -49,6 +49,8 @@ export interface ViewOptions {
   snapPixels: boolean;
   /** 多选对齐时对齐到所在的画框或画板，而不是选区整体 */
   alignToContainer: boolean;
+  /** 框选时对象整个在框里才选（否则框到一部分就选） */
+  marqueeContain: boolean;
 }
 
 export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
@@ -62,6 +64,7 @@ export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
   snapGuides: true,
   snapPixels: false,
   alignToContainer: false,
+  marqueeContain: false,
 };
 
 /** 正在编辑的文字。属性面板按它显示和修改选中那几个字的样式 */

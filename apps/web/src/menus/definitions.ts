@@ -561,7 +561,7 @@ export function registerBuiltinMenus(): void {
   registerMenu('bar.file', () => [
     { id: 'file.new', labelKey: 'file.new', run: () => openFileDialog('new') },
     { id: 'file.open', labelKey: 'file.open', shortcut: 'mod+o', run: (c) => void openDocument(c.editor) },
-    { id: 'file.placeImage', labelKey: 'image.place', run: (c) => void pickAndPlaceImages(c.editor) },
+    { id: 'file.placeImage', labelKey: 'image.place', command: 'image.pick' },
     'separator',
     { id: 'file.save', labelKey: 'file.save', shortcut: 'mod+s', run: (c) => void saveDocument(c.editor) },
     { id: 'file.saveAs', labelKey: 'file.saveAs', shortcut: 'mod+shift+s', run: (c) => void saveDocumentAs(c.editor) },
@@ -658,6 +658,7 @@ export function registerBuiltinMenus(): void {
     toggle('pixelGrid'),
     toggle('layoutGrids'),
     toggle('sizeLabel'),
+    toggle('marqueeContain'),
     snapItems(),
     cmd('guides.clearAll'),
     'separator',

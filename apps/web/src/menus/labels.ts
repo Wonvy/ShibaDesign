@@ -129,6 +129,8 @@ export const COMMAND_LABELS: Record<string, string> = {
   'view.toggle|"snapGuides"': 'menu.snapGuides',
   'view.toggle|"snapPixels"': 'menu.snapPixels',
   'view.toggle|"alignToContainer"': 'align.toContainerOff',
+  'view.toggle|"marqueeContain"': 'menu.marqueeContain',
+  'image.pick': 'image.place',
   'guides.clearAll': 'menu.clearGuides',
   'guides.clear': 'menu.clearBoardGuides',
   'guides.remove': 'menu.removeGuide',

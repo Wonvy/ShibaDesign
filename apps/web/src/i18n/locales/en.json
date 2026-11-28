@@ -917,7 +917,8 @@
       "layoutGrids": "Layout grids",
       "copyAsCss": "Copy as CSS",
       "undoAction": "Undo {{action}}",
-      "redoAction": "Redo {{action}}"
+      "redoAction": "Redo {{action}}",
+      "marqueeContain": "Marquee selects only fully enclosed objects"
     },
     "guide": {
       "vertical": "Vertical guide",

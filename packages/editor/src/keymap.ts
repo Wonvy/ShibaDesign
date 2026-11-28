@@ -266,4 +266,5 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: 'mod+\\', command: 'dock.toggleHidden' },
   { key: 'mod+k', command: 'help.commandPalette' },
   { key: 'shift+/', command: 'help.shortcuts' },
+  { key: 'mod+shift+k', command: 'image.pick' },
 ];
