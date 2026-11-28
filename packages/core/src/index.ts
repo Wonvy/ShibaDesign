@@ -21,3 +21,5 @@ export * from './styles';
 export * from './components';
 export * from './layouts';
 export * from './corners';
+export * from './polygon';
+export * from './arrows';

@@ -26,3 +26,5 @@ export * from './snap';
 export { RULER_SIZE, rulerStep } from './guides';
 export type { GuideHit } from './guides';
 export * from './corner-handles';
+export { scaleUniform, scaledParams } from './scale';
+export { fitCurve } from './curve-fit';

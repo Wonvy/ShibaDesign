@@ -1,4 +1,5 @@
 import type { Image } from 'canvaskit-wasm';
+import { arrowPaths } from './arrows';
 import {
   IDENTITY,
   dashPattern,
@@ -510,6 +511,28 @@ class SvgExporter {
         }
       : {};
 
+    // 开放路径两头有箭头：填充照常，描的是缩短过的线，箭头另画一条按描边颜色填充的路径
+    const arrows = stroke ? arrowPaths(this.context.ck, node) : null;
+    if (arrows && stroke) {
+      const { ck } = this.context;
+      const out: SvgElement[] = [];
+      if (fill?.type === 'image') out.push(...this.imageFill(node, fill, geometry));
+      else if (fill)
+        out.push(
+          svgEl(geometry.tag, { ...geometry.attrs, ...this.fillAttrs(fill, this.context.geometry.localBounds(node)) }),
+        );
+      out.push(svgEl('path', { d: svgPath(toPathData(ck, arrows.line)), fill: 'none', ...strokeAttrs }));
+      out.push(
+        svgEl('path', {
+          d: svgPath(toPathData(ck, arrows.heads)),
+          fill: svgColor(stroke.color),
+          'fill-opacity': svgOpacity(stroke.color.a),
+        }),
+      );
+      arrows.line.delete();
+      arrows.heads.delete();
+      return out;
+    }
     if (fill?.type === 'image') {
       const out = this.imageFill(node, fill, geometry);
       if (stroke) out.push(svgEl(geometry.tag, { ...geometry.attrs, fill: 'none', ...strokeAttrs }));

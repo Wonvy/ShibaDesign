@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import type { ViewMode } from '@shiba/editor';
 import { useEditor, useEditorState } from '../editor/context';
 import { pickAndPlaceImages } from '../files';
-import { toolbarItems } from '../toolbar';
+import { toolbarGroups } from '../toolbar';
+import { ToolGroup } from './ToolGroup';
 import { IconButton } from '../ui/controls';
 import { formatShortcut } from '../ui/shortcut';
 import { MenuBar } from '../menus/MenuBar';
@@ -42,15 +43,8 @@ export function TopBar(props: { onPlay: () => void }): ReactNode {
       </div>
 
       <div className="group" role="toolbar">
-        {toolbarItems.map(({ tool: id, icon: Icon, labelKey }) => (
-          <IconButton
-            key={id}
-            title={withShortcut(t(labelKey), 'tool.set', id)}
-            active={tool === id}
-            onClick={() => editor.commands.run('tool.set', id)}
-          >
-            <Icon size={16} />
-          </IconButton>
+        {toolbarGroups.map((group) => (
+          <ToolGroup key={group.id} group={group} />
         ))}
         <IconButton title={t('image.place')} onClick={() => void pickAndPlaceImages(editor)}>
           <ImagePlus size={16} />

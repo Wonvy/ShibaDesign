@@ -20,6 +20,8 @@ import {
   type Stroke,
   type StrokeCap,
   type StrokeJoin,
+  ARROW_HEADS,
+  type ArrowHead,
 } from '@shiba/core';
 import { DEFAULT_FILL, DEFAULT_STROKE, type Editor } from '@shiba/editor';
 import { useEditorState } from '../editor/context';
@@ -152,6 +154,8 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
     if (!mergeKey) seal();
   };
   const kind = stroke ? dashKind(stroke) : 'solid';
+  // 箭头只对开放的钢笔路径有意义
+  const hasOpenPath = nodes.some((n) => n.type === 'path' && n.subpaths.some((sub) => !sub.closed));
   const fillEditing = useEditorState((s) => s.fillEditing);
 
   const removeFill = (
@@ -454,6 +458,34 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {stroke && hasOpenPath && (
+        <div className="prop-row">
+          <span className="prop-label">{t('prop.arrows')}</span>
+          <div className="prop-controls arrow-controls">
+            {(['arrowStart', 'arrowEnd'] as const).map((end) => (
+              <select
+                key={end}
+                className="select"
+                aria-label={t(`prop.${end}`)}
+                title={t(`prop.${end}`)}
+                value={stroke[end] ?? 'none'}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  patchStroke({ [end]: value === 'none' ? undefined : (value as ArrowHead) });
+                }}
+              >
+                <option value="none">{t('prop.arrowNone')}</option>
+                {ARROW_HEADS.map((head) => (
+                  <option key={head} value={head}>
+                    {t(`prop.arrow_${head}`)}
+                  </option>
+                ))}
+              </select>
+            ))}
           </div>
         </div>
       )}

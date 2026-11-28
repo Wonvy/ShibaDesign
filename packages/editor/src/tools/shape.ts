@@ -61,7 +61,12 @@ export function dragRect(start: Point, current: Point, square: boolean, fromCent
  * 形状工具：拖出一个矩形或椭圆；单击不拖动时创建默认大小。
  * 按住 Shift 约束为正方形或正圆，按住 Alt 从中心画，拖动中按住空格挪动正在画的形状
  */
-export function createShapeTool(kind: 'rect' | 'ellipse'): Tool {
+export type ShapeKind = 'rect' | 'ellipse' | 'polygon' | 'star';
+
+/** 新画的星形内顶点到中心的距离是外顶点的几倍（黄金比例附近，像常见的五角星） */
+const STAR_RATIO = 0.382;
+
+export function createShapeTool(kind: ShapeKind): Tool {
   let drag: Drag | null = null;
 
   const build = (editor: Editor, containerId: NodeId, rect: Rect): SceneNode => {
@@ -70,13 +75,16 @@ export function createShapeTool(kind: 'rect' | 'ellipse'): Tool {
     const common = {
       parent: containerId,
       index: store.indexOnTop(containerId),
-      seq: nextSeq(store, kind),
+      seq: nextSeq(store, kind === 'star' ? 'polygon' : kind),
       transform: translation(origin.x, origin.y),
       size: [rect.w, rect.h] as const,
       fill: solid(DEFAULT_FILL),
       stroke: null,
     };
-    return kind === 'rect' ? createNode('rect', { ...common, cornerRadius: 0 }) : createNode('ellipse', common);
+    if (kind === 'rect') return createNode('rect', { ...common, cornerRadius: 0 });
+    if (kind === 'polygon') return createNode('polygon', { ...common, sides: 3, cornerRadius: 0 });
+    if (kind === 'star') return createNode('polygon', { ...common, sides: 5, innerRatio: STAR_RATIO, cornerRadius: 0 });
+    return createNode('ellipse', common);
   };
 
   return {
@@ -155,7 +163,7 @@ export function createShapeTool(kind: 'rect' | 'ellipse'): Tool {
       }
       editor.store.sealHistory();
       editor.select([id]);
-      editor.setTool('select');
+      if (!editor.toolLocked) editor.setTool('select');
     },
   };
 }

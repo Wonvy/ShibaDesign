@@ -3,7 +3,7 @@ import { CURVE_CHANNELS, MAX_CURVE_POINTS } from './curves';
 import { MAX_GRADIENT_STOPS } from './gradient';
 import { DOCUMENT_VERSION, TEXT_ALIGNS, type DocumentData } from './model';
 import { LIST_KINDS, MAX_LIST_LEVEL } from './paragraphs';
-import { MAX_DASH_SEGMENTS, STROKE_CAPS, STROKE_JOINS } from './stroke';
+import { ARROW_HEADS, MAX_DASH_SEGMENTS, STROKE_CAPS, STROKE_JOINS } from './stroke';
 import { MAX_STYLE_NAME, MAX_STYLES } from './styles';
 
 /**
@@ -172,7 +172,9 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
   if ('stroke' in node && node.stroke !== null) {
     const stroke = node.stroke;
     if (!isObject(stroke) || !isColor(stroke.color) || !isFiniteNumber(stroke.width)) fail('stroke');
-    const { dash, dashOffset, cap, join, colorStyle } = stroke as Record<string, unknown>;
+    const { dash, dashOffset, cap, join, colorStyle, arrowStart, arrowEnd } = stroke as Record<string, unknown>;
+    const isArrow = (v: unknown): boolean => v === undefined || (ARROW_HEADS as readonly unknown[]).includes(v);
+    if (!isArrow(arrowStart) || !isArrow(arrowEnd)) fail('stroke');
     if (
       (dash !== undefined &&
         !(
@@ -198,6 +200,17 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       ) {
         fail('cornerRadii');
       }
+      if (!isCornerLook(node)) fail('cornerStyle');
+      break;
+    case 'polygon':
+      if (!isFiniteNumber(node.sides) || node.sides < 3 || node.sides > 60) fail('sides');
+      if (
+        node.innerRatio !== undefined &&
+        !(isFiniteNumber(node.innerRatio) && node.innerRatio > 0 && node.innerRatio <= 1)
+      ) {
+        fail('innerRatio');
+      }
+      if (!isFiniteNumber(node.cornerRadius) || node.cornerRadius < 0) fail('cornerRadius');
       if (!isCornerLook(node)) fail('cornerStyle');
       break;
     case 'path':

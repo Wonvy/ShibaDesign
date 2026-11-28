@@ -7,13 +7,14 @@ import {
   rectCornerRadii,
   type NodePatch,
   type PathNode,
+  type PolygonNode,
   type RectNode,
   type SceneNode,
 } from '@shiba/core';
 import type { Editor } from '@shiba/editor';
 import { IconButton, NumberField } from '../ui/controls';
 
-type Rounded = RectNode | PathNode;
+type Rounded = RectNode | PathNode | PolygonNode;
 
 /** 能改圆角的：矩形，和带尖角锚点的路径 */
 export function roundable(nodes: readonly SceneNode[]): Rounded[] | null {
@@ -27,7 +28,7 @@ export function roundable(nodes: readonly SceneNode[]): Rounded[] | null {
 
 /** 一个对象现在的圆角半径（路径取第一个能圆的锚点） */
 function radiusOf(node: Rounded): number {
-  if (node.type === 'rect') return node.cornerRadius;
+  if (node.type === 'rect' || node.type === 'polygon') return node.cornerRadius;
   for (const s of node.subpaths) {
     const i = s.anchors.findIndex((_, k) => canRoundAnchor(s, k));
     if (i >= 0) return s.anchors[i]!.radius ?? 0;
@@ -37,6 +38,7 @@ function radiusOf(node: Rounded): number {
 
 function radiusPatch(node: Rounded, radius: number): NodePatch {
   if (node.type === 'rect') return { cornerRadius: radius, cornerRadii: undefined };
+  if (node.type === 'polygon') return { cornerRadius: radius };
   return {
     subpaths: node.subpaths.map((s) => ({
       closed: s.closed,
@@ -69,7 +71,9 @@ export function CornerFields({ editor, nodes }: { editor: Editor; nodes: Rounded
   const smoothing = Math.round((first.cornerSmoothing ?? 0) * 100);
 
   const update = (label: string, patch: (node: Rounded) => NodePatch | null): void => {
-    editor.updateSelection(label, (node) => (node.type === 'rect' || node.type === 'path' ? patch(node) : null));
+    editor.updateSelection(label, (node) =>
+      node.type === 'rect' || node.type === 'path' || node.type === 'polygon' ? patch(node) : null,
+    );
     store.sealHistory();
   };
 

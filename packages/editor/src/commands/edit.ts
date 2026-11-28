@@ -179,10 +179,14 @@ export const selectAll: Command = {
   run: (editor) => editor.select(editor.selectableNodes().map((n) => n.id)),
 };
 
+/** Esc：工具锁着时先解锁、回到选择工具（选中的不变），否则取消选择 */
 export const deselect: Command = {
   id: 'edit.deselect',
-  enabled: hasSelection,
-  run: (editor) => editor.clearSelection(),
+  enabled: (editor) => editor.toolLocked || hasSelection(editor),
+  run(editor) {
+    if (editor.toolLocked) editor.setTool('select');
+    else editor.clearSelection();
+  },
 };
 
 export const nudge: Command<{ dx: number; dy: number }> = {

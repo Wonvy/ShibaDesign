@@ -6,6 +6,14 @@
 export const COMMAND_LABELS: Record<string, string> = {
   'tool.set|"select"': 'tool.select',
   'tool.set|"direct"': 'tool.direct',
+  'tool.set|"scale"': 'tool.scale',
+  'tool.set|"line"': 'tool.line',
+  'tool.set|"arrow"': 'tool.arrow',
+  'tool.set|"polygon"': 'tool.polygon',
+  'tool.set|"star"': 'tool.star',
+  'tool.set|"pencil"': 'tool.pencil',
+  'tool.set|"eyedropper"': 'tool.eyedropper',
+  'tool.set|"zoom"': 'tool.zoom',
   'tool.set|"hand"': 'tool.hand',
   'tool.set|"rect"': 'tool.rect',
   'tool.set|"ellipse"': 'tool.ellipse',
@@ -59,6 +67,7 @@ export const COMMAND_LABELS: Record<string, string> = {
   'arrange.flip|"vertical"': 'transform.flipV',
   'arrange.rotate|90': 'transform.rotate90',
   'arrange.rotate|-90': 'menu.rotateCcw',
+  'arrange.scale': 'menu.scaleUniform',
 
   'group.create': 'group.create',
   'group.release': 'group.release',

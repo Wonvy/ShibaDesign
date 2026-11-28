@@ -1,6 +1,8 @@
 import type { CanvasKit, Path } from 'canvaskit-wasm';
 import {
   hasRoundedAnchors,
+  polygonOutline,
+  type PolygonNode,
   rectCornerRadii,
   rectNeedsCorners,
   rectOutline,
@@ -36,6 +38,14 @@ export const ellipseType: NodeTypeDef<EllipseNode> = {
     const builder = new ck.PathBuilder();
     builder.addOval(ck.XYWHRect(0, 0, node.size[0], node.size[1]));
     return finish(builder);
+  },
+};
+
+export const polygonType: NodeTypeDef<PolygonNode> = {
+  type: 'polygon',
+  children: 'none',
+  outline(node, { ck }) {
+    return buildPath(ck, [polygonOutline(node)], 'nonzero');
   },
 };
 

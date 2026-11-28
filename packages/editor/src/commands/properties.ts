@@ -89,3 +89,14 @@ export const pasteProperties: Command = {
 export function hasCopiedProperties(editor: Editor): boolean {
   return copied.has(editor);
 }
+
+/** 吸管用：把 source 的外观套到选中的对象上；fillOnly 只套填充（Alt 点） */
+export function applyPropertiesFrom(editor: Editor, source: SceneNode, fillOnly: boolean): void {
+  const props = propertiesOf(source);
+  editor.updateSelection('eyedropper', (node) => {
+    const patch = patchFor(node, props);
+    if (!patch || !fillOnly) return patch;
+    return 'fill' in patch ? ({ fill: (patch as { fill: unknown }).fill } as NodePatch) : null;
+  });
+  editor.store.sealHistory();
+}

@@ -42,7 +42,7 @@ import {
   updateColorStyle,
   updateTextStyle,
 } from './style';
-import { flipSelection, rotateSelection } from './transform';
+import { flipSelection, rotateSelection, scaleSelection } from './transform';
 import {
   deleteSelection,
   deselect,
@@ -168,6 +168,7 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(moveNodes)
     .register(reorderSlides)
     .register(toggleSkip)
+    .register(scaleSelection)
     .register(toggleView)
     .register(clearGuides)
     .register(clearAllGuides)

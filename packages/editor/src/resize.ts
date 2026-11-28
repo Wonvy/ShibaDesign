@@ -238,6 +238,7 @@ function scaleContent(
   switch (orig.type) {
     case 'rect':
     case 'ellipse':
+    case 'polygon':
     case 'artboard':
       // 画板只改自己的大小，里面的内容不跟着缩放
       tx.update(id, { size: [w * sx, h * sy] });

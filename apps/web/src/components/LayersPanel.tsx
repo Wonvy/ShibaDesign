@@ -12,12 +12,14 @@ import {
   Image,
   Lock,
   LockOpen,
+  Pentagon,
   Search,
   Sparkles,
   Spline,
   Square,
   SquareDashed,
   SquaresUnite,
+  Star,
   Type,
   type LucideIcon,
 } from 'lucide-react';
@@ -42,6 +44,7 @@ const ICONS: Record<string, LucideIcon> = {
   artboard: Frame,
   rect: Square,
   ellipse: Circle,
+  polygon: Pentagon,
   path: Spline,
   boolean: SquaresUnite,
   text: Type,
@@ -375,7 +378,9 @@ export function LayersPanel(): ReactNode {
                   ? Crop
                   : isImage
                     ? Image
-                    : (ICONS[node.type] ?? Square);
+                    : node.type === 'polygon' && node.innerRatio !== undefined
+                      ? Star
+                      : (ICONS[node.type] ?? Square);
           const name = displayName(node, t, editor.store);
           // 主组件、实例和实例里的东西用组件色标出来
           const tone = isComponent(node) || isInstance(node) || node.source !== undefined ? ' is-component' : '';

@@ -170,6 +170,7 @@ export class Editor {
       textEditing: null,
       fillEditing: null,
       view: DEFAULT_VIEW_OPTIONS,
+      lockedTool: null,
     };
     this.store.subscribe(() => this.onDocumentChange());
   }
@@ -362,8 +363,24 @@ export class Editor {
     return this.tools.require(this.state.tool);
   }
 
+  /** 锁住的工具：画完一个形状不回到选择工具，可以连续画（双击工具按钮锁住，换工具时解开） */
+  get toolLocked(): boolean {
+    return this.state.lockedTool !== null && this.state.lockedTool === this.state.tool;
+  }
+
+  /** 切到这个工具并锁住它；已经锁着这个工具时解开 */
+  lockTool(id: string): void {
+    if (this.state.lockedTool === id && this.state.tool === id) {
+      this.setState({ lockedTool: null });
+      return;
+    }
+    this.setTool(id);
+    this.setState({ lockedTool: id });
+  }
+
   setTool(id: string): void {
     if (!this.tools.has(id) || id === this.state.tool) return;
+    if (this.state.lockedTool !== id) this.state = { ...this.state, lockedTool: null };
     this.tool.onDeactivate?.(this);
     this.setState({ tool: id, fillEditing: null });
     this.tool.onActivate?.(this);

@@ -49,3 +49,31 @@ export function dashKind(stroke: Stroke): 'solid' | 'dashed' | 'dotted' | 'custo
   if (dash.length === 2 && close(dash[0]!, 0) && close(dash[1]!, 2 * w) && stroke.cap === 'round') return 'dotted';
   return 'custom';
 }
+
+export const ARROW_HEADS = ['arrow', 'triangle', 'circle', 'square', 'bar'] as const;
+/**
+ * 开放路径两头的箭头：arrow 开口的箭头（两条线）、triangle 实心三角、circle 圆点、square 方块、bar 一道横杠。
+ * 都按描边的颜色画，大小跟着线宽
+ */
+export type ArrowHead = (typeof ARROW_HEADS)[number];
+
+/** 箭头的大小：从端点往回量的长度、半宽，以及线要缩回去多少（免得平头的线从实心箭头的尖上露出来） */
+export function arrowMetrics(head: ArrowHead, width: number): { length: number; half: number; trim: number } {
+  const w = Math.max(0.5, width);
+  const length = w * 4 + 4;
+  const half = length * 0.55;
+  switch (head) {
+    case 'triangle':
+      return { length, half, trim: length * 0.6 };
+    case 'circle': {
+      const r = w * 1.6 + 1.5;
+      return { length: r, half: r, trim: r * 0.5 };
+    }
+    case 'square': {
+      const s = w * 1.4 + 1;
+      return { length: s, half: s, trim: s * 0.5 };
+    }
+    default:
+      return { length, half, trim: 0 };
+  }
+}

@@ -23,6 +23,8 @@ export interface EditorState {
   fillEditing: FillEditing | null;
   /** 视图选项：标尺、辅助线、吸附等。界面层记在浏览器里 */
   view: ViewOptions;
+  /** 锁住的工具：画完不回到选择工具。换工具时解开 */
+  lockedTool: string | null;
 }
 
 /** 视图选项。都是只和这台电脑、这个人有关的偏好，不进文档 */

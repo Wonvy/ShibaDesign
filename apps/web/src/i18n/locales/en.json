@@ -18,7 +18,15 @@
       "ellipse": "Ellipse",
       "pen": "Pen",
       "text": "Text",
-      "direct": "Direct selection (edit anchors)"
+      "direct": "Direct selection (edit anchors)",
+      "scale": "Scale (strokes and text too)",
+      "line": "Line",
+      "arrow": "Arrow",
+      "polygon": "Polygon",
+      "star": "Star",
+      "pencil": "Pencil",
+      "eyedropper": "Eyedropper (apply the clicked object's look)",
+      "zoom": "Zoom"
     },
     "action": {
       "undo": "Undo",
@@ -50,7 +58,8 @@
       "assets": "Assets",
       "component": "Component",
       "properties": "Properties",
-      "notes": "Notes"
+      "notes": "Notes",
+      "polygon": "Polygon"
     },
     "slide": {
       "add": "New slide",
@@ -139,7 +148,19 @@
       "corner_round": "Round",
       "corner_inverted": "Inverted",
       "corner_chamfer": "Chamfer",
-      "cornerSmoothing": "Smoothing"
+      "cornerSmoothing": "Smoothing",
+      "arrows": "Arrows",
+      "arrowStart": "Start",
+      "arrowEnd": "End",
+      "arrowNone": "None",
+      "arrow_arrow": "Arrow",
+      "arrow_triangle": "Triangle",
+      "arrow_circle": "Circle",
+      "arrow_square": "Square",
+      "arrow_bar": "Bar",
+      "sides": "Sides",
+      "points": "Points",
+      "innerRatio": "Inner"
     },
     "blend": {
       "normal": "Normal",
@@ -171,7 +192,9 @@
       "group": "Group",
       "maskGroup": "Mask group",
       "component": "Component",
-      "instance": "Instance"
+      "instance": "Instance",
+      "polygon": "Polygon",
+      "star": "Star"
     },
     "inspector": {
       "empty": "Nothing selected",
@@ -819,7 +842,8 @@
       "hideSlide": "Hide slide (skip when presenting)",
       "showSlide": "Unhide slide",
       "moveLayers": "Move layers",
-      "reorderSlides": "Reorder slides"
+      "reorderSlides": "Reorder slides",
+      "scaleUniform": "Scale proportionally"
     },
     "guide": {
       "vertical": "Vertical guide",
@@ -850,6 +874,9 @@
       "pin": "Pin to this image",
       "unpin": "Unpin and follow the selection",
       "original": "Hold to see the original"
+    },
+    "toolbar": {
+      "lockHint": "Double-click to keep it on"
     }
   }
 }

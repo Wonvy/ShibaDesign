@@ -31,6 +31,8 @@ export function displayName(node: SceneNode, t: (key: string) => string, store?:
           ? 'instance'
           : node.type === 'group' && node.mask
             ? 'maskGroup'
-            : node.type;
+            : node.type === 'polygon' && node.innerRatio !== undefined
+              ? 'star'
+              : node.type;
   return `${t(`node.${kind}`)} ${node.seq}`;
 }

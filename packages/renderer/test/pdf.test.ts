@@ -644,3 +644,48 @@ describe('导出 PDF', () => {
     expect(ops.fnArray).toContain(pdfjs.OPS.paintImageXObject);
   });
 });
+
+describe('导出 PDF：箭头和多边形', () => {
+  const corner = (x: number, y: number) => ({ x, y, inX: x, inY: y, outX: x, outY: y });
+
+  it('箭头写成两样：缩短的线描边，箭头按描边的颜色填充；多边形和星形是闭合的路径', async () => {
+    const env = setup();
+    env.add(
+      createNode('path', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 40, 60],
+        size: [200, 0],
+        subpaths: [{ closed: false, anchors: [corner(0, 0), corner(200, 0)] }],
+        fillRule: 'nonzero',
+        fill: null,
+        stroke: { color: rgba(0, 0, 1), width: 4, arrowEnd: 'triangle' },
+      }),
+    );
+    env.add(
+      createNode('polygon', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 40, 120],
+        size: [100, 100],
+        sides: 5,
+        innerRatio: 0.4,
+        cornerRadius: 0,
+        fill: solid(rgba(1, 0.5, 0)),
+        stroke: null,
+      }),
+    );
+    const { bytes } = await exportAndOpen(env);
+    const back = await reimport(bytes);
+    const paths = back.items.filter((n) => n.type === 'path') as Extract<SceneNode, { type: 'path' }>[];
+    const line = paths.find((p) => p.stroke && !p.fill)!;
+    const head = paths.find((p) => p.fill && 'color' in p.fill && p.fill.color.b === 1)!;
+    expect(line.stroke).toMatchObject({ color: rgba(0, 0, 1), width: 4 });
+    // 线缩回去了：右端不到 240
+    expect(line.transform[4] + line.size[0]).toBeLessThan(235);
+    // 箭头的尖在原来的端点 (240, 60)，底边宽 2 × 11
+    expect(head.transform[4] + head.size[0]).toBeCloseTo(240, 0);
+    expect(head.size[1]).toBeCloseTo(22, 0);
+    const star = paths.find((p) => p.fill && 'color' in p.fill && p.fill.color.r === 1)!;
+    expect(star.subpaths[0]!.closed).toBe(true);
+    expect(star.subpaths[0]!.anchors).toHaveLength(10);
+  });
+});

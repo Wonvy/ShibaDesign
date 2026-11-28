@@ -1,4 +1,5 @@
 import type { CornerStyle } from './corners';
+import type { ArrowHead } from './stroke';
 /**
  * 文档数据模型。
  *
@@ -187,6 +188,9 @@ export interface Stroke {
   join?: StrokeJoin;
   /** 描边颜色链接的颜色样式，和 SolidFill.colorStyle 一样 */
   colorStyle?: string;
+  /** 开放路径起点、终点的箭头。省略表示没有。见 stroke.ts */
+  arrowStart?: ArrowHead;
+  arrowEnd?: ArrowHead;
 }
 
 export interface BaseNode {
@@ -282,6 +286,18 @@ export interface RectNode extends BaseNode, ShapeStyle {
 
 export interface EllipseNode extends BaseNode, ShapeStyle {
   type: 'ellipse';
+}
+
+/** 多边形（sides 条边）或星形（有 innerRatio 时，sides 个角）。画在外框里，见 polygon.ts */
+export interface PolygonNode extends BaseNode, ShapeStyle {
+  type: 'polygon';
+  sides: number;
+  /** 星形内顶点到中心的距离是外顶点的几倍（0 到 1）。省略表示多边形 */
+  innerRatio?: number;
+  /** 每个顶点一样的圆角，以及样式和平滑度，同矩形 */
+  cornerRadius: number;
+  cornerStyle?: CornerStyle;
+  cornerSmoothing?: number;
 }
 
 /** 贝塞尔锚点。控制柄用本地绝对坐标；没有控制柄时与锚点重合 */
@@ -453,6 +469,7 @@ export interface NodeTypeMap {
   artboard: ArtboardNode;
   rect: RectNode;
   ellipse: EllipseNode;
+  polygon: PolygonNode;
   path: PathNode;
   boolean: BooleanNode;
   text: TextNode;

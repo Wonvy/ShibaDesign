@@ -1,4 +1,5 @@
 import type { CanvasKit, Image } from 'canvaskit-wasm';
+import { arrowPaths } from './arrows';
 import {
   dashPattern,
   gradientGeometry,
@@ -439,10 +440,12 @@ class PdfExporter {
     if (outline.data.length === 0) return;
     const { fill } = node;
     const stroke = node.stroke && node.stroke.width > 0 ? node.stroke : null;
+    const arrows = stroke ? arrowPaths(this.c.ck, node) : null;
 
     // 纯色填充加不透明的描边：用一条"填充并描边"指令，读回来还是一个对象，文件也小。
-    // 描边半透明时不能这样合：PDF 规定这条指令的描边不叠在填充上，而是直接盖掉它，和画布上不一样
-    if (fill?.type === 'solid' && stroke && stroke.color.a >= 1 && paint.opacity >= 1) {
+    // 描边半透明时不能这样合：PDF 规定这条指令的描边不叠在填充上，而是直接盖掉它，和画布上不一样。
+    // 有箭头时描的是缩短过的线，也不能合
+    if (fill?.type === 'solid' && stroke && !arrows && stroke.color.a >= 1 && paint.opacity >= 1) {
       content.save();
       const state = this.state(fill.color.a, 1, paint.blend);
       if (state) content.graphicsState(state);
@@ -462,9 +465,15 @@ class PdfExporter {
       if (state) content.graphicsState(state);
       content.strokeColor(stroke.color);
       strokeStyle(content, stroke);
-      content.path(outline.data).stroke();
+      content.path(arrows ? toPathData(this.c.ck, arrows.line) : outline.data).stroke();
       content.restore();
     }
+    if (stroke && arrows) {
+      const heads = { data: toPathData(this.c.ck, arrows.heads), evenOdd: false };
+      this.fillPath(content, heads, stroke.color, paint);
+    }
+    arrows?.line.delete();
+    arrows?.heads.delete();
   }
 
   // ───────────── 渐变 ─────────────

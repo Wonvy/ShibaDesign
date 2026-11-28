@@ -85,6 +85,12 @@ export class Keymap {
 export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: 'v', command: 'tool.set', args: 'select' },
   { key: 'a', command: 'tool.set', args: 'direct' },
+  { key: 'k', command: 'tool.set', args: 'scale' },
+  { key: 'l', command: 'tool.set', args: 'line' },
+  { key: 'shift+l', command: 'tool.set', args: 'arrow' },
+  { key: 'shift+p', command: 'tool.set', args: 'pencil' },
+  { key: 'i', command: 'tool.set', args: 'eyedropper' },
+  { key: 'z', command: 'tool.set', args: 'zoom' },
   { key: 'h', command: 'tool.set', args: 'hand' },
   { key: 'r', command: 'tool.set', args: 'rect' },
   { key: 'o', command: 'tool.set', args: 'ellipse' },

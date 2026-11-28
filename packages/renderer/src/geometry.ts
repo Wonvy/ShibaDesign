@@ -1,4 +1,5 @@
 import type { CanvasKit, Path } from 'canvaskit-wasm';
+import { arrowPaths } from './arrows';
 import {
   applyToPoint,
   hasShapeStyle,
@@ -97,7 +98,16 @@ export class GeometryCache {
     const bounds = this.localBounds(node);
     if (!hasShapeStyle(node) || !node.stroke) return bounds;
     const stroke = strokeBounds(this.ck, this.outlineOf(node), node.stroke);
-    return stroke ? unionRects([bounds, stroke])! : bounds;
+    const rects = stroke ? [bounds, stroke] : [bounds];
+    // 箭头伸出线的端点
+    const arrows = arrowPaths(this.ck, node);
+    if (arrows) {
+      const [x0, y0, x1, y1] = arrows.heads.computeTightBounds();
+      if (Number.isFinite(x0) && x1! >= x0!) rects.push({ x: x0!, y: y0!, w: x1! - x0!, h: y1! - y0! });
+      arrows.line.delete();
+      arrows.heads.delete();
+    }
+    return unionRects(rects)!;
   }
 
   /** 节点在世界坐标里的外接矩形 */

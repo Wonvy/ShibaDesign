@@ -730,3 +730,44 @@ function points(data: number[]): [number, number][] {
   }
   return out;
 }
+
+describe('导出 SVG：箭头和多边形', () => {
+  const corner = (x: number, y: number) => ({ x, y, inX: x, inY: y, outX: x, outY: y });
+
+  it('箭头是一条描边的线加一个填充的箭头路径，颜色和描边一样；多边形写成路径', async () => {
+    const env = setup();
+    env.add(
+      createNode('path', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 40, 60],
+        size: [200, 0],
+        subpaths: [{ closed: false, anchors: [corner(0, 0), corner(200, 0)] }],
+        fillRule: 'nonzero',
+        fill: null,
+        stroke: { color: rgba(0, 0, 1), width: 4, arrowStart: 'circle', arrowEnd: 'arrow' },
+      }),
+    );
+    env.add(
+      createNode('polygon', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 40, 120],
+        size: [100, 100],
+        sides: 6,
+        cornerRadius: 8,
+        fill: solid(rgba(1, 0.5, 0)),
+        stroke: null,
+      }),
+    );
+    const svg = await exportBoard(env);
+    const paths = elements(svg, 'path');
+    const line = paths.find((p) => p['stroke'] === '#0000ff')!;
+    expect(line['stroke-width']).toBe('4');
+    expect(line['fill']).toBe('none');
+    const heads = paths.filter((p) => p['fill'] === '#0000ff' && !p['stroke']);
+    expect(heads).toHaveLength(1);
+    // 起点的圆和终点的箭头在同一条路径里：至少两段子路径
+    expect(heads[0]!['d']!.match(/M/g)!.length).toBeGreaterThanOrEqual(2);
+    const hexagon = paths.find((p) => p['fill'] === '#ff8000')!;
+    expect(hexagon['d']).toMatch(/Z/);
+  });
+});

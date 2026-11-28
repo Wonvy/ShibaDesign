@@ -23,6 +23,7 @@ import { lookPlan, makeLookShader } from './image-look';
 import type { GeometryCache } from './geometry';
 import { drawGradient } from './gradient';
 import { makeImageShader, type ImageCache } from './images';
+import { arrowPaths } from './arrows';
 import { isPlainShape, type DrawContext, type NodeTypeDef, type NodeTypeRegistry } from './node-types';
 import { toSkBlendMode, toSkColor, toSkMatrix } from './skia';
 
@@ -446,11 +447,20 @@ function drawShape(node: SceneNode, ctx: DrawContext): void {
     }
   }
   if (node.stroke && node.stroke.width > 0) {
+    // 开放路径两头有箭头：描缩短过的线，再按描边的颜色填箭头
+    const arrows = arrowPaths(ck, node);
     paint.setStyle(ck.PaintStyle.Stroke);
     paint.setStrokeWidth(node.stroke.width);
     paint.setColor(toSkColor(ck, node.stroke.color, ctx.opacity));
     const dash = applyStrokeStyle(ck, paint, node.stroke);
-    canvas.drawPath(outline, paint);
+    canvas.drawPath(arrows?.line ?? outline, paint);
+    if (arrows) {
+      paint.setStyle(ck.PaintStyle.Fill);
+      paint.setPathEffect(null);
+      canvas.drawPath(arrows.heads, paint);
+      arrows.line.delete();
+      arrows.heads.delete();
+    }
     // 画笔是共用的，画完把虚线、端点、拐角恢复成默认
     if (dash) {
       paint.setPathEffect(null);

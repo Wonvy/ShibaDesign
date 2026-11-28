@@ -1,6 +1,11 @@
 import type { Editor } from '../editor';
 import { createDirectSelectTool } from './direct-select';
+import { createEyedropperTool } from './eyedropper';
 import { createHandTool } from './hand';
+import { createLineTool } from './line';
+import { createPencilTool } from './pencil';
+import { createScaleTool } from './scale';
+import { createZoomTool } from './zoom';
 import { createMotionPathTool } from './motion-path';
 import { createPenTool } from './pen';
 import { createSelectTool } from './select';
@@ -15,6 +20,14 @@ export function registerBuiltinTools(editor: Editor): void {
     .register(createHandTool())
     .register(createShapeTool('rect'))
     .register(createShapeTool('ellipse'))
+    .register(createShapeTool('polygon'))
+    .register(createShapeTool('star'))
+    .register(createLineTool('line'))
+    .register(createLineTool('arrow'))
+    .register(createPencilTool())
+    .register(createEyedropperTool())
+    .register(createZoomTool())
+    .register(createScaleTool())
     .register(createPenTool())
     .register(createMotionPathTool());
   registerTextTool(editor);
