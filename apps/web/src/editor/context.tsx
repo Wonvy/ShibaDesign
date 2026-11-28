@@ -6,6 +6,11 @@ const EditorContext = createContext<Editor | null>(null);
 
 export const EditorProvider = EditorContext.Provider;
 
+/** 有编辑器时返回它，没有时返回 null（通用控件在编辑器外面也能用） */
+export function useEditorMaybe(): Editor | null {
+  return useContext(EditorContext);
+}
+
 export function useEditor(): Editor {
   const editor = useContext(EditorContext);
   if (!editor) throw new Error('useEditor 必须在 EditorProvider 内使用');

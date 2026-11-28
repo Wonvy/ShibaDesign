@@ -128,6 +128,7 @@ export const COMMAND_LABELS: Record<string, string> = {
   'view.toggle|"snapObjects"': 'menu.snapObjects',
   'view.toggle|"snapGuides"': 'menu.snapGuides',
   'view.toggle|"snapPixels"': 'menu.snapPixels',
+  'view.toggle|"alignToContainer"': 'align.toContainerOff',
   'guides.clearAll': 'menu.clearGuides',
   'guides.clear': 'menu.clearBoardGuides',
   'guides.remove': 'menu.removeGuide',

@@ -30,3 +30,4 @@ export * from './layout-grid';
 export * from './css';
 export * from './export-settings';
 export * from './interactions';
+export * from './expression';

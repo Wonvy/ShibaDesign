@@ -96,7 +96,9 @@
       "right": "Align right",
       "top": "Align top",
       "vcenter": "Align vertical centers",
-      "bottom": "Align bottom"
+      "bottom": "Align bottom",
+      "toContainerOff": "Aligning to the selection; click to align to the containing frame or artboard",
+      "toContainerOn": "Aligning to the containing frame or artboard; click to align to the selection"
     },
     "distribute": {
       "hspacing": "Distribute horizontal spacing",
@@ -1031,6 +1033,13 @@
     "framePresets": {
       "hintFrame": "Drag on the slide to draw a frame, or pick a size to place one in the middle.",
       "hintBoard": "Drag outside artboards to draw a new artboard, inside one to draw a frame, or pick a size to add an artboard."
+    },
+    "color": {
+      "eyedropper": "Eyedropper: pick a color from anywhere on screen",
+      "palette": "Recent and document colors",
+      "recent": "Recent",
+      "document": "In this document",
+      "paletteEmpty": "Nothing yet. Colors you use will show up here."
     }
   }
 }

@@ -73,6 +73,7 @@ export function Inspector(): ReactNode {
           ) : (
             <Section
               key={panel.id}
+              id={panel.id}
               title={t(panel.titleKey)}
               actions={
                 <button

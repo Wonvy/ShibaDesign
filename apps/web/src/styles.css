@@ -3304,3 +3304,74 @@ button.template-card:hover,
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* ───────── 输入控件：拖标签改数值、色板、折叠分区 ───────── */
+
+.field-label.is-scrubbable {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+.color-field {
+  position: relative;
+}
+
+.color-tool {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
+.color-palette {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.palette-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.palette-title {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.palette-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 18px);
+  gap: 4px;
+}
+
+.palette-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+.section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

@@ -156,3 +156,29 @@ describe('画框的圆角', () => {
     expect((s.store.get(frame) as FrameNode).cornerRadius).toBeCloseTo(6, 9);
   });
 });
+
+describe('对齐到画框', () => {
+  it('只选一个画框里的对象时对齐到画框；多选时打开"对齐到画框"才对齐到画框，否则对齐到选区', () => {
+    const s = scene(ck, [
+      [420, 220, 40, 40],
+      [520, 260, 40, 40],
+    ]);
+    const frame = addFrame(s);
+    s.store.transact('move in', (tx) => {
+      tx.update(s.rects[0]!, { parent: frame, index: 'a0', transform: translation(20, 20) });
+      tx.update(s.rects[1]!, { parent: frame, index: 'a1', transform: translation(120, 60) });
+    });
+    s.editor.select([s.rects[0]!]);
+    s.editor.commands.run('arrange.align', 'right');
+    // 画框 300 宽：右对齐后 x = 260
+    expect(s.store.get(s.rects[0]!)?.transform[4]).toBe(260);
+    s.editor.select([s.rects[0]!, s.rects[1]!]);
+    s.editor.commands.run('arrange.align', 'top');
+    expect(s.store.get(s.rects[0]!)?.transform[5]).toBe(20);
+    expect(s.store.get(s.rects[1]!)?.transform[5]).toBe(20);
+    s.editor.setView({ alignToContainer: true });
+    s.editor.commands.run('arrange.align', 'bottom');
+    expect(s.store.get(s.rects[0]!)?.transform[5]).toBe(160);
+    expect(s.store.get(s.rects[1]!)?.transform[5]).toBe(160);
+  });
+});

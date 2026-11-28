@@ -120,6 +120,8 @@ export class DocStore {
   private sealed = true;
   private _version = 0;
   private normalizers: Normalizer[] = [...BUILTIN_NORMALIZERS];
+  private groupKey: string | null = null;
+  private groupCounter = 0;
 
   private constructor(data: DocumentData) {
     this.rootId = data.rootId;
@@ -228,7 +230,8 @@ export class DocStore {
       return result;
     }
 
-    const mergeKey = options.mergeKey ?? null;
+    // 分组进行中：一律用分组的合并键，合成一步
+    const mergeKey = this.groupKey ?? options.mergeKey ?? null;
     const top = this.undoStack.at(-1);
     if (!this.sealed && mergeKey !== null && top?.mergeKey === mergeKey) {
       for (const patch of patches) {
@@ -248,8 +251,25 @@ export class DocStore {
     return result;
   }
 
-  /** 结束一段连续操作：之后的事务不再并入上一步撤销 */
+  /** 结束一段连续操作：之后的事务不再并入上一步撤销。分组进行中时不起作用（等分组结束一起封口） */
   sealHistory(): void {
+    if (this.groupKey !== null) return;
+    this.sealed = true;
+  }
+
+  /**
+   * 开始一组修改：到 endGroup 之前的所有事务合并成一步撤销，中间的 sealHistory 不起作用。
+   * 给"拖数字输入框的标签连续改数值"这类操作用：每一帧照常提交，最后只留一步
+   */
+  beginGroup(): void {
+    this.groupCounter += 1;
+    this.groupKey = `group:${this.groupCounter}`;
+    this.sealed = true;
+  }
+
+  endGroup(): void {
+    if (this.groupKey === null) return;
+    this.groupKey = null;
     this.sealed = true;
   }
 

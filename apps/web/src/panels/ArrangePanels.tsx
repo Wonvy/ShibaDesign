@@ -11,6 +11,7 @@ import {
   ArrowUp,
   BringToFront,
   Crop,
+  Frame,
   Group,
   Hash,
   SendToBack,
@@ -27,6 +28,7 @@ import { MASK_MODES, type AlignMode, type BooleanOp, type DistributeMode } from 
 import type { OrderMode } from '@shiba/editor';
 import { IconButton } from '../ui/controls';
 import { formatShortcut } from '../ui/shortcut';
+import { useEditorState } from '../editor/context';
 import type { PanelProps } from './registry';
 
 const ALIGN: { mode: AlignMode; icon: LucideIcon }[] = [
@@ -59,6 +61,7 @@ const BOOLEAN: { op: BooleanOp; icon: LucideIcon }[] = [
 
 export function AlignPanel({ editor }: PanelProps): ReactNode {
   const { t } = useTranslation();
+  const toContainer = useEditorState((s) => s.view.alignToContainer);
   return (
     <div className="button-row">
       {ALIGN.map(({ mode, icon: Icon }) => (
@@ -82,6 +85,14 @@ export function AlignPanel({ editor }: PanelProps): ReactNode {
           <Icon size={16} />
         </IconButton>
       ))}
+      <span className="row-divider" />
+      <IconButton
+        title={t(toContainer ? 'align.toContainerOn' : 'align.toContainerOff')}
+        active={toContainer}
+        onClick={() => editor.commands.run('view.toggle', 'alignToContainer')}
+      >
+        <Frame size={16} />
+      </IconButton>
     </div>
   );
 }

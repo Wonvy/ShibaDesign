@@ -47,6 +47,8 @@ export interface ViewOptions {
   snapGuides: boolean;
   /** 位置和大小取整到像素 */
   snapPixels: boolean;
+  /** 多选对齐时对齐到所在的画框或画板，而不是选区整体 */
+  alignToContainer: boolean;
 }
 
 export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
@@ -59,6 +61,7 @@ export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
   snapObjects: true,
   snapGuides: true,
   snapPixels: false,
+  alignToContainer: false,
 };
 
 /** 正在编辑的文字。属性面板按它显示和修改选中那几个字的样式 */

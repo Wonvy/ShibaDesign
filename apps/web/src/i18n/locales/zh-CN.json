@@ -96,7 +96,9 @@
       "right": "右对齐",
       "top": "顶对齐",
       "vcenter": "垂直居中",
-      "bottom": "底对齐"
+      "bottom": "底对齐",
+      "toContainerOff": "多选时对齐到选区；点一下改成对齐到所在的画框或画板",
+      "toContainerOn": "多选时对齐到所在的画框或画板；点一下改回对齐到选区"
     },
     "distribute": {
       "hspacing": "水平等间距分布",
@@ -1031,6 +1033,13 @@
     "framePresets": {
       "hintFrame": "在画板上拖出一个画框，或者点一个尺寸放在这一页中间。",
       "hintBoard": "在画板外拖出一个新画板，在画板里拖出画框；也可以点一个尺寸放一个新画板。"
+    },
+    "color": {
+      "eyedropper": "吸管：取屏幕上任何地方的颜色",
+      "palette": "最近用过的颜色、文档里的颜色",
+      "recent": "最近用过",
+      "document": "文档里的颜色",
+      "paletteEmpty": "还没有。改过颜色以后这里会列出最近用过的。"
     }
   }
 }

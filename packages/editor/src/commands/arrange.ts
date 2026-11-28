@@ -26,16 +26,27 @@ function boxesOf(editor: Editor, nodes: readonly SceneNode[]): Box[] {
   return nodes.map((node) => ({ id: node.id, ...editor.geometry.worldBounds(node) }));
 }
 
+/** 对象所在的画框或画板（往上找最近的一个） */
+function containerOf(editor: Editor, node: SceneNode): SceneNode | null {
+  for (let parent = node.parent ? editor.store.get(node.parent) : undefined; parent;) {
+    if (parent.type === 'frame' || parent.type === 'artboard') return parent;
+    parent = parent.parent ? editor.store.get(parent.parent) : undefined;
+  }
+  return artboardOf(editor.store, node.id);
+}
+
 /**
- * 对齐的参照物：多选时是选区整体；只选一个对象时是它所在的画板，
- * 也就是幻灯片视图里的"对齐幻灯片"。
+ * 对齐的参照物：多选时是选区整体（视图选项"对齐到画框"打开时是它们所在的画框或画板）；
+ * 只选一个对象时是它所在的画框或画板，也就是幻灯片视图里的"对齐幻灯片"。
  */
 function alignReference(editor: Editor, nodes: readonly SceneNode[], boxes: readonly Box[]): Rect | null {
-  if (nodes.length > 1) return unionRects(boxes);
-  const only = nodes[0];
-  if (!only || only.type === 'artboard') return null;
-  const board = artboardOf(editor.store, only.id);
-  return board ? editor.geometry.worldBounds(board) : null;
+  if (nodes.length > 1 && !editor.view.alignToContainer) return unionRects(boxes);
+  const first = nodes[0];
+  if (!first || nodes.some((n) => n.type === 'artboard')) return nodes.length > 1 ? unionRects(boxes) : null;
+  const container = containerOf(editor, first);
+  // 多选时它们得在同一个容器里，不然按选区整体
+  if (nodes.length > 1 && nodes.some((n) => containerOf(editor, n)?.id !== container?.id)) return unionRects(boxes);
+  return container ? editor.geometry.worldBounds(container) : null;
 }
 
 function applyDeltas(editor: Editor, label: string, deltas: readonly Delta[]): void {
