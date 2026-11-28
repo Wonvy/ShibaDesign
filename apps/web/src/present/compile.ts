@@ -25,6 +25,16 @@ export interface CompiledPresentation {
   dispose(): void;
 }
 
+export interface CompileOptions {
+  /**
+   * 图层写成什么：svg（默认，矢量）；png（渲染成图片，导出视频时用：录像要把图层画到画布上，
+   * 内联 SVG 里的文字要用网页里的字体，画不到画布上）
+   */
+  layers?: 'svg' | 'png';
+  /** 渲染成图片时的倍率，默认 2 */
+  scale?: number;
+}
+
 /** 退回成图片时的倍率：两倍图，在普通和高分屏上放大播放都够清晰 */
 const SNAPSHOT_SCALE = 2;
 
@@ -42,7 +52,9 @@ export async function compilePresentation(
   editor: Editor,
   mode: 'preview' | 'export',
   title: string,
+  options: CompileOptions = {},
 ): Promise<CompiledPresentation> {
+  const scale = options.scale ?? SNAPSHOT_SCALE;
   const { store } = editor;
   const urls: string[] = [];
   const toSrc = (png: Uint8Array): string => {
@@ -53,14 +65,17 @@ export async function compilePresentation(
   };
 
   const visibleSlides = slides(store).filter((slide) => slide.visible);
-  const svg = await editor.svgLayers(
-    visibleSlides.flatMap((slide) =>
-      store
-        .children(slide.id)
-        .filter((node) => node.visible)
-        .map((node) => node.id),
-    ),
-  );
+  const svg =
+    options.layers === 'png'
+      ? null
+      : await editor.svgLayers(
+          visibleSlides.flatMap((slide) =>
+            store
+              .children(slide.id)
+              .filter((node) => node.visible)
+              .map((node) => node.id),
+          ),
+        );
 
   const compiled: PlayerSlide[] = [];
   let fonts = '';
@@ -72,12 +87,12 @@ export async function compilePresentation(
         if (!node.visible) continue;
         let content: { svg?: string; src?: string; box: Rect } | null = null;
         try {
-          content = svg.layer(node.id);
+          content = svg?.layer(node.id) ?? null;
         } catch (error) {
           console.warn('[shiba] 图层写不成 SVG，改用图片', error);
         }
         if (!content) {
-          const snapshot = await editor.snapshot(node.id, SNAPSHOT_SCALE);
+          const snapshot = await editor.snapshot(node.id, scale);
           if (snapshot) content = { src: toSrc(snapshot.png), box: snapshot.box };
         }
         if (!content) continue;
@@ -116,9 +131,9 @@ export async function compilePresentation(
         transition: slide.deck?.transition ?? { effect: 'none', duration: 0 },
       });
     }
-    fonts = svg.fontCss();
+    fonts = svg?.fontCss() ?? '';
   } finally {
-    svg.dispose();
+    svg?.dispose();
   }
   return {
     data: { title, slides: compiled, fonts: fonts || undefined },

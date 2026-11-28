@@ -5,6 +5,8 @@ interface Toast {
   message: string;
   /** warning：不是出错，但内容值得多看一会儿 */
   kind: 'info' | 'error' | 'warning';
+  /** 提示后面的按钮（比如"取消"） */
+  action?: { label: string; run(): void };
 }
 
 let toasts: Toast[] = [];
@@ -32,10 +34,14 @@ export function toast(message: string, kind: Toast['kind'] = 'info'): void {
 /**
  * 显示一条不会自动消失的提示，用于要等一会儿的操作。
  * 返回的对象可以更新文字；操作结束后必须调用 close。
+ * @param action 提示后面的按钮，比如可以中途取消的操作给一个"取消"
  */
-export function busyToast(message: string): { update(message: string): void; close(): void } {
+export function busyToast(
+  message: string,
+  action?: { label: string; run(): void },
+): { update(message: string): void; close(): void } {
   const id = nextId++;
-  toasts = [...toasts, { id, message, kind: 'info' }];
+  toasts = [...toasts, { id, message, kind: 'info', action }];
   emit();
   return {
     update(next) {
@@ -62,6 +68,11 @@ export function Toasts(): ReactNode {
       {items.map((t) => (
         <div key={t.id} className={`toast toast-${t.kind}`}>
           {t.message}
+          {t.action && (
+            <button type="button" className="toast-action" onClick={t.action.run}>
+              {t.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

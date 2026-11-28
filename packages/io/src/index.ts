@@ -4,3 +4,4 @@ export * from './pdf-export';
 export * from './font';
 export * from './svg-export';
 export * from './zip';
+export * from './video';

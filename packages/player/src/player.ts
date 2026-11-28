@@ -19,6 +19,11 @@ import type {
  *   mover  整体平移（飞入飞出），以及混合模式、显示与隐藏
  *   layer  把图层摆到幻灯片上的固定位置（"平滑"切换时补间的就是它）
  *   fx     以图层中心为原点的效果：缩放、旋转、透明度、裁剪
+ * 这些元素都带着 data-shiba 标记（frame、slide、mover、layer、fx），图层内容带着 data-layer（图层 id）。
+ * 导出视频时按这些标记读出每一帧的画面（见 record.ts），所以改结构时两边要一起改。
+ *
+ * 平时按真实时间播放。options.manual 为 true 时时间不走，由 advance() 一点点推进，
+ * 定时器和动画都按这个虚拟的时钟走：导出视频就是推进一帧、读一帧。
  */
 export function runPlayer(root: HTMLElement, data: PresentationData, options: PlayerOptions = {}): PlayerHandle {
   interface LayerView {
@@ -73,6 +78,74 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
   const matrixCss = (m: readonly number[]): string => `matrix(${m.join(',')})`;
   let contentCount = 0;
 
+  // ───────────── 时钟 ─────────────
+
+  const manual = !!options.manual;
+  /** 虚拟时钟的当前时刻，毫秒 */
+  let clockNow = 0;
+  let timerCount = 0;
+  let timers: { id: number; at: number; run: () => void }[] = [];
+  /** 由虚拟时钟驱动的动画：开始时刻和总时长 */
+  let clocked: { animation: Animation; start: number; length: number }[] = [];
+
+  function later(run: () => void, ms: number): number {
+    if (!manual) return window.setTimeout(run, ms);
+    const id = ++timerCount;
+    timers.push({ id, at: clockNow + ms, run });
+    return id;
+  }
+
+  function cancelLater(id: number): void {
+    if (!manual) window.clearTimeout(id);
+    else timers = timers.filter((timer) => timer.id !== id);
+  }
+
+  /** 播一段动画。虚拟时钟下先停住，由 advance() 设置它的进度 */
+  function animate(el: Element, frames: Keyframe[], timing: KeyframeAnimationOptions): Animation {
+    const animation = el.animate(frames, timing);
+    if (manual) {
+      animation.pause();
+      animation.currentTime = 0;
+      clocked.push({ animation, start: clockNow, length: Number(timing.duration) || 0 });
+    }
+    return animation;
+  }
+
+  /** 按虚拟时钟设置每段动画的进度；到头的让它结束（finished 随之兑现，后面的步骤照常接上） */
+  function syncAnimations(): void {
+    const keep: typeof clocked = [];
+    for (const entry of clocked) {
+      const { animation } = entry;
+      // 已经被直接播完或者取消了
+      if (animation.playState === 'finished' || animation.playState === 'idle') continue;
+      const elapsed = clockNow - entry.start;
+      if (elapsed >= entry.length) animation.finish();
+      else {
+        animation.currentTime = elapsed;
+        keep.push(entry);
+      }
+    }
+    clocked = keep;
+  }
+
+  /** 把虚拟时钟往前推 ms 毫秒，途中到期的定时器按时刻先后执行 */
+  function advance(ms: number): void {
+    if (!manual || destroyed) return;
+    const target = clockNow + Math.max(0, ms);
+    for (;;) {
+      let due: (typeof timers)[number] | null = null;
+      for (const timer of timers) if (timer.at <= target && (!due || timer.at < due.at)) due = timer;
+      if (!due) break;
+      const fire = due;
+      timers = timers.filter((timer) => timer !== fire);
+      clockNow = fire.at;
+      syncAnimations();
+      fire.run();
+    }
+    clockNow = target;
+    syncAnimations();
+  }
+
   /**
    * 图层的内容元素。SVG 里的 id 换成这一份独有的前缀：平滑切换时前后两页、淡出的残影里会有同样的图层，
    * id 重复的话，裁剪、蒙版、渐变的引用会指到别的那份上（比如已经隐藏的上一页），内容就看不见了
@@ -91,14 +164,17 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
     img.alt = '';
     img.draggable = false;
     img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+    img.dataset.layer = layerData.id;
     return img;
   }
 
   function buildSlide(slide: PlayerSlide): SlideView {
     const frame = doc.createElement('div');
     frame.style.cssText = `position:absolute;left:0;top:0;width:${slide.width}px;height:${slide.height}px;transform-origin:0 0;overflow:hidden;`;
+    frame.dataset.shiba = 'frame';
     const el = doc.createElement('div');
     el.style.cssText = `position:absolute;inset:0;overflow:hidden;background:${slide.background};`;
+    el.dataset.shiba = 'slide';
     frame.appendChild(el);
 
     const layers = new Map<string, LayerView>();
@@ -106,10 +182,13 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
       const mover = doc.createElement('div');
       mover.style.cssText = `position:absolute;left:0;top:0;mix-blend-mode:${layerData.blend};`;
       if (layerData.hidden) mover.style.visibility = 'hidden';
+      mover.dataset.shiba = 'mover';
       const layer = doc.createElement('div');
       layer.style.cssText = `position:absolute;left:0;top:0;width:${layerData.width}px;height:${layerData.height}px;transform-origin:0 0;transform:${matrixCss(layerData.matrix)};`;
+      layer.dataset.shiba = 'layer';
       const fx = doc.createElement('div');
       fx.style.cssText = 'position:absolute;inset:0;transform-origin:50% 50%;';
+      fx.dataset.shiba = 'fx';
       const image = makeContent(layerData);
       fx.appendChild(image);
       layer.appendChild(fx);
@@ -170,8 +249,8 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
             fill: 'forwards',
           };
           if (animation.duration > 0) {
-            if (animation.fx) entry.animations.push(target.fx.animate(animation.fx as Keyframe[], timing));
-            if (animation.move) entry.animations.push(target.mover.animate(animation.move as Keyframe[], timing));
+            if (animation.fx) entry.animations.push(animate(target.fx, animation.fx as Keyframe[], timing));
+            if (animation.move) entry.animations.push(animate(target.mover, animation.move as Keyframe[], timing));
           }
           if (entry.animations.length === 0) entry.end();
           else Promise.all(entry.animations.map((a) => a.finished)).then(entry.end, () => undefined);
@@ -184,7 +263,7 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
         },
       };
       running.push(entry);
-      if (animation.start > 0) entry.timer = window.setTimeout(entry.begin, animation.start);
+      if (animation.start > 0) entry.timer = later(entry.begin, animation.start);
       else entry.begin();
     }
   }
@@ -194,7 +273,7 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
     for (const entry of running) {
       if (entry.done) continue;
       if (entry.timer) {
-        window.clearTimeout(entry.timer);
+        cancelLater(entry.timer);
         entry.begin();
       }
       for (const animation of entry.animations) animation.finish();
@@ -210,7 +289,7 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
     const active: Animation[] = [];
     const cleanup: (() => void)[] = [];
     const play = (el: Element, frames: Keyframe[], easing = EASE): void => {
-      active.push(el.animate(frames, { duration, easing, fill: 'both' }));
+      active.push(animate(el, frames, { duration, easing, fill: 'both' }));
     };
 
     if (spec.effect === 'fade') {
@@ -315,6 +394,7 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
 
     const previous = current;
     const next = buildSlide(data.slides[index]!);
+    next.frame.dataset.slide = String(index);
     stage.insertBefore(next.frame, counter);
     fit(next);
     current = next;
@@ -385,7 +465,8 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
   if (observer) observer.observe(stage);
   stage.addEventListener('click', onClick);
   stage.addEventListener('keydown', onKeyDown);
-  stage.focus();
+  // 虚拟时钟下是在后台逐帧取画面，不要抢走焦点
+  if (!manual) stage.focus();
   showSlide(Math.min(Math.max(0, options.startSlide || 0), Math.max(0, data.slides.length - 1)), false);
 
   return {
@@ -393,11 +474,12 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
     previous,
     goTo: (slide) => showSlide(slide, false),
     state,
+    advance,
     destroy() {
       if (destroyed) return;
       if (transition) transition.finish();
       for (const entry of running) {
-        if (entry.timer) window.clearTimeout(entry.timer);
+        if (entry.timer) cancelLater(entry.timer);
         for (const animation of entry.animations) animation.cancel();
       }
       destroyed = true;

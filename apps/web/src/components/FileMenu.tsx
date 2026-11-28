@@ -17,6 +17,7 @@ import {
 } from '../files';
 import { Menu } from '../ui/Menu';
 import { ExportSvgDialog } from './ExportSvgDialog';
+import { ExportVideoDialog } from './ExportVideoDialog';
 
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -35,6 +36,7 @@ function shortcut(keys: string): string {
 /** 菜单项要打开的对话框 */
 interface MenuActions {
   exportSvg(): void;
+  exportVideo(): void;
 }
 
 interface Item {
@@ -58,6 +60,7 @@ const GROUPS: Item[][] = [
     { labelKey: 'file.exportPng', keys: 'mod+shift+e', run: (editor) => void exportPng(editor, 1) },
     { labelKey: 'file.exportPng2x', run: (editor) => void exportPng(editor, 2) },
     { labelKey: 'file.exportHtml', run: (editor) => void exportHtml(editor) },
+    { labelKey: 'file.exportVideo', run: (_editor, actions) => actions.exportVideo() },
   ],
 ];
 
@@ -102,8 +105,11 @@ export function FileMenu(): ReactNode {
   const editor = useEditor();
   const { t } = useTranslation();
   const file = useFileState();
-  const [dialog, setDialog] = useState<'svg' | null>(null);
-  const [actions] = useState<MenuActions>(() => ({ exportSvg: () => setDialog('svg') }));
+  const [dialog, setDialog] = useState<'svg' | 'video' | null>(null);
+  const [actions] = useState<MenuActions>(() => ({
+    exportSvg: () => setDialog('svg'),
+    exportVideo: () => setDialog('video'),
+  }));
   useFileShortcuts(editor, actions);
 
   return (
@@ -137,6 +143,7 @@ export function FileMenu(): ReactNode {
         {file.dirty && <span className="dirty-dot" role="img" aria-label={t('file.unsaved')} />}
       </span>
       {dialog === 'svg' && <ExportSvgDialog onClose={() => setDialog(null)} />}
+      {dialog === 'video' && <ExportVideoDialog onClose={() => setDialog(null)} />}
     </>
   );
 }

@@ -75,6 +75,11 @@ export interface PresentationData {
 export interface PlayerOptions {
   /** 从第几页开始，从 0 数 */
   startSlide?: number;
+  /**
+   * 时间不自己走，由 PlayerHandle.advance 推进（导出视频时逐帧取画面用）。
+   * 这时动画按虚拟的时钟播放，播放器也不会抢焦点
+   */
+  manual?: boolean;
   /** 用户按了 Esc */
   onExit?: () => void;
   /** 页码或步骤变化时 */
@@ -99,6 +104,8 @@ export interface PlayerHandle {
   previous(): void;
   goTo(slide: number): void;
   state(): PlayerState;
+  /** 把时间往前推这么多毫秒。只在 manual 模式下有用，平时什么都不做 */
+  advance(ms: number): void;
   /** 停止播放并移除播放器创建的所有元素 */
   destroy(): void;
 }

@@ -206,6 +206,11 @@
       "exportPdfFailed": "导出 PDF 失败",
       "exportingSvg": "正在导出 SVG（{{count}} 个画板）…",
       "exportSvgFailed": "导出 SVG 失败",
+      "exportingVideo": "正在导出视频 {{percent}}%…",
+      "exportVideoFailed": "导出视频失败",
+      "videoUnsupported": "这个浏览器不能编码 H.264 视频，可以改成导出 GIF，或者换用 Chrome、Edge",
+      "exportCancelled": "已取消导出",
+      "cancel": "取消",
       "noArtboards": "没有可以导出的画板",
       "openFailed": "无法打开文件：{{reason}}",
       "reason": {
@@ -221,7 +226,8 @@
         "pdfFailed": "PDF 解析失败",
         "pdfTooLarge": "文件过大"
       },
-      "exportHtml": "导出 HTML（可播放）"
+      "exportHtml": "导出 HTML（可播放）",
+      "exportVideo": "导出视频…"
     },
     "image": {
       "place": "插入图片",
@@ -373,6 +379,26 @@
       "asTextHint": "可以搜索、复制。用到的字体做成子集内嵌在文件里，在装了同样字体的设计软件里可以直接改字",
       "outline": "转成轮廓",
       "outlineHint": "在哪里打开都一样，但不能再改字",
+      "export": "导出",
+      "cancel": "取消"
+    },
+    "videoExport": {
+      "title": "导出视频",
+      "format": "格式",
+      "mp4": "MP4 视频",
+      "mp4Hint": "文件小、画面清晰，适合发送和上传",
+      "noEncoder": "这个浏览器不能编码视频，请用 Chrome、Edge 或较新的 Safari；GIF 可以导出",
+      "gif": "GIF 动图",
+      "gifHint": "在哪里都能直接播放，但文件大、颜色少，适合短小的动画",
+      "size": "画面大小",
+      "fps": "帧率",
+      "fpsValue": "{{fps}} 帧/秒",
+      "timing": "自动播放",
+      "dwell": "每页停留",
+      "dwellHint": "一页的动画都播完以后停多久再翻页",
+      "clickDelay": "单击动画自动接上",
+      "clickDelayHint": "原本要单击才开始的动画，在上一步播完后等多久自动开始",
+      "seconds": "秒",
       "export": "导出",
       "cancel": "取消"
     }

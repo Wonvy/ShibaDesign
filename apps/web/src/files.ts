@@ -26,6 +26,7 @@ import { buildPresentationHtml } from '@shiba/player';
 import { i18n } from './i18n';
 import { displayName } from './names';
 import { compilePresentation } from './present/compile';
+import { VideoUnsupportedError, type VideoSettings } from './present/video-settings';
 import { busyToast, toast } from './ui/toast';
 
 /**
@@ -105,6 +106,10 @@ const PDF_TYPES: PickerType[] = [{ description: 'PDF', accept: { [PDF_MIME]: [PD
 const SVG_MIME = 'image/svg+xml';
 const SVG_TYPES: PickerType[] = [{ description: 'SVG', accept: { [SVG_MIME]: ['.svg'] } }];
 const ZIP_MIME = 'application/zip';
+const VIDEO_TYPES: Record<VideoSettings['format'], { mime: string; extension: string }> = {
+  mp4: { mime: 'video/mp4', extension: '.mp4' },
+  gif: { mime: 'image/gif', extension: '.gif' },
+};
 const ZIP_TYPES: PickerType[] = [{ description: 'ZIP', accept: { [ZIP_MIME]: ['.zip'] } }];
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp';
 /** 图片长边超过这个值就在导入时缩小。解码后的图片整张放在内存和显存里，太大会拖垮整个画布 */
@@ -507,6 +512,75 @@ export async function exportSvg(editor: Editor, choice: SvgExportChoice): Promis
       return;
     }
     download(name, bytes, single ? SVG_MIME : ZIP_MIME);
+    toast(t('file.exported', { name }));
+  } catch (error) {
+    if (isAbort(error)) return;
+    console.error(error);
+    toast(t('file.saveFailed'), 'error');
+  }
+}
+
+/**
+ * 把演示稿导出成 MP4 视频或 GIF 动图。要等一阵子，提示里显示进度，可以中途取消。
+ * 和导出 PDF 一样，能直接写文件的浏览器先选好保存位置再开始
+ */
+export async function exportVideo(editor: Editor, settings: VideoSettings): Promise<void> {
+  if (!slides(editor.store).some((slide) => slide.visible)) {
+    toast(t('present.empty'), 'error');
+    return;
+  }
+  const type = VIDEO_TYPES[settings.format];
+  const name = `${fileSafe(documentTitle())}${type.extension}`;
+  let out: SaveHandle | null = null;
+  try {
+    if (picker.showSaveFilePicker) {
+      out = await picker.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: settings.format.toUpperCase(), accept: { [type.mime]: [type.extension] } }],
+      });
+    }
+  } catch (error) {
+    if (isAbort(error)) return;
+    console.error(error);
+  }
+
+  const controller = new AbortController();
+  const busy = busyToast(t('file.exportingVideo', { percent: 0 }), {
+    label: t('file.cancel'),
+    run: () => controller.abort(),
+  });
+  let bytes: Uint8Array;
+  try {
+    let shown = 0;
+    // 录制和编码的代码只在这里用到，用到时才加载
+    const { renderVideo } = await import('./present/video');
+    bytes = await renderVideo(editor, settings, {
+      signal: controller.signal,
+      onProgress(fraction) {
+        const percent = Math.floor(fraction * 100);
+        if (percent === shown) return;
+        shown = percent;
+        busy.update(t('file.exportingVideo', { percent }));
+      },
+    });
+  } catch (error) {
+    busy.close();
+    if (isAbort(error)) {
+      toast(t('file.exportCancelled'));
+      return;
+    }
+    console.error(error);
+    toast(t(error instanceof VideoUnsupportedError ? 'file.videoUnsupported' : 'file.exportVideoFailed'), 'error');
+    return;
+  }
+  busy.close();
+  try {
+    if (out) {
+      await writeTo(out, bytes);
+      toast(t('file.exported', { name: out.name }));
+      return;
+    }
+    download(name, bytes, type.mime);
     toast(t('file.exported', { name }));
   } catch (error) {
     if (isAbort(error)) return;

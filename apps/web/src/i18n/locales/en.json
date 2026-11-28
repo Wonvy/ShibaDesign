@@ -206,6 +206,11 @@
       "exportPdfFailed": "Could not export the PDF",
       "exportingSvg": "Exporting SVG (artboards: {{count}})…",
       "exportSvgFailed": "Could not export the SVG",
+      "exportingVideo": "Exporting video {{percent}}%…",
+      "exportVideoFailed": "Could not export the video",
+      "videoUnsupported": "This browser cannot encode H.264 video. Export a GIF instead, or use Chrome or Edge",
+      "exportCancelled": "Export cancelled",
+      "cancel": "Cancel",
       "noArtboards": "There are no artboards to export",
       "openFailed": "Could not open the file: {{reason}}",
       "reason": {
@@ -221,7 +226,8 @@
         "pdfFailed": "the PDF could not be parsed",
         "pdfTooLarge": "the file is too large"
       },
-      "exportHtml": "Export HTML (playable)"
+      "exportHtml": "Export HTML (playable)",
+      "exportVideo": "Export video…"
     },
     "image": {
       "place": "Place image",
@@ -373,6 +379,26 @@
       "asTextHint": "Searchable and copyable. The fonts used are embedded as subsets; design tools with the same fonts installed can edit the text",
       "outline": "Convert to outlines",
       "outlineHint": "Looks the same everywhere, but the text can no longer be edited",
+      "export": "Export",
+      "cancel": "Cancel"
+    },
+    "videoExport": {
+      "title": "Export video",
+      "format": "Format",
+      "mp4": "MP4 video",
+      "mp4Hint": "Small and sharp; good for sharing and uploading",
+      "noEncoder": "This browser cannot encode video. Use Chrome, Edge or a recent Safari; GIF export still works",
+      "gif": "GIF animation",
+      "gifHint": "Plays anywhere, but larger with fewer colors; best for short animations",
+      "size": "Size",
+      "fps": "Frame rate",
+      "fpsValue": "{{fps}} fps",
+      "timing": "Auto-advance",
+      "dwell": "Time per slide",
+      "dwellHint": "How long to stay on a slide after its animations finish",
+      "clickDelay": "Click animations start after",
+      "clickDelayHint": "Animations that normally wait for a click start this long after the previous step",
+      "seconds": "s",
       "export": "Export",
       "cancel": "Cancel"
     }
