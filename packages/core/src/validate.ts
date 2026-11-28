@@ -1,5 +1,6 @@
 import { MAX_GRADIENT_STOPS } from './gradient';
-import { DOCUMENT_VERSION, type DocumentData } from './model';
+import { DOCUMENT_VERSION, TEXT_ALIGNS, type DocumentData } from './model';
+import { LIST_KINDS, MAX_LIST_LEVEL } from './paragraphs';
 
 /**
  * 文档数据校验。文档可能来自用户打开的文件，是不可信输入：
@@ -115,6 +116,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       }
       if (typeof node.align !== 'string' || typeof node.sizing !== 'string') fail('align/sizing');
       if (node.spans !== undefined && !isSpans(node.spans, (node.text as string).length)) fail('spans');
+      if (node.paragraphs !== undefined && !isParagraphs(node.paragraphs, node.text as string)) fail('paragraphs');
       if (node.appearance !== undefined && !isAppearance(node.appearance)) fail('appearance');
       break;
     }
@@ -216,6 +218,29 @@ function isSpans(value: unknown, length: number): boolean {
       if (style[key] !== undefined && typeof style[key] !== 'boolean') return false;
     }
     if (style.color !== undefined && style.color !== null && !isColor(style.color)) return false;
+  }
+  return true;
+}
+
+/** 段落样式：每段一项（可以是 null），不比段落多，值的类型和范围都对 */
+function isParagraphs(value: unknown, text: string): boolean {
+  if (!Array.isArray(value) || value.length > text.split('\n').length) return false;
+  for (const entry of value) {
+    if (entry === null) continue;
+    if (!isObject(entry)) return false;
+    for (const [key, v] of Object.entries(entry)) {
+      if (key === 'align') {
+        if (!(TEXT_ALIGNS as readonly unknown[]).includes(v)) return false;
+      } else if (key === 'list') {
+        if (v !== null && !(LIST_KINDS as readonly unknown[]).includes(v)) return false;
+      } else if (key === 'level') {
+        if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > MAX_LIST_LEVEL) return false;
+      } else if (['spaceBefore', 'spaceAfter', 'indent', 'firstLine'].includes(key)) {
+        if (!isFiniteNumber(v) || (v as number) < 0 || (v as number) > 10_000) return false;
+      } else {
+        return false;
+      }
+    }
   }
   return true;
 }

@@ -152,6 +152,12 @@ function elements(svg: string, tag: string): Record<string, string>[] {
   return out;
 }
 
+/** 第 i 个 <tspan> 里的文字 */
+function svgSpanText(svg: string, index: number): string {
+  const match = [...svg.matchAll(/<tspan[^>]*>(.*?)<\/tspan>/g)][index];
+  return match ? match[1]!.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&') : '';
+}
+
 /** <text> 里的文字（去掉标签、还原转义） */
 function texts(svg: string): string[] {
   return [...svg.matchAll(/<text[^>]*>(.*?)<\/text>/g)].map((m) =>
@@ -449,6 +455,28 @@ describe('导出 SVG', () => {
     expect(svg).toMatch(/font-family:"Inter";[^}]*font-style:italic/);
     expect(svg).toMatch(/font-family:"Noto Sans SC";[^}]*font-style:normal/);
     expect(elements(svg, 'text')).toHaveLength(1);
+  });
+
+  it('段落样式：列表的符号和编号写成文字放在缩进里，每段按自己的对齐和缩进摆', async () => {
+    const env = setup();
+    text(env, '第一项\n第二项\n居中', {
+      sizing: 'fixed',
+      size: [300, 0],
+      paragraphs: [{ list: 'number' }, { list: 'number', spaceBefore: 10 }, { align: 'center' }],
+    });
+    const svg = await exportBoard(env);
+    expect(texts(svg)).toEqual(['1.第一项2.第二项居中']);
+    const spans = elements(svg, 'tspan');
+    /** 某个字的横坐标：找到它所在的 <tspan>，取 x 列表里对应的那一个 */
+    const xOf = (char: string): number => {
+      const index = spans.findIndex((_, i) => svgSpanText(svg, i).includes(char));
+      return Number(spans[index]!.x!.split(' ')[[...svgSpanText(svg, index)].indexOf(char)]);
+    };
+    // 字号 20：编号右边缘在 26，文字从 36 开始
+    expect(xOf('第')).toBeCloseTo(36, 0);
+    expect(xOf('1')).toBeLessThan(26);
+    // 居中的那一段在 300 宽的框里居中
+    expect(xOf('居')).toBeCloseTo(150 - 20, 0);
   });
 
   it('文字转轮廓：没有 <text>，每段字是一条路径，形状和字体里的字形一致', async () => {

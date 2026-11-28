@@ -41,14 +41,14 @@ function fnv(text: string, seed: number): string {
 
 /** 文字和排版参数的指纹。只包含会影响排版结果的字段 */
 export function textAppearanceBasis(
-  node: Pick<TextNode, 'text' | 'style' | 'align' | 'sizing' | 'size' | 'spans'>,
+  node: Pick<TextNode, 'text' | 'style' | 'align' | 'sizing' | 'size' | 'spans' | 'paragraphs'>,
 ): string {
   const { style } = node;
-  // 斜体、下划线、删除线和字符级样式是后来加的：没有用到时不进指纹，这样之前存下的指纹仍然对得上
+  // 斜体、下划线、删除线、字符级样式、段落样式是后来加的：没有用到时不进指纹，这样之前存下的指纹仍然对得上
   const extra =
-    style.italic || style.underline || style.strikethrough || node.spans?.length
+    (style.italic || style.underline || style.strikethrough || node.spans?.length
       ? JSON.stringify([!!style.italic, !!style.underline, !!style.strikethrough, node.spans ?? []])
-      : '';
+      : '') + (node.paragraphs?.length ? JSON.stringify(node.paragraphs) : '');
   const key =
     extra +
     JSON.stringify([

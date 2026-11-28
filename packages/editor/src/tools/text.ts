@@ -5,8 +5,13 @@ import {
   invert,
   multiply,
   nextSeq,
+  paragraphIndexAt,
+  paragraphRanges,
+  paragraphsAfterEdit,
+  rangeParagraphStyle,
   rangeStyle,
   setCharacterStyle,
+  setParagraphStyle,
   spansAfterEdit,
   styleAtCaret,
   textAppearanceBasis,
@@ -20,6 +25,8 @@ import {
   type NodeId,
   type Point,
   type Matrix,
+  type ListKind,
+  type ParagraphOverride,
   type Rect,
   type TextAppearance,
   type TextNode,
@@ -48,6 +55,9 @@ import type { Tool } from './tool';
  *
  * 字符级样式：新打的字接着前一个字的样式；选中一段字再改样式只改这一段；
  * 没选中时在光标处换样式，记下来给接下来打的字用（和常见的文字处理软件一样）。
+ *
+ * 段落样式作用于选区碰到的那几段（没选中时是光标所在的一段）；没在编辑时作用于整个文本。
+ * 列表里：Tab / Shift+Tab 升降一级；在空的列表项上按回车、在列表项开头按退格，退出列表（和常见的文字处理软件一样）。
  */
 
 const DEFAULT_TEXT_COLOR: Color = rgba(0.1, 0.1, 0.1);
@@ -188,7 +198,10 @@ export function registerTextTool(editor: Editor): void {
       const typing = session.typing;
       session.typing = null;
       const spans = spansAfterEdit(node, text, typing?.style);
-      editor.store.transact('type', (tx) => tx.update(node.id, { text, spans }), { mergeKey: session.mergeKey });
+      const paragraphs = paragraphsAfterEdit(node, text, readSelection(session.textarea).focus);
+      editor.store.transact('type', (tx) => tx.update(node.id, { text, spans, paragraphs }), {
+        mergeKey: session.mergeKey,
+      });
       session.typed = true;
       session.changed = true;
     }
@@ -278,6 +291,85 @@ export function registerTextTool(editor: Editor): void {
     }
   };
 
+  /** 现在要改段落样式的那几段的样式：编辑中是选区碰到的段落，否则是选中的第一个文本节点的全部段落 */
+  const currentParagraph = (): ReturnType<typeof rangeParagraphStyle> | null => {
+    const node = nodeOf();
+    if (session && node) {
+      const { anchor, focus } = readSelection(session.textarea);
+      return rangeParagraphStyle(node, anchor, focus);
+    }
+    const first = editor.selectedNodes().find((n): n is TextNode => n.type === 'text');
+    return first ? rangeParagraphStyle(first, 0, first.text.length) : null;
+  };
+
+  /**
+   * 改段落样式。编辑中：改选区碰到的那几段（没选中时是光标所在的一段）；没在编辑：改选中的所有文本节点的全部段落。
+   * @param mergeKey 连续的修改合成一步撤销，由调用方在结束时封存
+   * @param refocus 改完把键盘焦点还给文字
+   */
+  const applyParagraph = (patch: ParagraphOverride, mergeKey?: string, refocus = false): void => {
+    const node = nodeOf();
+    if (session && node) {
+      const { anchor, focus } = readSelection(session.textarea);
+      sealTyping();
+      editor.store.transact(
+        'paragraph style',
+        (tx) => tx.update(node.id, setParagraphStyle(node, anchor, focus, patch)),
+        { mergeKey },
+      );
+      if (!mergeKey) editor.store.sealHistory();
+      session.changed = true;
+      if (refocus) session.textarea.focus({ preventScroll: true });
+      refresh();
+      return;
+    }
+    editor.updateSelection(
+      'paragraph style',
+      (n) => (n.type === 'text' ? setParagraphStyle(n, 0, n.text.length, patch) : null),
+      mergeKey,
+    );
+    if (!mergeKey) editor.store.sealHistory();
+  };
+
+  /** 设成列表或者取消：这几段已经都是这种列表时取消，否则都设成它 */
+  const toggleList = (kind: ListKind): void => {
+    const current = currentParagraph();
+    if (!current) return;
+    const on = current.style.list === kind && !current.mixed.has('list');
+    applyParagraph({ list: on ? null : kind }, undefined, true);
+  };
+
+  /** 列表升降一级 */
+  const shiftLevel = (delta: 1 | -1): void => {
+    const current = currentParagraph();
+    if (!current) return;
+    applyParagraph({ level: current.style.level + delta }, undefined, true);
+  };
+
+  /**
+   * 列表里的几个按键：Tab / Shift+Tab 升降一级；在空的列表项上按回车、在列表项开头按退格，退出列表。
+   * 处理了返回 true
+   */
+  const listKey = (event: KeyboardEvent): boolean => {
+    const node = nodeOf();
+    if (!session || !node || event.metaKey || event.ctrlKey || event.altKey) return false;
+    const { anchor, focus } = readSelection(session.textarea);
+    const current = rangeParagraphStyle(node, anchor, focus);
+    if (!current.style.list || current.mixed.has('list')) return false;
+    if (event.key === 'Tab') {
+      shiftLevel(event.shiftKey ? -1 : 1);
+      return true;
+    }
+    if (anchor !== focus || event.shiftKey) return false;
+    const range = paragraphRanges(node.text)[paragraphIndexAt(node.text, focus)]!;
+    const empty = range.start === range.end;
+    if ((event.key === 'Enter' && empty) || (event.key === 'Backspace' && focus === range.start)) {
+      applyParagraph({ list: null });
+      return true;
+    }
+    return false;
+  };
+
   const moveVertically = (direction: -1 | 1, extend: boolean): void => {
     const node = nodeOf();
     if (!session || !node) return;
@@ -320,6 +412,10 @@ export function registerTextTool(editor: Editor): void {
     if (toggle) {
       event.preventDefault();
       toggleStyle(toggle);
+      return;
+    }
+    if (listKey(event)) {
+      event.preventDefault();
       return;
     }
     if (event.key === 'Tab') event.preventDefault();
@@ -697,6 +793,33 @@ export function registerTextTool(editor: Editor): void {
     },
   };
 
+  const paragraphText: Command<{ patch: ParagraphOverride; mergeKey?: string; refocus?: boolean }> = {
+    id: 'text.paragraph',
+    enabled: () => session !== null || editor.selectedNodes().some((n) => n.type === 'text'),
+    run(_editor, args) {
+      applyParagraph(args.patch, args.mergeKey, args.refocus);
+    },
+  };
+
+  const listText: Command<ListKind> = {
+    id: 'text.list',
+    enabled: () => session !== null || editor.selectedNodes().some((n) => n.type === 'text'),
+    run(_editor, kind) {
+      toggleList(kind);
+    },
+  };
+
+  const levelText: Command<1 | -1> = {
+    id: 'text.listLevel',
+    enabled: () => {
+      const current = currentParagraph();
+      return current !== null && current.style.list !== null && !current.mixed.has('list');
+    },
+    run(_editor, delta) {
+      shiftLevel(delta);
+    },
+  };
+
   const toggleText: Command<TextToggle> = {
     id: 'text.toggle',
     enabled: () => session !== null || editor.selectedNodes().some((n) => n.type === 'text'),
@@ -709,6 +832,9 @@ export function registerTextTool(editor: Editor): void {
   editor.commands.register(editText);
   editor.commands.register(styleText);
   editor.commands.register(toggleText);
+  editor.commands.register(paragraphText);
+  editor.commands.register(listText);
+  editor.commands.register(levelText);
 }
 
 /** 可以一键开关的字符样式 */

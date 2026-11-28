@@ -182,7 +182,22 @@
       "mixed": "多种",
       "scopeSelection": "正在修改选中的文字",
       "scopeCaret": "正在设置接下来输入的文字",
-      "scopeAll": "正在修改整段文字"
+      "scopeAll": "正在修改整段文字",
+      "paragraphScopeSelection": "下面改的是：选中的段落",
+      "paragraphScopeCaret": "下面改的是：光标所在的段落",
+      "paragraphScopeAll": "下面改的是：全部段落",
+      "list": "列表",
+      "bullets": "项目符号",
+      "numbering": "编号",
+      "outdent": "减少一级",
+      "indentMore": "增加一级",
+      "indent": "缩进",
+      "indentLeft": "左",
+      "firstLine": "首行",
+      "firstLineTwo": "首行缩进两个字",
+      "spacing": "段距",
+      "spaceBefore": "段前",
+      "spaceAfter": "段后"
     },
     "file": {
       "menu": "文件",

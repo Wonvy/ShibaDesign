@@ -1,4 +1,4 @@
-import type { CanvasKit, GlyphRun as SkGlyphRun, Typeface } from 'canvaskit-wasm';
+import type { CanvasKit, GlyphRun as SkGlyphRun, Paragraph, Typeface } from 'canvaskit-wasm';
 import { hasLiveAppearance, styleOfChar, type CharacterStyle, type Color, type TextNode } from '@shiba/core';
 import type { TextAppearances } from './appearance';
 import type { FontManager, LoadedFace } from './fonts';
@@ -75,38 +75,87 @@ export class TextShaper {
     );
   }
 
-  /** 把一个文本节点拆成一段段的字。认不出字体文件时返回 'raster' */
+  /**
+   * 把一个文本节点拆成一段段的字。认不出字体文件时返回 'raster'。
+   * 每一段（用换行分开）是单独排的，列表的符号也是单独排的小段落：位置都换算到节点的本地坐标，
+   * 字符位置换算成整个文本的下标。列表符号不是文本里的字，它的范围是空的（start = stop = 段首）
+   */
   shape(node: TextNode): ShapedText {
-    const { ck, fonts } = this;
-    const toUtf16 = utf8Offsets(node.text);
     const runs: ShapedRun[] = [];
-    for (const line of this.layouts.get(node).paragraph.getShapedLines()) {
+    for (const block of this.layouts.get(node).blocks) {
+      if (block.marker) {
+        const { marker } = block;
+        const shaped = this.shapePiece(node, marker.paragraph, marker.text, marker.x, marker.y, null, marker.style);
+        if (shaped === 'raster') return 'raster';
+        for (const run of shaped) runs.push({ ...run, start: block.start, stop: block.start });
+      }
+      // 空的一段里只有一个零宽空格，没有要写出去的字
+      if (block.end === block.start) continue;
+      // 首行缩进的占位符在排版引擎里占一个字符（U+FFFC）
+      const text = (block.shift > 0 ? '\ufffc' : '') + node.text.slice(block.start, block.end);
+      const shaped = this.shapePiece(node, block.paragraph, text, block.x, block.y, block.start - block.shift, null);
+      if (shaped === 'raster') return 'raster';
+      runs.push(...shaped);
+    }
+    return { runs };
+  }
+
+  /**
+   * 一个排好的段落里的字
+   * @param text 交给排版引擎的文字
+   * @param base 这段文字在节点文字里从哪开始（null 表示不是节点里的字，比如列表符号）
+   * @param override 这些字的样式（列表符号用）；不给时按节点里的字取样式
+   */
+  private shapePiece(
+    node: TextNode,
+    paragraph: Paragraph,
+    text: string,
+    dx: number,
+    dy: number,
+    base: number | null,
+    override: CharacterStyle | null,
+  ): ShapedRun[] | 'raster' {
+    const { ck, fonts } = this;
+    const toUtf16 = utf8Offsets(text);
+    const runs: ShapedRun[] = [];
+    for (const line of paragraph.getShapedLines()) {
       for (const run of line.runs) {
         const typeface = run.typeface as Typeface | null;
         const count = run.glyphs.length;
-        const text: string[] = [];
+        if (count === 0) {
+          typeface?.delete();
+          continue;
+        }
+        const chars: string[] = [];
         for (let i = 0; i < count; i++) {
           const from = toUtf16.get(run.offsets[i]!);
           const to = toUtf16.get(run.offsets[i + 1]!);
-          text.push(from !== undefined && to !== undefined && to > from ? node.text.slice(from, to) : '');
+          chars.push(from !== undefined && to !== undefined && to > from ? text.slice(from, to) : '');
         }
+        const first = toUtf16.get(run.offsets[0]!) ?? 0;
+        const last = toUtf16.get(run.offsets[count]!) ?? text.length;
         // 这段字的样式（同一段字的样式一定相同，排版引擎在样式变化处会断开）
-        const style = styleOfChar(node, toUtf16.get(run.offsets[0]!) ?? 0);
+        const style = override ?? styleOfChar(node, (base ?? 0) + first);
         const families = [style.fontFamily.latin, style.fontFamily.cjk];
-        const names = fonts.resolve(families, text.join(''), style.fontWeight, style.italic).names;
-        const face = this.identify(run, text.join(''), names, families, style.fontWeight, style.italic);
-        const lines = style.underline || style.strikethrough ? decorationLines(ck, run, style) : [];
+        const names = fonts.resolve(families, chars.join(''), style.fontWeight, style.italic).names;
+        const face = this.identify(run, chars.join(''), names, families, style.fontWeight, style.italic);
+        const lines = style.underline || style.strikethrough ? decorationLines(ck, run, style, dx, dy) : [];
         typeface?.delete();
         if (!face) return 'raster';
+        const positions = Float32Array.from(run.positions.subarray(0, count * 2));
+        for (let i = 0; i < count; i++) {
+          positions[i * 2] = positions[i * 2]! + dx;
+          positions[i * 2 + 1] = positions[i * 2 + 1]! + dy;
+        }
         runs.push({
           face,
           size: run.size,
           glyphs: Uint16Array.from(run.glyphs.subarray(0, count)),
-          positions: Float32Array.from(run.positions.subarray(0, count * 2)),
-          end: run.positions[count * 2] ?? run.positions[Math.max(0, count * 2 - 2)] ?? 0,
-          text,
-          start: toUtf16.get(run.offsets[0]!) ?? 0,
-          stop: toUtf16.get(run.offsets[count]!) ?? node.text.length,
+          positions,
+          end: (run.positions[count * 2] ?? run.positions[Math.max(0, count * 2 - 2)] ?? 0) + dx,
+          text: chars,
+          start: base === null ? 0 : base + first,
+          stop: base === null ? 0 : base + last,
           color: style.color,
           lines,
           // 排版结果里的 fakeItalic 在 0.42 版里没有填，按"要斜体但字体文件不是斜体"推断
@@ -115,7 +164,7 @@ export class TextShaper {
         });
       }
     }
-    return { runs };
+    return runs;
   }
 
   /** 一个字体文件对应的 Skia 字体，用来查字的字形编号和宽度。由这个对象持有，不要 delete */
@@ -205,15 +254,21 @@ export class TextShaper {
  * 一段字的下划线和删除线。位置和粗细取字体里记的值，没有时按字号估计，和排版引擎的做法一致：
  * 下划线在基线下方，删除线大约在小写字母的中间。线从第一个字的起点画到最后一个字的终点
  */
-function decorationLines(ck: CanvasKit, run: SkGlyphRun, style: CharacterStyle): DecorationLine[] {
+function decorationLines(
+  ck: CanvasKit,
+  run: SkGlyphRun,
+  style: CharacterStyle,
+  dx: number,
+  dy: number,
+): DecorationLine[] {
   const count = run.glyphs.length;
   if (count === 0) return [];
   const font = new ck.Font(run.typeface as Typeface | null, run.size);
   const metrics = font.getMetrics();
   font.delete();
-  const x0 = run.positions[0]!;
-  const x1 = run.positions[count * 2]!;
-  const baseline = run.positions[1]!;
+  const x0 = run.positions[0]! + dx;
+  const x1 = run.positions[count * 2]! + dx;
+  const baseline = run.positions[1]! + dy;
   const lines: DecorationLine[] = [];
   if (style.underline) {
     const thickness = metrics.underlineThickness || run.size / 14;

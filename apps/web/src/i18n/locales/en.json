@@ -182,7 +182,22 @@
       "mixed": "Mixed",
       "scopeSelection": "Changes apply to the selected text",
       "scopeCaret": "Changes apply to the text you type next",
-      "scopeAll": "Changes apply to the whole text"
+      "scopeAll": "Changes apply to the whole text",
+      "paragraphScopeSelection": "Changes below apply to: the selected paragraphs",
+      "paragraphScopeCaret": "Changes below apply to: the paragraph at the cursor",
+      "paragraphScopeAll": "Changes below apply to: all paragraphs",
+      "list": "List",
+      "bullets": "Bullets",
+      "numbering": "Numbering",
+      "outdent": "Decrease level",
+      "indentMore": "Increase level",
+      "indent": "Indent",
+      "indentLeft": "Left",
+      "firstLine": "First",
+      "firstLineTwo": "Indent first line by two characters",
+      "spacing": "Spacing",
+      "spaceBefore": "Before",
+      "spaceAfter": "After"
     },
     "file": {
       "menu": "File",

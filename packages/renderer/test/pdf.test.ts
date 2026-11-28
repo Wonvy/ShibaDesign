@@ -357,7 +357,7 @@ describe('导出 PDF', () => {
     });
     const { bytes } = await exportAndOpen(env);
     const expected: number[] = [];
-    for (const line of env.layouts.get(env.store.require(node.id) as TextNode).paragraph.getShapedLines()) {
+    for (const line of env.layouts.get(env.store.require(node.id) as TextNode).blocks[0]!.paragraph.getShapedLines()) {
       for (const run of line.runs) {
         for (let i = 0; i < run.glyphs.length; i++) {
           // 空格没有轮廓，导入时不会留下字形（这段字全是 ASCII，字节偏移就是字符下标）
@@ -375,6 +375,13 @@ describe('导出 PDF', () => {
     }
     expect(actual.length).toBe(expected.length);
     actual.forEach((x, i) => expect(x).toBeCloseTo(expected[i]!, 1));
+  });
+
+  it('列表的编号写成真正的文字，可以复制出来', async () => {
+    const env = setup();
+    text(env, 'One\nTwo', { paragraphs: [{ list: 'number' }, { list: 'number' }] });
+    const { textContent } = await exportAndOpen(env);
+    expect(textContent.replace(/\s+/g, '')).toBe('1.One2.Two');
   });
 
   it('排版用的 WOFF2 和嵌入用的 WOFF 字形编号不一致时，按字符换成嵌入文件里的字形（全角冒号）', async () => {

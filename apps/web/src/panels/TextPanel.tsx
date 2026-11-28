@@ -1,6 +1,10 @@
 import {
   Bold,
   Italic,
+  List,
+  ListIndentDecrease,
+  ListIndentIncrease,
+  ListOrdered,
   Strikethrough,
   TextAlignCenter,
   TextAlignEnd,
@@ -12,10 +16,14 @@ import {
 import { useCallback, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  MAX_LIST_LEVEL,
   hasLiveAppearance,
+  rangeParagraphStyle,
   rangeStyle,
   rgba,
   type CharacterStyle,
+  type ListKind,
+  type ParagraphOverride,
   type TextAlign,
   type TextNode,
   type TextStyle,
@@ -46,14 +54,20 @@ const TOGGLES: { key: TextToggle; icon: LucideIcon; labelKey: string; shortcut: 
   { key: 'strikethrough', icon: Strikethrough, labelKey: 'text.strikethrough', shortcut: shortcut('X', true) },
 ];
 
+const LISTS: { kind: ListKind; icon: LucideIcon; labelKey: string }[] = [
+  { kind: 'bullet', icon: List, labelKey: 'text.bullets' },
+  { kind: 'number', icon: ListOrdered, labelKey: 'text.numbering' },
+];
+
 const SIZING: TextNode['sizing'][] = ['auto', 'fixed'];
 const MIXED = '';
 
 /**
  * 文本属性。
  * 字体、字号、粗细、斜体、下划线、删除线、颜色、字距可以按字设置：编辑文字时改的是选中的那几个字
- * （没选中时是接下来要打的字），没在编辑时改选中文本的全部文字。行高、对齐、宽度模式是整段的。
- * 范围里不一致的项显示为空白。多选时显示第一个文本的值，修改作用于选中的全部文本。
+ * （没选中时是接下来要打的字），没在编辑时改选中文本的全部文字。
+ * 对齐、列表、缩进、段距按段落设置：编辑时改选区碰到的那几段（没选中时是光标所在的一段），没在编辑时改全部段落。
+ * 行高、宽度模式是整个文本的。范围里不一致的项显示为空白。多选时显示第一个文本的值，修改作用于选中的全部文本。
  */
 export function TextPanel({ editor, nodes }: PanelProps): ReactNode {
   const { t } = useTranslation();
@@ -71,6 +85,29 @@ export function TextPanel({ editor, nodes }: PanelProps): ReactNode {
         ? rangeStyle(first, target.start, target.end)
         : rangeStyle(first, 0, first.text.length);
   const families = editor.fonts.familyNames();
+  const paragraph = target
+    ? rangeParagraphStyle(first, target.start, target.end)
+    : rangeParagraphStyle(first, 0, first.text.length);
+  const setParagraphs = (patch: ParagraphOverride): void => {
+    editor.commands.run('text.paragraph', { patch, refocus: true });
+  };
+  const listOn = (kind: ListKind): boolean => paragraph.style.list === kind && !paragraph.mixed.has('list');
+  const inList = paragraph.style.list !== null && !paragraph.mixed.has('list');
+  const lengthField = (
+    key: 'indent' | 'firstLine' | 'spaceBefore' | 'spaceAfter',
+    labelKey: string,
+    disabled = false,
+  ): ReactNode => (
+    <NumberField
+      label={t(labelKey)}
+      value={paragraph.style[key]}
+      mixed={paragraph.mixed.has(key)}
+      min={0}
+      max={10000}
+      disabled={disabled}
+      onCommit={(v) => editor.commands.run('text.paragraph', { patch: { [key]: v } })}
+    />
+  );
 
   const setChars = (patch: Partial<CharacterStyle>, options: { mergeKey?: string; refocus?: boolean } = {}): void => {
     editor.commands.run('text.style', { patch, ...options });
@@ -191,6 +228,16 @@ export function TextPanel({ editor, nodes }: PanelProps): ReactNode {
         </div>
       </div>
 
+      <p className="menu-hint text-scope">
+        {t(
+          target
+            ? target.start < target.end
+              ? 'text.paragraphScopeSelection'
+              : 'text.paragraphScopeCaret'
+            : 'text.paragraphScopeAll',
+        )}
+      </p>
+
       <div className="prop-row">
         <span className="prop-label">{t('text.align')}</span>
         <div className="prop-controls button-row">
@@ -198,12 +245,73 @@ export function TextPanel({ editor, nodes }: PanelProps): ReactNode {
             <IconButton
               key={align}
               title={t(labelKey)}
-              active={first.align === align}
-              onClick={() => update('text align', () => ({ align }))}
+              active={paragraph.style.align === align && !paragraph.mixed.has('align')}
+              onClick={() => setParagraphs({ align })}
             >
               <Icon size={15} />
             </IconButton>
           ))}
+        </div>
+      </div>
+
+      <div className="prop-row">
+        <span className="prop-label">{t('text.list')}</span>
+        <div className="prop-controls button-row">
+          {LISTS.map(({ kind, icon: Icon, labelKey }) => (
+            <IconButton
+              key={kind}
+              title={t(labelKey)}
+              active={listOn(kind)}
+              onClick={() => editor.commands.run('text.list', kind)}
+            >
+              <Icon size={15} />
+            </IconButton>
+          ))}
+          <span className="row-divider" />
+          <IconButton
+            title={`${t('text.outdent')} (⇧Tab)`}
+            disabled={!inList || paragraph.style.level <= 0}
+            onClick={() => editor.commands.run('text.listLevel', -1)}
+          >
+            <ListIndentDecrease size={15} />
+          </IconButton>
+          <IconButton
+            title={`${t('text.indentMore')} (Tab)`}
+            disabled={!inList || paragraph.style.level >= MAX_LIST_LEVEL}
+            onClick={() => editor.commands.run('text.listLevel', 1)}
+          >
+            <ListIndentIncrease size={15} />
+          </IconButton>
+        </div>
+      </div>
+
+      <div className="prop-row">
+        <span className="prop-label">{t('text.indent')}</span>
+        <div className="prop-controls field-grid">
+          {lengthField('indent', 'text.indentLeft')}
+          {lengthField('firstLine', 'text.firstLine', inList)}
+        </div>
+      </div>
+      {!inList && (
+        <div className="prop-row">
+          <span className="prop-label" />
+          <div className="prop-controls">
+            <button
+              type="button"
+              className="text-btn text-btn-small"
+              onClick={() => setParagraphs({ firstLine: style.fontSize * 2 })}
+            >
+              {t('text.firstLineTwo')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="prop-row">
+        <span className="prop-label">{t('text.spacing')}</span>
+        <div className="prop-controls field-grid">
+          {lengthField('spaceBefore', 'text.spaceBefore')}
+          {lengthField('spaceAfter', 'text.spaceAfter')}
         </div>
       </div>
 

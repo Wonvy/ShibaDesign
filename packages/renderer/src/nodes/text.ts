@@ -2,7 +2,7 @@ import { hasLiveAppearance, type TextNode } from '@shiba/core';
 import type { NodeTypeDef } from '../node-types';
 import { toSkColor } from '../skia';
 import type { TextAppearances } from '../text/appearance';
-import type { TextLayouts } from '../text/layout';
+import { drawTextLayout, type TextLayouts } from '../text/layout';
 
 /**
  * 文本节点。排版结果来自 TextLayouts，所以这个类型要带着它创建，
@@ -38,7 +38,7 @@ export function createTextNodeType(layouts: TextLayouts, appearances: TextAppear
         }
         return;
       }
-      canvas.drawParagraph(layouts.get(node).paragraph, 0, 0);
+      drawTextLayout(canvas, layouts.get(node));
     },
   };
 }

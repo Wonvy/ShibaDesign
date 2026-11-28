@@ -9,6 +9,7 @@
  */
 
 import type { SlideAnimation, SlideTransition } from './animation';
+import type { ParagraphOverride } from './paragraphs';
 
 export type NodeId = string;
 
@@ -277,7 +278,7 @@ export interface TextSpan {
 
 /**
  * 文本。style 和 fill 是整段的默认样式；其中一部分字可以有自己的样式，按区间记在 spans 里。
- * 行高、对齐和宽度模式是整段共用的。
+ * align 是默认的对齐方式，每一段还可以有自己的段落样式（paragraphs）。行高和宽度模式是整个文本共用的。
  */
 export interface TextNode extends BaseNode {
   type: 'text';
@@ -294,6 +295,11 @@ export interface TextNode extends BaseNode {
   fill: SolidFill | null;
   /** 和默认样式不同的那些字，按位置排好、互不重叠。省略表示整段都是默认样式 */
   spans?: readonly TextSpan[];
+  /**
+   * 每一段（用换行分开）自己的段落样式：对齐、段前段后距、缩进、列表。按段落序号排，
+   * 每项只记和默认值不同的那几项，没有不同的是 null。省略表示每段都用默认值。见 paragraphs.ts
+   */
+  paragraphs?: readonly (ParagraphOverride | null)[];
   /**
    * 保真外观：从别的文件（比如 PDF）导入的文字，在被改动之前按原文件的字形显示，看起来和原来一模一样。
    * 文字或排版参数一旦改动就不再使用它，改按上面的样式正常排版。见 text-appearance.ts。

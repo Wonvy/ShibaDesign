@@ -1,8 +1,14 @@
-import type { CanvasKit, FontWeight, LineMetrics, Paragraph } from 'canvaskit-wasm';
+import type { Canvas, CanvasKit, FontWeight, LineMetrics, Paragraph } from 'canvaskit-wasm';
 import {
   baseCharacterStyle,
+  listMarkers,
+  paragraphGeometry,
+  paragraphRanges,
+  paragraphStyles,
+  styleOfChar,
   styleRuns,
   type CharacterStyle,
+  type ParagraphStyle,
   type DocStore,
   type NodeId,
   type Rect,
@@ -32,9 +38,18 @@ export function textFontRequests(node: TextNode): TextFontRequest[] {
     italic: style.italic,
   });
   // 第一项是整段的默认样式，用全部文字：行高的"支柱"和空文本都靠它
-  const requests = [request(baseCharacterStyle(node), node.text)];
+  const base = baseCharacterStyle(node);
+  const requests = [request(base, node.text)];
   if (node.spans) {
     for (const run of styleRuns(node)) requests.push(request(run.style, node.text.slice(run.start, run.end)));
+  }
+  // 列表的符号和编号，用各段第一个字的样式（和排版时一样）
+  if (node.paragraphs) {
+    const ranges = paragraphRanges(node.text);
+    listMarkers(paragraphStyles(node)).forEach((marker, i) => {
+      const range = ranges[i]!;
+      if (marker) requests.push(request(range.end > range.start ? styleOfChar(node, range.start) : base, marker));
+    });
   }
   return requests;
 }
@@ -44,17 +59,65 @@ export async function ensureTextFonts(fonts: FontManager, node: TextNode): Promi
   await Promise.all(textFontRequests(node).map((r) => fonts.ensure(r.families, r.text, r.weight, r.italic)));
 }
 
-export interface TextLayout {
+/** 列表项前面的符号或编号：单独排成一个小段落，基线和这一段第一行对齐 */
+export interface TextMarker {
   paragraph: Paragraph;
-  /** 文本框的宽度：固定宽度时是设定值，自动宽度时是最长一行的宽度 */
+  x: number;
+  y: number;
+  text: string;
+  style: CharacterStyle;
+}
+
+/** 排好的一段（文本里用换行分开的一段） */
+export interface TextBlock {
+  paragraph: Paragraph;
+  /** 这一段的左上角，本地坐标 */
+  x: number;
+  y: number;
+  /** 这一段排版用的宽度和排出来的高度 */
   width: number;
   height: number;
+  /** 这一段在节点文字里的范围（字符串下标，不含换行） */
+  start: number;
+  end: number;
+  /** 段首有首行缩进的占位符时是 1：排版引擎里的位置 = 文字里的位置 - start + shift。空的一段里还有一个零宽空格 */
+  shift: number;
+  style: ParagraphStyle;
+  marker: TextMarker | null;
+  /** 这一段的行（排版引擎给的，坐标和位置都是这一段自己的） */
+  lines: LineMetrics[];
+  /** 第一行在整个文本的行里排第几 */
+  firstLine: number;
+}
+
+export interface TextLayout {
+  /** 每一段一个，从上到下 */
+  blocks: TextBlock[];
+  /** 文本框的宽度：固定宽度时是设定值，自动宽度时是最宽一段（连同缩进）的宽度 */
+  width: number;
+  height: number;
+  /** 所有段落的行，位置换算成整个文本的字符下标，坐标换算成本地坐标 */
   lines: LineMetrics[];
   /** 每一行的上沿和高度（本地坐标）。光标、上下移动都按它算 */
   lineTops: number[];
   lineHeights: number[];
   /** 还有字体没加载完，当前结果可能缺字；加载完会自动重排 */
   pending: boolean;
+}
+
+/** 把排好的文本画到画布上，原点是文本框的左上角 */
+export function drawTextLayout(canvas: Canvas, layout: TextLayout): void {
+  for (const block of layout.blocks) {
+    canvas.drawParagraph(block.paragraph, block.x, block.y);
+    if (block.marker) canvas.drawParagraph(block.marker.paragraph, block.marker.x, block.marker.y);
+  }
+}
+
+function disposeLayout(layout: TextLayout): void {
+  for (const block of layout.blocks) {
+    block.paragraph.delete();
+    block.marker?.paragraph.delete();
+  }
 }
 
 interface Entry {
@@ -67,6 +130,7 @@ interface Entry {
   width: number;
   fill: SolidFill | null;
   spans: readonly TextSpan[] | undefined;
+  paragraphs: TextNode['paragraphs'];
   epoch: number;
 }
 
@@ -76,6 +140,10 @@ const AUTO_LAYOUT_WIDTH = 1e6;
  * 文本排版：把文本节点排成 Skia 段落并缓存，同时提供编辑需要的几何查询
  * （光标位置、点击位置对应的字符、选区矩形、上下行移动）。
  * 所有字符位置都是 JavaScript 字符串下标（UTF-16），坐标都是节点本地坐标。
+ *
+ * 每一段（用换行分开）单独排成一个 Skia 段落，按段前段后距从上往下摆：Skia 的段落样式（对齐）是整个段落共用的，
+ * 也不支持缩进，所以每段各排各的。左缩进就是把这一段往右挪、排版宽度相应减小；首行缩进是在段首放一个
+ * 这么宽的占位符；列表的符号单独排成一个小段落，放在缩进出来的那一档里。
  */
 export class TextLayouts {
   private entries = new Map<NodeId, Entry>();
@@ -105,11 +173,12 @@ export class TextLayouts {
       cached.sizing === node.sizing &&
       cached.width === width &&
       cached.fill === node.fill &&
-      cached.spans === node.spans
+      cached.spans === node.spans &&
+      cached.paragraphs === node.paragraphs
     ) {
       return cached.layout;
     }
-    cached?.layout.paragraph.delete();
+    if (cached) disposeLayout(cached.layout);
     const layout = this.build(node);
     this.entries.set(node.id, {
       layout,
@@ -120,6 +189,7 @@ export class TextLayouts {
       width,
       fill: node.fill,
       spans: node.spans,
+      paragraphs: node.paragraphs,
       epoch: this.fonts.epoch,
     });
     return layout;
@@ -127,7 +197,7 @@ export class TextLayouts {
 
   /** 丢弃全部缓存。字体加载完成后调用 */
   clear(): void {
-    for (const entry of this.entries.values()) entry.layout.paragraph.delete();
+    for (const entry of this.entries.values()) disposeLayout(entry.layout);
     this.entries.clear();
   }
 
@@ -141,33 +211,54 @@ export class TextLayouts {
   /** 光标在某个字符位置时的矩形（宽度为 0） */
   caretRect(node: TextNode, offset: number): Rect {
     const layout = this.get(node);
-    const { paragraph, lines } = layout;
-    const line = lineAt(lines, offset);
-    if (!line) return { x: alignedStart(node.align, layout.width), y: 0, w: 0, h: layout.height };
-    const top = layout.lineTops[line.lineNumber] ?? 0;
-    const height = layout.lineHeights[line.lineNumber] ?? layout.height;
+    const block = blockAt(layout.blocks, offset);
+    const local = offset - block.start + block.shift;
+    const line = lineAt(block.lines, local);
+    const index = line ? block.firstLine + line.lineNumber : -1;
+    const top = layout.lineTops[index] ?? block.y;
+    const height = layout.lineHeights[index] ?? block.height;
     const { ck } = this;
+    /** 一段字符（整个文本的下标）左边或右边的横坐标，这一段自己的坐标 */
     const edge = (from: number, to: number, side: 'left' | 'right'): number | null => {
-      const rects = paragraph.getRectsForRange(from, to, ck.RectHeightStyle.Max, ck.RectWidthStyle.Tight);
+      const rects = block.paragraph.getRectsForRange(
+        from - block.start + block.shift,
+        to - block.start + block.shift,
+        ck.RectHeightStyle.Max,
+        ck.RectWidthStyle.Tight,
+      );
       const rect = side === 'left' ? rects[0] : rects[rects.length - 1];
       return rect ? (side === 'left' ? rect.rect[0]! : rect.rect[2]!) : null;
     };
 
     let x: number | null = null;
-    if (offset > line.startIndex) x = edge(prevBoundary(node.text, offset), offset, 'right');
-    else if (offset < node.text.length && node.text[offset] !== '\n') {
-      x = edge(offset, nextBoundary(node.text, offset), 'left');
-    }
-    return { x: x ?? line.left, y: top, w: 0, h: height };
+    if (offset > block.start && line && local > line.startIndex)
+      x = edge(prevBoundary(node.text, offset), offset, 'right');
+    else if (offset < block.end) x = edge(offset, nextBoundary(node.text, offset), 'left');
+    // 空的一段：有首行缩进时光标在占位符后面，否则按对齐方式
+    if (x === null && block.shift > 0) x = block.paragraph.getRectsForPlaceholders()[0]?.rect[2] ?? null;
+    x ??= line ? line.left : alignedStart(block.style.align, block.width);
+    return { x: block.x + x, y: top, w: 0, h: height };
   }
 
   /** 本地坐标里的一个点最接近哪个字符位置 */
   offsetAt(node: TextNode, x: number, y: number): number {
     const layout = this.get(node);
-    if (layout.lines.length === 0) return 0;
-    const clampedY = Math.min(Math.max(y, 0), Math.max(0, layout.height - 0.01));
-    const pos = layout.paragraph.getGlyphPositionAtCoordinate(x, clampedY).pos;
-    return Math.min(Math.max(pos, 0), node.text.length);
+    const { blocks } = layout;
+    // 落在段与段之间的空隙里时，算离得近的那一段
+    let block = blocks[blocks.length - 1]!;
+    for (let i = 0; i < blocks.length; i++) {
+      const current = blocks[i]!;
+      const next = blocks[i + 1];
+      const bottom = next ? (current.y + current.height + next.y) / 2 : Infinity;
+      if (y < bottom) {
+        block = current;
+        break;
+      }
+    }
+    if (block.lines.length === 0) return block.start;
+    const localY = Math.min(Math.max(y - block.y, 0), Math.max(0, block.height - 0.01));
+    const pos = block.paragraph.getGlyphPositionAtCoordinate(x - block.x, localY).pos;
+    return Math.min(Math.max(block.start + pos - block.shift, block.start), block.end);
   }
 
   /** 一段字符范围覆盖的矩形，每行一个或多个 */
@@ -176,32 +267,52 @@ export class TextLayouts {
     const { ck } = this;
     const from = Math.min(start, end);
     const to = Math.max(start, end);
-    return this.get(node)
-      .paragraph.getRectsForRange(from, to, ck.RectHeightStyle.Max, ck.RectWidthStyle.Tight)
-      .map(({ rect }) => ({ x: rect[0]!, y: rect[1]!, w: rect[2]! - rect[0]!, h: rect[3]! - rect[1]! }));
+    const rects: Rect[] = [];
+    for (const block of this.get(node).blocks) {
+      const a = Math.max(from, block.start);
+      const b = Math.min(to, block.end);
+      if (a >= b) continue;
+      for (const { rect } of block.paragraph.getRectsForRange(
+        a - block.start + block.shift,
+        b - block.start + block.shift,
+        ck.RectHeightStyle.Max,
+        ck.RectWidthStyle.Tight,
+      )) {
+        rects.push({ x: block.x + rect[0]!, y: block.y + rect[1]!, w: rect[2]! - rect[0]!, h: rect[3]! - rect[1]! });
+      }
+    }
+    return rects;
   }
 
   /** 光标上移或下移一行后的字符位置。x 是希望保持的横坐标 */
   verticalMove(node: TextNode, offset: number, direction: -1 | 1, x: number): number {
-    const { lines, paragraph, lineTops, lineHeights } = this.get(node);
-    const current = lineAt(lines, offset);
-    if (!current) return offset;
-    const target = lines[current.lineNumber + direction];
-    if (!target) return direction < 0 ? 0 : node.text.length;
-    const middle = lineTops[target.lineNumber]! + lineHeights[target.lineNumber]! / 2;
-    return Math.min(paragraph.getGlyphPositionAtCoordinate(x, middle).pos, node.text.length);
+    const layout = this.get(node);
+    const block = blockAt(layout.blocks, offset);
+    const line = lineAt(block.lines, offset - block.start + block.shift);
+    if (!line) return offset;
+    const target = block.firstLine + line.lineNumber + direction;
+    if (target < 0) return 0;
+    if (target >= layout.lines.length) return node.text.length;
+    const targetBlock = layout.blocks.find((b) => target >= b.firstLine && target < b.firstLine + b.lines.length)!;
+    const middle = layout.lineTops[target]! + layout.lineHeights[target]! / 2;
+    const pos = targetBlock.paragraph.getGlyphPositionAtCoordinate(x - targetBlock.x, middle - targetBlock.y).pos;
+    return Math.min(Math.max(targetBlock.start + pos - targetBlock.shift, targetBlock.start), targetBlock.end);
   }
 
   /** 某个字符位置所在的词，双击选词用 */
   wordAt(node: TextNode, offset: number): { start: number; end: number } {
-    const range = this.get(node).paragraph.getWordBoundary(Math.min(offset, Math.max(0, node.text.length - 1)));
-    return { start: range.start, end: range.end };
+    const block = blockAt(this.get(node).blocks, offset);
+    if (block.end === block.start) return { start: block.start, end: block.start };
+    const local = Math.min(offset, block.end - 1) - block.start + block.shift;
+    const range = block.paragraph.getWordBoundary(local);
+    const map = (pos: number): number => Math.min(Math.max(block.start + pos - block.shift, block.start), block.end);
+    return { start: map(range.start), end: map(range.end) };
   }
 
   private drop(id: NodeId): void {
     const entry = this.entries.get(id);
     if (!entry) return;
-    entry.layout.paragraph.delete();
+    disposeLayout(entry.layout);
     this.entries.delete(id);
   }
 
@@ -222,55 +333,152 @@ export class TextLayouts {
     // 用"支柱"把每一行的高度强制成 字号 × 行高，行距才均匀。
     // 但有字比默认字号大时不能强制，否则大字的行会和上下行叠在一起：这时支柱只是最小行高，行跟着大字长高
     const forced = runs.every((run) => run.style.fontSize <= style.fontSize + 1e-6);
-    const paragraphStyle = new ck.ParagraphStyle({
-      textAlign: toSkAlign(ck, node.align),
-      strutStyle: {
-        strutEnabled: true,
-        fontFamilies: baseNames,
-        fontSize: style.fontSize,
-        heightMultiplier: style.lineHeight,
-        halfLeading: true,
-        forceStrutHeight: forced,
-      },
-      textStyle: this.skTextStyle(base, baseNames, style.lineHeight),
-    });
-    const builder = ck.ParagraphBuilder.MakeFromFontProvider(paragraphStyle, fonts.provider);
-    if (node.spans) {
-      for (const run of runs) {
-        const text = node.text.slice(run.start, run.end);
-        builder.pushStyle(new ck.TextStyle(this.skTextStyle(run.style, resolve(run.style, text), style.lineHeight)));
-        builder.addText(text);
-        builder.pop();
+    const strutStyle = {
+      strutEnabled: true,
+      fontFamilies: baseNames,
+      fontSize: style.fontSize,
+      heightMultiplier: style.lineHeight,
+      halfLeading: true,
+      forceStrutHeight: forced,
+    };
+    const ranges = paragraphRanges(node.text);
+    const styles = paragraphStyles(node);
+    const markers = listMarkers(styles);
+
+    const drafts = ranges.map((range, i) => {
+      const paragraphStyle = styles[i]!;
+      const geometry = paragraphGeometry(paragraphStyle, style.fontSize);
+      const builder = ck.ParagraphBuilder.MakeFromFontProvider(
+        new ck.ParagraphStyle({
+          textAlign: toSkAlign(ck, paragraphStyle.align),
+          strutStyle,
+          textStyle: this.skTextStyle(base, baseNames, style.lineHeight),
+        }),
+        fonts.provider,
+      );
+      let shift = 0;
+      if (geometry.firstLine > 0) {
+        // 首行缩进：段首放一个这么宽、不占高度的占位符
+        builder.addPlaceholder(geometry.firstLine, 0, ck.PlaceholderAlignment.Baseline, ck.TextBaseline.Alphabetic, 0);
+        shift = 1;
       }
-    } else {
-      builder.addText(node.text);
-    }
-    const paragraph = builder.build();
-    builder.delete();
+      if (node.spans) {
+        for (const run of runs) {
+          const from = Math.max(run.start, range.start);
+          const to = Math.min(run.end, range.end);
+          if (from >= to) continue;
+          const text = node.text.slice(from, to);
+          builder.pushStyle(new ck.TextStyle(this.skTextStyle(run.style, resolve(run.style, text), style.lineHeight)));
+          builder.addText(text);
+          builder.pop();
+        }
+      } else if (range.end > range.start) {
+        builder.addText(node.text.slice(range.start, range.end));
+      }
+      // 空的一段排版引擎不给行，也没有高度：放一个零宽空格，这一段就有一行的高度和光标位置。
+      // 它在排版引擎里占一个位置，但换算回文字下标时都夹到这一段的范围（空）里
+      if (range.end === range.start) builder.addText('\u200b');
+      const paragraph = builder.build();
+      builder.delete();
+      return { paragraph, range, style: paragraphStyle, geometry, shift, markerText: markers[i] ?? null };
+    });
 
     let width: number;
     if (node.sizing === 'fixed') {
       width = Math.max(1, node.size[0]);
-      paragraph.layout(width);
     } else {
-      // 先用极大的宽度排一次量出最长一行，再按这个宽度重排，这样居中和右对齐才有意义
-      paragraph.layout(AUTO_LAYOUT_WIDTH);
-      width = Math.ceil(paragraph.getLongestLine()) + 1;
-      paragraph.layout(width);
+      // 先用极大的宽度排一次量出最宽的一段，再按这个宽度重排，这样居中和右对齐才有意义
+      let widest = 0;
+      for (const draft of drafts) {
+        draft.paragraph.layout(AUTO_LAYOUT_WIDTH);
+        widest = Math.max(widest, draft.geometry.left + draft.paragraph.getLongestLine());
+      }
+      width = Math.ceil(widest) + 1;
     }
-    const height = paragraph.getHeight();
-    const lines = paragraph.getLineMetrics();
-    // 行高被强制成一样时每行等分总高度；否则按各行自己的高度（排版引擎给的是取整过的，按总高度缩放回去）
-    const raw = lines.map((line) => (forced ? 1 : Math.max(1, line.height)));
-    const total = raw.reduce((sum, h) => sum + h, 0) || 1;
-    const lineHeights = raw.map((h) => (h / total) * height);
+
+    const blocks: TextBlock[] = [];
+    const lines: LineMetrics[] = [];
     const lineTops: number[] = [];
-    let top = 0;
-    for (const h of lineHeights) {
-      lineTops.push(top);
-      top += h;
-    }
-    return { paragraph, width, height, lines, lineTops, lineHeights, pending };
+    const lineHeights: number[] = [];
+    let y = 0;
+    drafts.forEach((draft, i) => {
+      const blockWidth = Math.max(1, width - draft.geometry.left);
+      draft.paragraph.layout(blockWidth);
+      if (i > 0) y += drafts[i - 1]!.style.spaceAfter + draft.style.spaceBefore;
+      const height = draft.paragraph.getHeight();
+      const metrics = draft.paragraph.getLineMetrics();
+      const block: TextBlock = {
+        paragraph: draft.paragraph,
+        x: draft.geometry.left,
+        y,
+        width: blockWidth,
+        height,
+        start: draft.range.start,
+        end: draft.range.end,
+        shift: draft.shift,
+        style: draft.style,
+        marker: null,
+        lines: metrics,
+        firstLine: lines.length,
+      };
+      // 行高被强制成一样时每行等分这一段的高度；否则按各行自己的高度（排版引擎给的是取整过的，按总高度缩放回去）
+      const raw = metrics.map((line) => (forced ? 1 : Math.max(1, line.height)));
+      const total = raw.reduce((sum, h) => sum + h, 0) || 1;
+      let top = y;
+      metrics.forEach((line, k) => {
+        const h = (raw[k]! / total) * height;
+        const map = (index: number): number =>
+          Math.min(Math.max(block.start + index - block.shift, block.start), block.end);
+        lines.push({
+          ...line,
+          lineNumber: lines.length,
+          startIndex: map(line.startIndex),
+          endIndex: map(line.endIndex),
+          endExcludingWhitespaces: map(line.endExcludingWhitespaces),
+          endIncludingNewline: map(line.endIncludingNewline),
+          baseline: line.baseline + y,
+          left: line.left + block.x,
+        });
+        lineTops.push(top);
+        lineHeights.push(h);
+        top += h;
+      });
+      if (draft.markerText && draft.geometry.markerRight !== null) {
+        block.marker = this.marker(node, block, draft.markerText, draft.geometry.markerRight, base, resolve);
+      }
+      blocks.push(block);
+      y += height;
+    });
+    return { blocks, width, height: y, lines, lineTops, lineHeights, pending };
+  }
+
+  /** 列表符号：用这一段第一个字的样式（不带下划线、删除线），右边缘对齐到 right，基线和第一行对齐 */
+  private marker(
+    node: TextNode,
+    block: TextBlock,
+    text: string,
+    right: number,
+    base: CharacterStyle,
+    resolve: (style: CharacterStyle, text: string) => string[],
+  ): TextMarker {
+    const { ck, fonts } = this;
+    const style: CharacterStyle = {
+      ...(block.end > block.start ? styleOfChar(node, block.start) : base),
+      underline: false,
+      strikethrough: false,
+    };
+    const builder = ck.ParagraphBuilder.MakeFromFontProvider(
+      new ck.ParagraphStyle({ textStyle: this.skTextStyle(style, resolve(style, text), node.style.lineHeight) }),
+      fonts.provider,
+    );
+    builder.addText(text);
+    const paragraph = builder.build();
+    builder.delete();
+    paragraph.layout(AUTO_LAYOUT_WIDTH);
+    const width = paragraph.getMaxIntrinsicWidth();
+    const own = paragraph.getLineMetrics()[0]?.baseline ?? 0;
+    const first = block.lines[0]?.baseline ?? own;
+    return { paragraph, x: right - width, y: block.y + first - own, text, style };
   }
 
   private skTextStyle(style: CharacterStyle, families: string[], lineHeight: number) {
@@ -294,6 +502,12 @@ export class TextLayouts {
       decorationThickness: 1,
     };
   }
+}
+
+/** 字符位置所在的那一段：范围包含它的（段末算这一段）；超出时是最后一段 */
+function blockAt(blocks: readonly TextBlock[], offset: number): TextBlock {
+  for (const block of blocks) if (offset <= block.end) return block;
+  return blocks[blocks.length - 1]!;
 }
 
 /** 字符位置所在的行：起点不超过它的最后一行 */

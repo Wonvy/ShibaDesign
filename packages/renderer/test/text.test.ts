@@ -171,7 +171,7 @@ describe('TextLayouts', () => {
     await fonts.ensure(FAMILIES, TEXT, 400);
     const layout = layouts.get(node);
     expect(layout.pending).toBe(false);
-    expect(layout.paragraph.unresolvedCodepoints()).toEqual([]);
+    expect(layout.blocks[0]!.paragraph.unresolvedCodepoints()).toEqual([]);
     expect(layout.lines).toHaveLength(1);
     expect(layout.height).toBeCloseTo(56, 0);
     expect(layout.width).toBeGreaterThan(200);
@@ -267,11 +267,11 @@ describe('TextLayouts', () => {
     const { store, fonts, layouts } = setup();
     const node = addText(store, 'abc');
     await fonts.ensure(FAMILIES, 'abc', 400);
-    const first = layouts.get(node).paragraph;
+    const first = layouts.get(node);
     const moved = store.transact('move', (tx) => tx.update(node.id, { transform: [1, 0, 0, 1, 50, 60] })) as TextNode;
-    expect(layouts.get(moved).paragraph).toBe(first);
+    expect(layouts.get(moved)).toBe(first);
     const edited = store.transact('edit', (tx) => tx.update(node.id, { text: 'abcd' })) as TextNode;
-    expect(layouts.get(edited).paragraph).not.toBe(first);
+    expect(layouts.get(edited)).not.toBe(first);
   });
 
   it('粗体比常规体宽', async () => {
@@ -421,5 +421,88 @@ describe('保真外观', () => {
     const node = await frozen(env);
     env.assets.replaceAll([]);
     expect(env.appearances.paths(node)).toBeNull();
+  });
+});
+
+describe('段落样式', () => {
+  /** 一个三段的固定宽度文本 */
+  async function three(paragraphs: TextNode['paragraphs'], text = 'alpha\nbeta\ngamma') {
+    const env = setup();
+    const node = addText(env.store, text, { sizing: 'fixed', size: [400, 0], paragraphs });
+    await ensureTextFonts(env.fonts, node);
+    await Promise.resolve();
+    return { ...env, node: env.store.require(node.id) as TextNode };
+  }
+
+  it('每段单独对齐；段前段后距只加在段与段之间', async () => {
+    const { layouts, node } = await three([null, { align: 'right', spaceBefore: 10, spaceAfter: 20 }]);
+    const layout = layouts.get(node);
+    const [a, b, c] = layout.blocks;
+    expect(a!.y).toBe(0);
+    expect(b!.y).toBeCloseTo(a!.height + 10, 5);
+    expect(c!.y).toBeCloseTo(b!.y + b!.height + 20, 5);
+    expect(layout.height).toBeCloseTo(c!.y + c!.height, 5);
+    // 第二段右对齐：光标在段末时贴着右边
+    expect(layouts.caretRect(node, 10).x).toBeCloseTo(400, 0);
+    expect(layouts.caretRect(node, 0).x).toBe(0);
+    // 光标的纵坐标跟着段落挪
+    expect(layouts.caretRect(node, 11).y).toBeCloseTo(c!.y, 5);
+    // 点在两段之间的空隙里，算离得近的那一段
+    // （第二段右对齐，点在最左边就是这一段的开头）
+    expect(layouts.offsetAt(node, 0, b!.y + b!.height + 2)).toBe(6);
+    expect(layouts.offsetAt(node, 400, b!.y + b!.height + 2)).toBe(10);
+    expect(layouts.offsetAt(node, 0, c!.y - 2)).toBe(11);
+  });
+
+  it('左缩进把整段往右挪，首行缩进只挪第一行', async () => {
+    const text = 'aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj';
+    const { layouts, node } = await three([{ indent: 30, firstLine: 50 }], text);
+    const layout = layouts.get(node);
+    expect(layout.lines.length).toBeGreaterThan(1);
+    expect(layouts.caretRect(node, 0).x).toBeCloseTo(80, 0);
+    const second = layout.lines[1]!.startIndex;
+    expect(layouts.caretRect(node, second).x).toBeCloseTo(30, 0);
+    // 点在缩进出来的空白里，落到这一行的开头
+    expect(layouts.offsetAt(node, 5, 10)).toBe(0);
+    // 首行缩进不影响字符位置
+    expect(layouts.selectionRects(node, 0, 4)[0]!.x).toBeCloseTo(80, 0);
+  });
+
+  it('列表：符号和编号排在缩进出来的那一档里，文字从下一档开始；编号按段数', async () => {
+    const { layouts, node } = await three([{ list: 'number' }, { list: 'number' }, { list: 'bullet', level: 1 }]);
+    const layout = layouts.get(node);
+    const [a, b, c] = layout.blocks;
+    expect(a!.marker!.text).toBe('1.');
+    expect(b!.marker!.text).toBe('2.');
+    expect(c!.marker!.text).toBe('◦');
+    // 字号 40：第一级文字从 72 开始，符号右边缘在 52；第二级再多一档
+    expect(layouts.caretRect(node, 0).x).toBeCloseTo(72, 0);
+    expect(a!.marker!.x + a!.marker!.paragraph.getMaxIntrinsicWidth()).toBeCloseTo(52, 0);
+    expect(layouts.caretRect(node, 11).x).toBeCloseTo(144, 0);
+    // 符号的基线和第一行对齐
+    const markerBaseline = a!.marker!.y + a!.marker!.paragraph.getLineMetrics()[0]!.baseline;
+    expect(markerBaseline).toBeCloseTo(layout.lines[0]!.baseline, 3);
+  });
+
+  it('空的一段也有一行和光标位置；自动宽度按最宽的一段（连同缩进）算', async () => {
+    const env = setup();
+    const node = addText(env.store, 'ab\n\ncd', { paragraphs: [null, null, { indent: 100 }] });
+    await ensureTextFonts(env.fonts, node);
+    await Promise.resolve();
+    const fresh = env.store.require(node.id) as TextNode;
+    const layout = env.layouts.get(fresh);
+    expect(layout.lines).toHaveLength(3);
+    expect(env.layouts.caretRect(fresh, 3).y).toBeCloseTo(layout.lineTops[1]!, 5);
+    expect(layout.width).toBeGreaterThan(100 + env.layouts.caretRect(fresh, 6).x - env.layouts.caretRect(fresh, 4).x);
+  });
+
+  it('列表符号的字体也会预先加载', async () => {
+    const env = setup();
+    const node = addText(env.store, '中文', { paragraphs: [{ list: 'bullet' }] });
+    await ensureTextFonts(env.fonts, node);
+    await Promise.resolve();
+    const layout = env.layouts.get(env.store.require(node.id) as TextNode);
+    expect(layout.pending).toBe(false);
+    expect(layout.blocks[0]!.marker!.paragraph.unresolvedCodepoints()).toEqual([]);
   });
 });
