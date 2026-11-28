@@ -6,6 +6,7 @@ import { createBoolean, releaseBoolean, setBooleanOp } from './boolean';
 import { createGroup, releaseGroup } from './group';
 import { placeImage, setImageFill } from './image';
 import { createMask, releaseMask, setMaskMode } from './mask';
+import { offsetPath, outlineStroke, outlineText } from './path';
 import { flipSelection, rotateSelection } from './transform';
 import { deleteSelection, deselect, duplicate, nudge, redo, selectAll, setTool, undo } from './edit';
 import { setViewMode, zoom100, zoomIn, zoomOut, zoomToFit } from './view';
@@ -48,11 +49,15 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(updateAnimation)
     .register(removeAnimation)
     .register(moveAnimation)
-    .register(setTransition);
+    .register(setTransition)
+    .register(outlineStroke)
+    .register(offsetPath)
+    .register(outlineText);
 }
 
 export type { Command } from './command';
 export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
+export type { OffsetPathArgs } from './path';
 export { pruneAnimations, slideLayerOf } from './animation';
 export { isMaskNode } from './mask';

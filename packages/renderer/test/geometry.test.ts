@@ -218,3 +218,74 @@ describe('命中测试', () => {
     expect(geometry.hitTest(5, 5, [store.root.id], 0)?.id).toBe(node.id);
   });
 });
+
+describe('画出来的范围', () => {
+  it('描边算在内：尖角的矩形每边多半个线宽，圆头的开放路径两头多半个线宽', () => {
+    const { store, geometry } = setup();
+    const root = store.root.id;
+    const box = rect(store, root, 0, 0, 100, 60);
+    store.transact('stroke', (tx) => tx.update(box.id, { stroke: { color: rgba(0, 0, 0), width: 10 } }));
+    expect(geometry.drawnBounds(store.get(box.id)!)).toEqual({ x: -5, y: -5, w: 110, h: 70 });
+
+    const line = store.transact('line', (tx) =>
+      tx.create(
+        createNode('path', {
+          parent: root,
+          index: store.indexOnTop(root),
+          seq: 1,
+          size: [100, 0],
+          fillRule: 'nonzero',
+          subpaths: [
+            {
+              closed: false,
+              anchors: [
+                { x: 0, y: 0, inX: 0, inY: 0, outX: 0, outY: 0 },
+                { x: 100, y: 0, inX: 100, inY: 0, outX: 100, outY: 0 },
+              ],
+            },
+          ],
+          fill: null,
+          stroke: { color: rgba(0, 0, 0), width: 8, cap: 'round' },
+        }),
+      ),
+    );
+    const bounds = geometry.drawnBounds(line);
+    expect(bounds.x).toBeCloseTo(-4, 3);
+    expect(bounds.w).toBeCloseTo(108, 3);
+    expect(bounds.h).toBeCloseTo(8, 3);
+  });
+
+  it('编组是子节点画出来的范围合起来；布尔组只算自己的描边', () => {
+    const { store, geometry } = setup();
+    const group = store.transact('group', (tx) =>
+      tx.create(
+        createNode('group', {
+          parent: store.root.id,
+          index: store.indexOnTop(store.root.id),
+          seq: 1,
+          transform: translation(20, 20),
+        }),
+      ),
+    );
+    const inner = rect(store, group.id, 10, 10, 50, 50);
+    rect(store, group.id, 100, 0, 20, 20);
+    store.transact('stroke', (tx) => tx.update(inner.id, { stroke: { color: rgba(0, 0, 0), width: 4 } }));
+    expect(geometry.drawnBounds(store.get(group.id)!)).toEqual({ x: 8, y: 0, w: 112, h: 62 });
+
+    const op = store.transact('boolean', (tx) =>
+      tx.create(
+        createNode('boolean', {
+          parent: store.root.id,
+          index: store.indexOnTop(store.root.id),
+          seq: 1,
+          op: 'union',
+          fill: solid(rgba(0, 0, 0)),
+          stroke: null,
+        }),
+      ),
+    );
+    const operand = rect(store, op.id, 0, 0, 40, 40);
+    store.transact('stroke', (tx) => tx.update(operand.id, { stroke: { color: rgba(0, 0, 0), width: 20 } }));
+    expect(geometry.drawnBounds(store.get(op.id)!)).toEqual({ x: 0, y: 0, w: 40, h: 40 });
+  });
+});

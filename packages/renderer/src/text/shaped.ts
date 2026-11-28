@@ -118,7 +118,10 @@ export class TextShaper {
     const { ck, fonts } = this;
     const toUtf16 = utf8Offsets(text);
     const runs: ShapedRun[] = [];
-    for (const line of paragraph.getShapedLines()) {
+    const metrics = paragraph.getLineMetrics();
+    for (const [lineIndex, line] of paragraph.getShapedLines().entries()) {
+      // 下划线、删除线按排版引擎记的基线画。画字时基线取整到了整数（字的位置里是取整后的），画线时没有取整
+      const lineBaseline = (metrics[lineIndex]?.baseline ?? line.baseline) + dy;
       for (const run of line.runs) {
         const typeface = run.typeface as Typeface | null;
         const count = run.glyphs.length;
@@ -139,7 +142,7 @@ export class TextShaper {
         const families = [style.fontFamily.latin, style.fontFamily.cjk];
         const names = fonts.resolve(families, chars.join(''), style.fontWeight, style.italic).names;
         const face = this.identify(run, chars.join(''), names, families, style.fontWeight, style.italic);
-        const lines = style.underline || style.strikethrough ? decorationLines(ck, run, style, dx, dy) : [];
+        const lines = style.underline || style.strikethrough ? decorationLines(ck, run, style, dx, lineBaseline) : [];
         typeface?.delete();
         if (!face) return 'raster';
         const positions = Float32Array.from(run.positions.subarray(0, count * 2));
@@ -160,7 +163,11 @@ export class TextShaper {
           lines,
           // 排版结果里的 fakeItalic 在 0.42 版里没有填，按"要斜体但字体文件不是斜体"推断
           skew: run.fakeItalic || (style.italic && !face.italic) ? FAKE_ITALIC_SKEW : 0,
-          embolden: run.fakeBold ? fakeBoldWidth(run.size) : 0,
+          // fakeBold 同样没有填。排版引擎的规则：要的字重至少是 600，并且比字体文件重 200 以上
+          embolden:
+            run.fakeBold || (style.fontWeight >= 600 && style.fontWeight - face.weight >= 200)
+              ? fakeBoldWidth(run.size)
+              : 0,
         });
       }
     }
@@ -251,15 +258,18 @@ export class TextShaper {
 }
 
 /**
- * 一段字的下划线和删除线。位置和粗细取字体里记的值，没有时按字号估计，和排版引擎的做法一致：
- * 下划线在基线下方，删除线大约在小写字母的中间。线从第一个字的起点画到最后一个字的终点
+ * 一段字的下划线和删除线，和排版引擎（SkParagraph 的 Decorations）画的一样：
+ * 粗细取字体里记的下划线粗细，没有时是字号的 1/14；只有删除线时改用字体里记的删除线粗细。
+ * 线的中心在基线往下"字体里记的位置"处：下划线的位置不是正数时用粗细代替，删除线没有记位置时按字号估计（大约在小写字母中间）。
+ * 线从第一个字的起点画到最后一个字的终点
+ * @param baseline 这一行的基线，节点本地坐标（没有取整的，见 shapePiece）
  */
 function decorationLines(
   ck: CanvasKit,
   run: SkGlyphRun,
   style: CharacterStyle,
   dx: number,
-  dy: number,
+  baseline: number,
 ): DecorationLine[] {
   const count = run.glyphs.length;
   if (count === 0) return [];
@@ -268,17 +278,19 @@ function decorationLines(
   font.delete();
   const x0 = run.positions[0]! + dx;
   const x1 = run.positions[count * 2]! + dx;
-  const baseline = run.positions[1]! + dy;
+  let thickness =
+    metrics.underlineThickness && metrics.underlineThickness > 0 ? metrics.underlineThickness : run.size / 14;
+  if (style.strikethrough && !style.underline && metrics.strikeoutThickness && metrics.strikeoutThickness > 0) {
+    thickness = metrics.strikeoutThickness;
+  }
   const lines: DecorationLine[] = [];
   if (style.underline) {
-    const thickness = metrics.underlineThickness || run.size / 14;
     const position = metrics.underlinePosition && metrics.underlinePosition > 0 ? metrics.underlinePosition : thickness;
-    lines.push({ x0, x1, y: baseline + position + thickness / 2, thickness });
+    lines.push({ x0, x1, y: baseline + position, thickness });
   }
   if (style.strikethrough) {
-    const thickness = metrics.strikeoutThickness || run.size / 14;
     const position = metrics.strikeoutPosition ?? -run.size * 0.3;
-    lines.push({ x0, x1, y: baseline + position + thickness / 2, thickness });
+    lines.push({ x0, x1, y: baseline + position, thickness });
   }
   return lines;
 }

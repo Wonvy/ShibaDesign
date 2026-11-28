@@ -186,19 +186,20 @@ export class Renderer {
   /**
    * 把一个节点导出成 PNG 文件的字节。
    * @param scale 导出倍率，1 表示一个文档单位对应一个像素
-   * @param padding 在几何边界外多留出的一圈，文档单位。描边会画到边界外面，需要靠它容纳
+   * @param area 导出哪一块（本地坐标）。给数字时是在几何边界外多留出的一圈，文档单位：描边会画到边界外面，需要靠它容纳；
+   *   也可以直接给一个范围，比如 GeometryCache.drawnBounds 算出来的
    * @returns 节点为空、或导出尺寸超过上限时返回 null
    */
-  renderToPng(id: NodeId, scale: number, padding = 0): Uint8Array | null {
+  renderToPng(id: NodeId, scale: number, area: number | Rect = 0): Uint8Array | null {
     const node = this.store.get(id);
     if (!node) return null;
-    const tight = this.geometry.localBounds(node);
-    const bounds = {
-      x: tight.x - padding,
-      y: tight.y - padding,
-      w: tight.w + padding * 2,
-      h: tight.h + padding * 2,
-    };
+    let bounds: Rect;
+    if (typeof area === 'number') {
+      const tight = this.geometry.localBounds(node);
+      bounds = { x: tight.x - area, y: tight.y - area, w: tight.w + area * 2, h: tight.h + area * 2 };
+    } else {
+      bounds = area;
+    }
     if (bounds.w <= 0 || bounds.h <= 0) return null;
     if (bounds.w * scale > MAX_EXPORT_SIZE || bounds.h * scale > MAX_EXPORT_SIZE) return null;
     const raster = this.rasterize(node, bounds, scale);

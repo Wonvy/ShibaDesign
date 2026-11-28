@@ -4,6 +4,7 @@ import { AnimationPanel } from './AnimationPanel';
 import { AppearancePanel } from './AppearancePanel';
 import { AlignPanel, BooleanPanel, MaskPanel, OrderPanel } from './ArrangePanels';
 import { ImagePanel } from './ImagePanel';
+import { PathPanel } from './PathPanel';
 import { TextPanel } from './TextPanel';
 import { TransformPanel } from './TransformPanel';
 import { registerPanel } from './registry';
@@ -24,6 +25,13 @@ export function registerBuiltinPanels(): void {
     order: 30,
     when: ({ nodes }) => nodes.some((n) => n.type === 'boolean') || nodes.filter(hasShapeStyle).length >= 2,
     component: BooleanPanel,
+  });
+  registerPanel({
+    id: 'path',
+    titleKey: 'panel.path',
+    order: 33,
+    when: ({ nodes }) => nodes.some((n) => n.type === 'text' || hasShapeStyle(n)),
+    component: PathPanel,
   });
   registerPanel({
     id: 'mask',

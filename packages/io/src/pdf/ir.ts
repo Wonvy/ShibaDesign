@@ -1,4 +1,13 @@
-import type { BlendMode, Color, Matrix } from '@shiba/core';
+import {
+  PATH_CLOSE,
+  PATH_CUBIC,
+  PATH_LINE,
+  PATH_MOVE,
+  PATH_QUAD,
+  type BlendMode,
+  type Color,
+  type Matrix,
+} from '@shiba/core';
 
 /**
  * PDF 导入的中间表示。
@@ -13,15 +22,15 @@ import type { BlendMode, Color, Matrix } from '@shiba/core';
 /**
  * 路径数据：一个扁平的数字数组，每条命令是一个命令码加它的坐标。
  * 0 移动到 (x, y)；1 直线到 (x, y)；2 三次曲线 (c1x, c1y, c2x, c2y, x, y)；
- * 3 二次曲线 (cx, cy, x, y)；4 闭合。
+ * 3 二次曲线 (cx, cy, x, y)；4 闭合。和 core 的 path-data.ts 是同一种写法
  */
 export type PathData = number[];
 
-export const MOVE = 0;
-export const LINE = 1;
-export const CUBIC = 2;
-export const QUAD = 3;
-export const CLOSE = 4;
+export const MOVE = PATH_MOVE;
+export const LINE = PATH_LINE;
+export const CUBIC = PATH_CUBIC;
+export const QUAD = PATH_QUAD;
+export const CLOSE = PATH_CLOSE;
 
 /** 轴对齐的包围盒 */
 export interface Box {

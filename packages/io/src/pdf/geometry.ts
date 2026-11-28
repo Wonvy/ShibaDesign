@@ -1,5 +1,5 @@
-import type { Anchor, Matrix, Subpath } from '@shiba/core';
-import { CLOSE, CUBIC, LINE, MOVE, QUAD, type Box, type PathData } from './ir';
+import type { Matrix, Subpath } from '@shiba/core';
+import { CLOSE, LINE, MOVE, type Box, type PathData } from './ir';
 
 /** 路径数据相关的几何计算：变换、包围盒、识别矩形和椭圆、转成锚点 */
 
@@ -181,79 +181,8 @@ export function asAxisRect(data: ArrayLike<number>): Box | null {
 
 // ───────────── 转成锚点 ─────────────
 
-const corner = (x: number, y: number): Anchor => ({ x, y, inX: x, inY: y, outX: x, outY: y });
-
-/** 把路径数据转成文档模型的子路径。二次曲线升成三次曲线，只有一个点的子路径丢弃 */
-export function toSubpaths(data: ArrayLike<number>): Subpath[] {
-  const result: Subpath[] = [];
-  let anchors: Anchor[] = [];
-  let closed = false;
-  let startX = 0;
-  let startY = 0;
-
-  const flush = (): void => {
-    if (closed && anchors.length > 1) {
-      // 最后一个点回到起点时，把它和起点合成一个锚点，否则闭合处会多出一条零长度的边
-      const first = anchors[0]!;
-      const last = anchors[anchors.length - 1]!;
-      if (Math.abs(first.x - last.x) < 1e-6 && Math.abs(first.y - last.y) < 1e-6) {
-        anchors[0] = { ...first, inX: last.inX, inY: last.inY };
-        anchors.pop();
-      }
-    }
-    if (anchors.length > 1) result.push({ closed, anchors });
-    anchors = [];
-    closed = false;
-  };
-  /** 闭合之后接着画，是从这个子路径的起点重新开始 */
-  const resume = (): void => {
-    if (closed || anchors.length === 0) {
-      flush();
-      anchors.push(corner(startX, startY));
-    }
-  };
-
-  for (let i = 0; i < data.length;) {
-    const command = data[i++]!;
-    if (command === MOVE) {
-      flush();
-      startX = data[i++]!;
-      startY = data[i++]!;
-      anchors.push(corner(startX, startY));
-    } else if (command === LINE) {
-      resume();
-      anchors.push(corner(data[i++]!, data[i++]!));
-    } else if (command === CUBIC) {
-      resume();
-      const previous = anchors[anchors.length - 1]!;
-      anchors[anchors.length - 1] = { ...previous, outX: data[i++]!, outY: data[i++]! };
-      const inX = data[i++]!;
-      const inY = data[i++]!;
-      const x = data[i++]!;
-      const y = data[i++]!;
-      anchors.push({ x, y, inX, inY, outX: x, outY: y });
-    } else if (command === QUAD) {
-      resume();
-      const previous = anchors[anchors.length - 1]!;
-      const cx = data[i++]!;
-      const cy = data[i++]!;
-      const x = data[i++]!;
-      const y = data[i++]!;
-      anchors[anchors.length - 1] = {
-        ...previous,
-        outX: previous.x + ((cx - previous.x) * 2) / 3,
-        outY: previous.y + ((cy - previous.y) * 2) / 3,
-      };
-      anchors.push({ x, y, inX: x + ((cx - x) * 2) / 3, inY: y + ((cy - y) * 2) / 3, outX: x, outY: y });
-    } else if (command === CLOSE) {
-      if (anchors.length > 0) closed = true;
-    } else {
-      break;
-    }
-  }
-  flush();
-  return result;
-}
+/** 路径数据转成文档模型的子路径。挪到了 core 里（把 Skia 路径存回文档时也要用），这里接着导出，原来的引用不用改 */
+export { toSubpaths } from '@shiba/core';
 
 /** 一条三次曲线在一个坐标轴上的取值范围 */
 function cubicExtent(p0: number, p1: number, p2: number, p3: number, range: [number, number]): void {

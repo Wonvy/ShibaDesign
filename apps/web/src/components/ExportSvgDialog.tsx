@@ -7,6 +7,7 @@ import { Dialog, DialogOption } from '../ui/Dialog';
 /** 上次的选择记在浏览器里，下次打开还是它 */
 const STORAGE_KEY = 'shiba.svgExport';
 
+/** 记下来的只有画板的范围（当前画板还是全部）和文字的写法；"选中的对象"看打开时有没有选中，不记 */
 function loadChoice(): SvgExportChoice {
   const fallback: SvgExportChoice = { scope: 'current', text: 'text' };
   try {
@@ -22,13 +23,15 @@ function loadChoice(): SvgExportChoice {
 
 function saveChoice(choice: SvgExportChoice): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(choice));
+    const previous = loadChoice();
+    const scope = choice.scope === 'selection' ? previous.scope : choice.scope;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...choice, scope }));
   } catch {
     // 隐私模式下存不了，下次用默认值
   }
 }
 
-/** 导出 SVG 的选项：导出哪些画板，文字保留成文字还是转成轮廓 */
+/** 导出 SVG 的选项：导出选中的对象还是画板，文字保留成文字还是转成轮廓 */
 export function ExportSvgDialog(props: { onClose: () => void }): ReactNode {
   const editor = useEditor();
   const { t } = useTranslation();
@@ -36,6 +39,8 @@ export function ExportSvgDialog(props: { onClose: () => void }): ReactNode {
   const targets = useMemo(() => svgExportTargets(editor), [editor]);
   const [choice, setChoice] = useState<SvgExportChoice>(() => {
     const saved = loadChoice();
+    // 选中了对象时多半是想导出它们，和导出 PNG 一样
+    if (targets.selection > 0) return { ...saved, scope: 'selection' };
     if (!targets.current) return { ...saved, scope: 'all' };
     if (targets.all <= 1) return { ...saved, scope: 'current' };
     return saved;
@@ -57,6 +62,16 @@ export function ExportSvgDialog(props: { onClose: () => void }): ReactNode {
     >
       <fieldset className="dialog-field">
         <legend>{t('svgExport.scope')}</legend>
+        <DialogOption
+          name="scope"
+          checked={choice.scope === 'selection'}
+          onSelect={() => set({ scope: 'selection' })}
+          label={
+            targets.selection > 0 ? t('svgExport.selection', { count: targets.selection }) : t('svgExport.noSelection')
+          }
+          hint={t('svgExport.selectionHint')}
+          disabled={targets.selection === 0}
+        />
         <DialogOption
           name="scope"
           checked={choice.scope === 'current'}

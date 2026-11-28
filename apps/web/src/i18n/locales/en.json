@@ -44,7 +44,8 @@
       "text": "Text",
       "image": "Image adjustments",
       "animation": "Animation",
-      "mask": "Mask"
+      "mask": "Mask",
+      "path": "Path"
     },
     "slide": {
       "add": "New slide",
@@ -223,6 +224,8 @@
       "exportSvg": "Export SVG…",
       "exportPng": "Export PNG",
       "exportPng2x": "Export PNG (2×)",
+      "exportJpeg": "Export JPEG",
+      "exportJpeg2x": "Export JPEG (2×)",
       "untitled": "Untitled",
       "unsaved": "Unsaved changes",
       "discardConfirm": "This document has unsaved changes that will be lost. Continue?",
@@ -234,6 +237,7 @@
       "exportingPdf": "Exporting PDF ({{count}} pages)…",
       "exportPdfFailed": "Could not export the PDF",
       "exportingSvg": "Exporting SVG (artboards: {{count}})…",
+      "exportingSvgSelection": "Exporting SVG…",
       "exportSvgFailed": "Could not export the SVG",
       "exportingVideo": "Exporting video {{percent}}%…",
       "exportVideoFailed": "Could not export the video",
@@ -241,6 +245,7 @@
       "exportCancelled": "Export cancelled",
       "cancel": "Cancel",
       "noArtboards": "There are no artboards to export",
+      "nothingSelected": "Nothing selected to export",
       "openFailed": "Could not open the file: {{reason}}",
       "reason": {
         "notZip": "this is not a ShibaDesign file",
@@ -386,6 +391,20 @@
       "removeStop": "Remove stop",
       "onCanvas": "Drag the start and end points on the canvas (or double-click the gradient; Esc to finish)"
     },
+    "path": {
+      "outlineText": "Outline text",
+      "outlineTextHint": "Turns the text into shapes that look the same and can be edited like any path, but the text itself can no longer be edited",
+      "outlineTextFailed": "Some text could not be outlined because its glyphs couldn't be read (the font file is unavailable or unsupported)",
+      "outlineStroke": "Outline stroke",
+      "outlineStrokeHint": "Turns the stroke into a shape filled with the stroke color; a shape that also has a fill becomes a group that looks the same",
+      "offset": "Offset path…",
+      "offsetHint": "Creates a new path by growing or shrinking the shape's outline",
+      "offsetTitle": "Offset path",
+      "distance": "Distance",
+      "distanceHint": "Positive grows the shape and goes below it; negative shrinks it and goes above it",
+      "apply": "Apply",
+      "cancel": "Cancel"
+    },
     "mask": {
       "create": "Create mask",
       "createHint": "Select two or more objects; the topmost one masks the ones below it.",
@@ -400,6 +419,9 @@
     "svgExport": {
       "title": "Export SVG",
       "scope": "Range",
+      "selection": "Selected objects ({{count}})",
+      "selectionHint": "One SVG file, cropped to the selection",
+      "noSelection": "Selected objects (none selected)",
       "current": "Current artboard: {{name}}",
       "noCurrent": "Current artboard (none selected)",
       "all": "All artboards ({{count}})",

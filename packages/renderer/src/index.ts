@@ -11,3 +11,4 @@ export * from './nodes/text';
 export * from './text/fonts';
 export * from './text/layout';
 export * from './text/appearance';
+export * from './path-ops';

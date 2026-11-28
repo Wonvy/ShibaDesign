@@ -13,3 +13,4 @@ export * from './text-spans';
 export * from './paragraphs';
 export * from './stroke';
 export * from './gradient';
+export * from './path-data';

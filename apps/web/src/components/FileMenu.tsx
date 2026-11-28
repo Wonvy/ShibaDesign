@@ -6,7 +6,7 @@ import { useEditor } from '../editor/context';
 import {
   exportHtml,
   exportPdf,
-  exportPng,
+  exportImage,
   isImageFile,
   newDocument,
   openDocument,
@@ -57,8 +57,10 @@ const GROUPS: Item[][] = [
   [
     { labelKey: 'file.exportPdf', run: (editor) => void exportPdf(editor) },
     { labelKey: 'file.exportSvg', run: (_editor, actions) => actions.exportSvg() },
-    { labelKey: 'file.exportPng', keys: 'mod+shift+e', run: (editor) => void exportPng(editor, 1) },
-    { labelKey: 'file.exportPng2x', run: (editor) => void exportPng(editor, 2) },
+    { labelKey: 'file.exportPng', keys: 'mod+shift+e', run: (editor) => void exportImage(editor, 'png', 1) },
+    { labelKey: 'file.exportPng2x', run: (editor) => void exportImage(editor, 'png', 2) },
+    { labelKey: 'file.exportJpeg', run: (editor) => void exportImage(editor, 'jpeg', 1) },
+    { labelKey: 'file.exportJpeg2x', run: (editor) => void exportImage(editor, 'jpeg', 2) },
     { labelKey: 'file.exportHtml', run: (editor) => void exportHtml(editor) },
     { labelKey: 'file.exportVideo', run: (_editor, actions) => actions.exportVideo() },
   ],

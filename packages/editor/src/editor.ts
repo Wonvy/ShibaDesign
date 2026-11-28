@@ -20,6 +20,7 @@ import {
   type Point,
   type Rect,
   type SceneNode,
+  type TextNode,
   type TextStyle,
 } from '@shiba/core';
 import {
@@ -39,6 +40,8 @@ import {
 } from '@shiba/renderer';
 import type { PdfExportContext, PdfExportOptions } from '@shiba/renderer/pdf';
 import type { SvgExportOptions, SvgLayers } from '@shiba/renderer/svg';
+import type { TextOutlinePart } from '@shiba/renderer/text-outline';
+import { replaceTextWithOutlines } from './commands/path';
 import { CommandRegistry } from './commands/command';
 import { InputController } from './input';
 import { DEFAULT_BINDINGS, Keymap } from './keymap';
@@ -634,12 +637,15 @@ export class Editor {
   }
 
   /**
-   * 把一个节点导出成 PNG。编辑器未挂载、节点不存在或尺寸超过上限时返回 null。
+   * 把一个节点导出成 PNG（导出 JPEG 时先导出 PNG 再转）。编辑器未挂载、节点不存在或尺寸超过上限时返回 null。
    * @param scale 导出倍率，2 表示两倍图
    */
   async exportPng(id: NodeId, scale: number): Promise<Uint8Array | null> {
     await this.fontsReady(id);
-    return this.renderer?.renderToPng(id, scale) ?? null;
+    const node = this.store.get(id);
+    if (!node || !this.renderer) return null;
+    // 画板按自己的大小导出；别的对象按画出来的范围，描边不会被切掉一半
+    return this.renderer.renderToPng(id, scale, node.type === 'artboard' ? 0 : this.geometry.drawnBounds(node));
   }
 
   /**
@@ -672,6 +678,18 @@ export class Editor {
   }
 
   /**
+   * 把选中的几个对象导出成一个 SVG 文件的内容，画面正好框住它们。见渲染器 svg.ts 的 exportSvgNodes。
+   * ids 按从下到上的顺序给
+   */
+  async exportSvgNodes(ids: readonly NodeId[], options: SvgExportOptions): Promise<string> {
+    const [{ exportSvgNodes }] = await Promise.all([
+      import('@shiba/renderer/svg'),
+      ...ids.map((id) => this.fontsReady(id)),
+    ]);
+    return exportSvgNodes(this.exportContext(), ids, options);
+  }
+
+  /**
    * 把一批节点各自写成可以内联进网页的 SVG，网页播放器用它们当图层。用完要 dispose
    */
   async svgLayers(nodes: readonly NodeId[]): Promise<SvgLayers> {
@@ -680,6 +698,36 @@ export class Editor {
       ...nodes.map((id) => this.fontsReady(id)),
     ]);
     return SvgLayers.create(this.exportContext(), nodes);
+  }
+
+  /**
+   * 文字转轮廓：把这些文本节点换成它们转出来的路径，样子不变，之后可以当形状改。一步撤销。
+   * 要等字体加载完、取字体文件读字形，所以是异步的；读不出字形的文字（字体文件取不到、不是 TrueType 轮廓）保持原样。
+   * 返回换掉了的节点，它们的 id 不变，换完会被选中
+   */
+  async outlineText(ids: readonly NodeId[]): Promise<NodeId[]> {
+    const [{ outlineTexts }] = await Promise.all([
+      import('@shiba/renderer/text-outline'),
+      ...ids.map((id) => this.fontsReady(id)),
+    ]);
+    // 字体加载完之后再取节点：等的这段时间里可能改过
+    const nodes = ids.map((id) => this.store.get(id)).filter((node): node is TextNode => node?.type === 'text');
+    const results = await outlineTexts(
+      { ck: this.ck, layouts: this.textLayouts, fonts: this.fonts, appearances: this.textAppearances },
+      nodes,
+    );
+    const outlines = new Map<TextNode, TextOutlinePart[]>();
+    for (const node of nodes) {
+      const parts = results.get(node.id);
+      if (parts) outlines.set(node, parts);
+    }
+    try {
+      const replaced = replaceTextWithOutlines(this, outlines);
+      if (replaced.length > 0) this.select(replaced);
+      return replaced;
+    } finally {
+      for (const parts of results.values()) for (const part of parts ?? []) part.path.delete();
+    }
   }
 
   /** 导出 PDF、SVG 共用的上下文 */

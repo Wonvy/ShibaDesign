@@ -7,6 +7,8 @@ import {
   rgba,
   slides,
   solid,
+  sortByZOrder,
+  topLevelOnly,
   type DocumentData,
   type NodeId,
   type Point,
@@ -30,7 +32,7 @@ import { VideoUnsupportedError, type VideoSettings } from './present/video-setti
 import { busyToast, toast } from './ui/toast';
 
 /**
- * 文件操作：新建、打开、保存 .shiba 文件，打开 PDF，导出 PNG，导入图片。
+ * 文件操作：新建、打开、保存 .shiba 文件，打开 PDF，导出图片、PDF、SVG、网页和视频，导入图片。
  *
  * 浏览器支持"文件系统访问"接口时（Chrome、Edge），保存会直接写回用户选的那个文件；
  * 不支持时（Safari、Firefox）退回成下载一个文件。
@@ -101,6 +103,9 @@ const OPEN_TYPES: PickerType[] = [
 ];
 const MAX_PDF_BYTES = 512 * 1024 * 1024;
 const PNG_TYPES: PickerType[] = [{ description: 'PNG', accept: { 'image/png': ['.png'] } }];
+const JPEG_TYPES: PickerType[] = [{ description: 'JPEG', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } }];
+/** JPEG 的压缩质量。0.92 是浏览器默认的质量，看不出压缩的痕迹，文件比 PNG 小得多 */
+const JPEG_QUALITY = 0.92;
 const HTML_TYPES: PickerType[] = [{ description: 'HTML', accept: { 'text/html': ['.html'] } }];
 const PDF_TYPES: PickerType[] = [{ description: 'PDF', accept: { [PDF_MIME]: [PDF_EXTENSION] } }];
 const SVG_MIME = 'image/svg+xml';
@@ -320,25 +325,52 @@ export async function saveDocument(editor: Editor): Promise<void> {
 
 // ───────────── 导出 ─────────────
 
-/** 导出 PNG：选中了一个对象就导出它，否则导出当前画板 */
-export async function exportPng(editor: Editor, scale: number): Promise<void> {
+export type ImageFormat = 'png' | 'jpeg';
+
+/**
+ * PNG → JPEG，用浏览器自己的编码器（渲染引擎的默认构建里没有 JPEG 编码器）。
+ * JPEG 没有透明，透明的地方垫成白色，不然会变成黑色。编码失败时返回 null
+ */
+async function pngToJpeg(png: Uint8Array): Promise<Uint8Array | null> {
+  try {
+    const bitmap = await createImageBitmap(new Blob([toBuffer(png)], { type: 'image/png' }));
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: JPEG_QUALITY });
+    return new Uint8Array(await blob.arrayBuffer());
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+
+/** 导出 PNG 或 JPEG：选中了一个对象就导出它，否则导出当前画板 */
+export async function exportImage(editor: Editor, format: ImageFormat, scale: number): Promise<void> {
   const selected = editor.selectedNodes();
   const target = selected.length === 1 ? selected[0]! : editor.activeArtboard;
   if (!target) return;
-  const bytes = await editor.exportPng(target.id, scale);
+  const png = await editor.exportPng(target.id, scale);
+  const bytes = png && format === 'jpeg' ? await pngToJpeg(png) : png;
   if (!bytes) {
     toast(t('file.exportFailed'), 'error');
     return;
   }
-  const name = `${displayName(target, t)}${scale === 1 ? '' : `@${scale}x`}.png`;
+  const extension = format === 'jpeg' ? 'jpg' : 'png';
+  const name = `${fileSafe(displayName(target, t))}${scale === 1 ? '' : `@${scale}x`}.${extension}`;
   try {
     if (picker.showSaveFilePicker) {
-      const out = await picker.showSaveFilePicker({ suggestedName: name, types: PNG_TYPES });
+      const types = format === 'jpeg' ? JPEG_TYPES : PNG_TYPES;
+      const out = await picker.showSaveFilePicker({ suggestedName: name, types });
       await writeTo(out, bytes);
       toast(t('file.exported', { name: out.name }));
       return;
     }
-    download(name, bytes, 'image/png');
+    download(name, bytes, format === 'jpeg' ? 'image/jpeg' : 'image/png');
     toast(t('file.exported', { name }));
   } catch (error) {
     if (isAbort(error)) return;
@@ -444,24 +476,54 @@ function fileSafe(name: string): string {
 }
 
 export interface SvgExportChoice {
-  /** current：当前画板；all：全部画板，打包成 ZIP */
-  scope: 'current' | 'all';
+  /** selection：选中的对象，合成一个文件；current：当前画板；all：全部画板，打包成 ZIP */
+  scope: 'selection' | 'current' | 'all';
   /** text：保留成文字（内嵌字体子集）；outline：转成轮廓 */
   text: 'text' | 'outline';
 }
 
-/** 导出 SVG 时有几个画板可选 */
-export function svgExportTargets(editor: Editor): { current: string | null; all: number } {
+/** 导出"选中的对象"时导出哪些：选区里最外层的那些，按层序从下到上 */
+function selectionExportIds(editor: Editor): NodeId[] {
+  const { store } = editor;
+  return sortByZOrder(store, topLevelOnly(store, editor.selection))
+    .filter((node) => node.visible)
+    .map((node) => node.id);
+}
+
+/** 导出 SVG 时有哪些可选：选中了几个对象、当前画板叫什么、一共有几个画板 */
+export function svgExportTargets(editor: Editor): { selection: number; current: string | null; all: number } {
   const active = editor.activeArtboard;
-  return { current: active ? displayName(active, t) : null, all: exportOrder(editor.store).length };
+  return {
+    selection: selectionExportIds(editor).length,
+    current: active ? displayName(active, t) : null,
+    all: exportOrder(editor.store).length,
+  };
 }
 
 /**
- * 导出 SVG：每个画板一个文件，导出全部画板时打包成一个 ZIP。
+ * 导出 SVG：选中的对象合成一个文件；画板每个一个文件，导出全部画板时打包成一个 ZIP。
  * 要在用户点"导出"的那一下里调用：能直接写文件的浏览器先弹出保存位置的对话框，再慢慢导出
  */
 export async function exportSvg(editor: Editor, choice: SvgExportChoice): Promise<void> {
   const { store } = editor;
+  const nodeName = (id: NodeId): string => {
+    const node = store.get(id);
+    return fileSafe(node ? displayName(node, t) : t('file.untitled'));
+  };
+  if (choice.scope === 'selection') {
+    const ids = selectionExportIds(editor);
+    if (ids.length === 0) {
+      toast(t('file.nothingSelected'), 'error');
+      return;
+    }
+    const name = `${ids.length === 1 ? nodeName(ids[0]!) : fileSafe(documentTitle())}.svg`;
+    await saveExported(name, SVG_TYPES, SVG_MIME, t('file.exportingSvgSelection'), async () => {
+      const title = ids.length === 1 ? displayName(store.get(ids[0]!)!, t) : documentTitle();
+      return new TextEncoder().encode(await editor.exportSvgNodes(ids, { text: choice.text, title }));
+    });
+    return;
+  }
+
   const active = editor.activeArtboard;
   const boards = choice.scope === 'all' ? exportOrder(store) : active ? [active.id] : [];
   if (boards.length === 0) {
@@ -469,35 +531,50 @@ export async function exportSvg(editor: Editor, choice: SvgExportChoice): Promis
     return;
   }
   const single = boards.length === 1;
-  const boardName = (id: NodeId): string => {
-    const node = store.get(id);
-    return fileSafe(node ? displayName(node, t) : t('file.untitled'));
-  };
-  const name = single ? `${boardName(boards[0]!)}.svg` : `${fileSafe(documentTitle())}.zip`;
+  const name = single ? `${nodeName(boards[0]!)}.svg` : `${fileSafe(documentTitle())}.zip`;
+  await saveExported(
+    name,
+    single ? SVG_TYPES : ZIP_TYPES,
+    single ? SVG_MIME : ZIP_MIME,
+    t('file.exportingSvg', { count: boards.length }),
+    async () => {
+      const encoder = new TextEncoder();
+      const files: { name: string; bytes: Uint8Array }[] = [];
+      for (const [index, id] of boards.entries()) {
+        const node = store.get(id);
+        const title = node ? displayName(node, t) : undefined;
+        const svg = await editor.exportSvg(id, { text: choice.text, title });
+        // 打包的文件名前面加上序号，解压出来按幻灯片的顺序排
+        const prefix = single ? '' : `${String(index + 1).padStart(String(boards.length).length, '0')} `;
+        files.push({ name: `${prefix}${nodeName(id)}.svg`, bytes: encoder.encode(svg) });
+      }
+      return single ? files[0]!.bytes : zipFiles(files);
+    },
+  );
+}
+
+/**
+ * 导出 SVG 的公共步骤：先选保存位置（能直接写文件的浏览器），再显示"正在导出"并生成内容，最后写文件或者下载
+ */
+async function saveExported(
+  name: string,
+  types: PickerType[],
+  mime: string,
+  busyMessage: string,
+  produce: () => Promise<Uint8Array>,
+): Promise<void> {
   let out: SaveHandle | null = null;
   try {
-    if (picker.showSaveFilePicker) {
-      out = await picker.showSaveFilePicker({ suggestedName: name, types: single ? SVG_TYPES : ZIP_TYPES });
-    }
+    if (picker.showSaveFilePicker) out = await picker.showSaveFilePicker({ suggestedName: name, types });
   } catch (error) {
     if (isAbort(error)) return;
     console.error(error);
   }
 
-  const busy = busyToast(t('file.exportingSvg', { count: boards.length }));
+  const busy = busyToast(busyMessage);
   let bytes: Uint8Array;
   try {
-    const encoder = new TextEncoder();
-    const files: { name: string; bytes: Uint8Array }[] = [];
-    for (const [index, id] of boards.entries()) {
-      const node = store.get(id);
-      const title = node ? displayName(node, t) : undefined;
-      const svg = await editor.exportSvg(id, { text: choice.text, title });
-      // 打包的文件名前面加上序号，解压出来按幻灯片的顺序排
-      const prefix = single ? '' : `${String(index + 1).padStart(String(boards.length).length, '0')} `;
-      files.push({ name: `${prefix}${boardName(id)}.svg`, bytes: encoder.encode(svg) });
-    }
-    bytes = single ? files[0]!.bytes : zipFiles(files);
+    bytes = await produce();
   } catch (error) {
     console.error(error);
     busy.close();
@@ -511,7 +588,7 @@ export async function exportSvg(editor: Editor, choice: SvgExportChoice): Promis
       toast(t('file.exported', { name: out.name }));
       return;
     }
-    download(name, bytes, single ? SVG_MIME : ZIP_MIME);
+    download(name, bytes, mime);
     toast(t('file.exported', { name }));
   } catch (error) {
     if (isAbort(error)) return;

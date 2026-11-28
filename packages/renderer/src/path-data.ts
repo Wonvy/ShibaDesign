@@ -1,4 +1,4 @@
-import type { CanvasKit, Path } from 'canvaskit-wasm';
+import type { CanvasKit, FillType, Path } from 'canvaskit-wasm';
 
 /**
  * Skia 路径 → 导入器用的那种路径数据（0 移动、1 直线、2 三次、3 二次、4 闭合），导出 PDF、SVG 时用。
@@ -40,4 +40,28 @@ export function toPathData(ck: CanvasKit, path: Path): number[] {
     }
   }
   return out;
+}
+
+/** 我们的路径命令码 → Skia 的路径动词：移动 0、直线 1、二次曲线 2、三次曲线 4、闭合 5 */
+const SK_VERB = [0, 1, 4, 2, 5];
+/** 每条命令带几个点 */
+const POINTS = [1, 1, 3, 2, 0];
+
+/** 路径数据 → Skia 路径（toPathData 的反方向）。遇到不认识的命令就停在那里。返回的路径由调用方 delete */
+export function fromPathData(ck: CanvasKit, data: ArrayLike<number>, fillType?: FillType): Path {
+  const verbs: number[] = [];
+  const points: number[] = [];
+  for (let i = 0; i < data.length;) {
+    const command = data[i++]!;
+    const count = POINTS[command];
+    if (count === undefined || i + count * 2 > data.length) break;
+    verbs.push(SK_VERB[command]!);
+    for (let k = 0; k < count * 2; k++) points.push(data[i++]!);
+  }
+  const builder = new ck.PathBuilder();
+  if (verbs.length > 0) builder.addVerbsPointsWeights(verbs, points);
+  if (fillType) builder.setFillType(fillType);
+  const path = builder.detach();
+  builder.delete();
+  return path;
 }

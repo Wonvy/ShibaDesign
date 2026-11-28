@@ -33,7 +33,14 @@ import {
   type CanvasKit,
   type FontFaceSource,
 } from '../src';
-import { SVG_ID_PLACEHOLDER, SvgLayers, exportSvg, type SvgExportContext, type SvgTextMode } from '../src/svg';
+import {
+  SVG_ID_PLACEHOLDER,
+  SvgLayers,
+  exportSvg,
+  exportSvgNodes,
+  type SvgExportContext,
+  type SvgTextMode,
+} from '../src/svg';
 
 const require = createRequire(import.meta.url);
 let ck: CanvasKit;
@@ -614,6 +621,41 @@ describe('导出 SVG', () => {
     expect(css).toContain('unicode-range:U+56FE}');
     expect(css).toContain('unicode-range:U+5C42}');
     layers.dispose();
+  });
+
+  it('导出选中的对象：画面正好框住它们（描边留出余量），各自按在画布上的位置摆；父节点的不透明度不算', async () => {
+    const env = setup();
+    env.store.transact('move board', (tx) => tx.update(env.board.id, { transform: [1, 0, 0, 1, 500, 300] }));
+    const group = env.add(createNode('group', { ...env.on(), opacity: 0.5, transform: [1, 0, 0, 1, 10, 10] }));
+    const rect = env.add(
+      createNode('rect', {
+        ...env.on(group.id),
+        transform: [1, 0, 0, 1, 20, 20],
+        size: [80, 40],
+        cornerRadius: 0,
+        fill: solid(rgba(0, 0, 1)),
+        stroke: { color: rgba(0, 0, 0), width: 4 },
+      }),
+    );
+    const ellipse = env.add(
+      createNode('ellipse', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 150, 100],
+        size: [40, 40],
+        fill: solid(rgba(1, 0, 0)),
+        stroke: null,
+      }),
+    );
+    const svg = await exportSvgNodes(env.context, [rect.id, ellipse.id], { text: 'text', title: '选中' });
+    // 矩形的世界坐标是 (530, 330)，描边宽 4，四周留 3；椭圆在 (650, 400)，没有描边，四周留 1
+    expect(elements(svg, 'svg')[0]).toMatchObject({ width: '164', height: '114', viewBox: '0 0 164 114' });
+    expect(elements(svg, 'rect')).toEqual([
+      expect.objectContaining({ width: '80', height: '40', transform: 'translate(3 3)' }),
+    ]);
+    expect(elements(svg, 'ellipse')[0]).toMatchObject({ transform: 'translate(123 73)' });
+    expect(svg).not.toContain('opacity');
+    expect(svg).toContain('<title>选中</title>');
+    await expect(exportSvgNodes(env.context, [], { text: 'text' })).rejects.toThrow();
   });
 
   it('不知道怎么写成矢量的节点画成图片放进去', async () => {

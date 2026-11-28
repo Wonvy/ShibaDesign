@@ -13,6 +13,7 @@ import {
   type SceneNode,
 } from '@shiba/core';
 import type { NodeTypeRegistry, OutlineContext } from './node-types';
+import { strokeBounds } from './path-ops';
 
 interface Entry {
   node: SceneNode;
@@ -73,6 +74,30 @@ export class GeometryCache {
       entry.bounds = { x: b[0]!, y: b[1]!, w: b[2]! - b[0]!, h: b[3]! - b[1]! };
     }
     return entry.bounds;
+  }
+
+  /**
+   * 节点画出来的范围（本地坐标）：几何边界再加上描边，端点、拐角都算在内。导出图片时按它裁，描边不会被切掉一半。
+   * 编组是子节点画出来的范围合起来；蒙版组只露出蒙版范围里的东西。布尔组的运算对象自己的描边不画，不算
+   */
+  drawnBounds(node: SceneNode): Rect {
+    const def = this.registry.get(node.type);
+    if (def?.children === 'draw') {
+      const { mask } = maskParts(this.store, node);
+      if (mask?.visible) {
+        const clip = node.type === 'group' && node.mask === 'shape' ? this.localBounds(mask) : this.drawnBounds(mask);
+        return transformRect(mask.transform, clip);
+      }
+      const rects = this.store
+        .children(node.id)
+        .filter((c) => c.visible)
+        .map((c) => transformRect(c.transform, this.drawnBounds(c)));
+      return unionRects(rects) ?? EMPTY_RECT;
+    }
+    const bounds = this.localBounds(node);
+    if (!hasShapeStyle(node) || !node.stroke) return bounds;
+    const stroke = strokeBounds(this.ck, this.outlineOf(node), node.stroke);
+    return stroke ? unionRects([bounds, stroke])! : bounds;
   }
 
   /** 节点在世界坐标里的外接矩形 */

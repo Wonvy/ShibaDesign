@@ -286,6 +286,11 @@ button {
   background: var(--panel);
 }
 
+.text-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* ───────── 下拉菜单 ───────── */
 
 .menu {
@@ -1084,6 +1089,21 @@ button {
   align-items: center;
   gap: 6px;
   align-self: flex-start;
+}
+
+/* ───────── 路径面板 ───────── */
+
+.path-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.path-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
 }
 
 /* ───────── 对话框 ───────── */

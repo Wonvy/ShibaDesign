@@ -6,9 +6,13 @@ import {
   hasShapeStyle,
   invert,
   maskParts,
+  multiply,
   normalizeStops,
   radialEllipseMatrix,
   transformRect,
+  translation,
+  unionRects,
+  worldTransform,
   type ArtboardNode,
   type Color,
   type GradientFill,
@@ -43,6 +47,7 @@ import { isPlainShape, type NodeTypeDef } from './node-types';
 import { toPathData } from './path-data';
 import type { PdfExportContext } from './pdf';
 import type { LoadedFace } from './text/fonts';
+import { appendRunGlyphs } from './text/outline';
 import { TextShaper, type ShapedRun, type ShapedText } from './text/shaped';
 
 /**
@@ -87,6 +92,27 @@ export async function exportSvg(
   try {
     await exporter.prepare([board]);
     return exporter.document(board, options.title);
+  } finally {
+    exporter.dispose();
+  }
+}
+
+/**
+ * 导出选中的几个对象，返回 SVG 文件的内容。画面正好框住这些对象（描边留出余量），
+ * 每个对象按它在画布上的位置摆放：父节点的变换算进去，父节点的不透明度、混合模式、蒙版不算。
+ * 对象按给的顺序从下到上画，调用方负责排好层序。没有看得见的对象时抛出错误
+ */
+export async function exportSvgNodes(
+  context: SvgExportContext,
+  ids: readonly NodeId[],
+  options: SvgExportOptions,
+): Promise<string> {
+  const nodes = ids.map((id) => context.store.get(id)).filter((node): node is SceneNode => !!node?.visible);
+  if (nodes.length === 0) throw new Error('nothing to export');
+  const exporter = new SvgExporter(context, options.text);
+  try {
+    await exporter.prepare(nodes);
+    return exporter.selection(nodes, options.title);
   } finally {
     exporter.dispose();
   }
@@ -263,6 +289,25 @@ class SvgExporter {
     this.begin('');
     const [width, height] = board.size;
     const body = this.node(board, IDENTITY, { blend: false, root: true });
+    return this.file(width, height, body, title);
+  }
+
+  /** 选中的几个对象：画面是它们在世界坐标里的范围，原点挪到范围的左上角 */
+  selection(nodes: readonly SceneNode[], title?: string): string {
+    this.begin('');
+    const { store } = this.context;
+    const placed = nodes.map((node) => ({ node, world: worldTransform(store, node.id) }));
+    const box = unionRects(placed.map(({ node, world }) => transformRect(world, paddedBounds(this.context, node))));
+    if (!box || box.w <= 0 || box.h <= 0) throw new Error('nothing to export');
+    const shift = translation(-box.x, -box.y);
+    const body = placed.flatMap(({ node, world }) =>
+      this.node(node, multiply(shift, world), { blend: true, root: false }),
+    );
+    return this.file(box.w, box.h, body, title);
+  }
+
+  /** 一个完整的 SVG 文件：尺寸、标题、<defs>（文字模式下有内嵌字体）和内容 */
+  private file(width: number, height: number, body: SvgElement[], title?: string): string {
     const defs: SvgElement[] = [];
     const css = this.mode === 'text' ? this.fonts.css() : '';
     if (css) defs.push(svgEl('style', {}, [escapeText(css)]));
@@ -719,19 +764,12 @@ class SvgExporter {
   private outlineRun(run: ShapedRun, color: Color): SvgElement | null {
     const outlines = this.faces.get(run.face.key)?.outlines;
     if (!outlines) return null;
-    const { size, skew } = run;
-    let d = '';
-    for (let i = 0; i < run.glyphs.length; i++) {
-      const outline = outlines.get(run.glyphs[i]!);
-      if (outline.length === 0) continue;
-      const x = run.positions[i * 2]!;
-      const y = run.positions[i * 2 + 1]!;
-      // 字形坐标以字号为 1、y 向上；斜切让字的上半部分往右倒
-      d += svgPath(outline, (u, v) => [x + size * (u + skew * v), y - size * v]);
-    }
-    if (!d) return null;
+    // 和画布上的"文字转轮廓"是同一份做法
+    const data: number[] = [];
+    appendRunGlyphs(run, outlines, data);
+    if (data.length === 0) return null;
     return svgEl('path', {
-      d,
+      d: svgPath(data),
       fill: svgColor(color),
       'fill-opacity': svgOpacity(color.a),
       ...(run.embolden > 0

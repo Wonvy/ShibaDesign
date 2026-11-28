@@ -44,7 +44,8 @@
       "text": "文本",
       "image": "图片调整",
       "animation": "动画",
-      "mask": "蒙版"
+      "mask": "蒙版",
+      "path": "路径"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -223,6 +224,8 @@
       "exportSvg": "导出 SVG…",
       "exportPng": "导出 PNG",
       "exportPng2x": "导出 PNG（2 倍）",
+      "exportJpeg": "导出 JPEG",
+      "exportJpeg2x": "导出 JPEG（2 倍）",
       "untitled": "未命名",
       "unsaved": "有未保存的修改",
       "discardConfirm": "当前文档有未保存的修改，继续会丢失这些修改。要继续吗？",
@@ -234,6 +237,7 @@
       "exportingPdf": "正在导出 PDF（{{count}} 页）…",
       "exportPdfFailed": "导出 PDF 失败",
       "exportingSvg": "正在导出 SVG（{{count}} 个画板）…",
+      "exportingSvgSelection": "正在导出 SVG…",
       "exportSvgFailed": "导出 SVG 失败",
       "exportingVideo": "正在导出视频 {{percent}}%…",
       "exportVideoFailed": "导出视频失败",
@@ -241,6 +245,7 @@
       "exportCancelled": "已取消导出",
       "cancel": "取消",
       "noArtboards": "没有可以导出的画板",
+      "nothingSelected": "没有选中要导出的对象",
       "openFailed": "无法打开文件：{{reason}}",
       "reason": {
         "notZip": "这不是 ShibaDesign 文件",
@@ -386,6 +391,20 @@
       "removeStop": "删除色标",
       "onCanvas": "在画布上拖动起点和终点（双击渐变也可以，Esc 退出）"
     },
+    "path": {
+      "outlineText": "文字转轮廓",
+      "outlineTextHint": "把文字变成形状，样子不变，可以像普通路径一样修改，但不能再改字",
+      "outlineTextFailed": "有的文字读不出字形（字体文件取不到或者格式不支持），没有转成轮廓",
+      "outlineStroke": "轮廓化描边",
+      "outlineStrokeHint": "把描边变成按描边颜色填充的形状；有填充的形状会变成一个编组，样子不变",
+      "offset": "偏移路径…",
+      "offsetHint": "按形状的轮廓往外扩或往里缩，生成一条新路径",
+      "offsetTitle": "偏移路径",
+      "distance": "距离",
+      "distanceHint": "正数往外扩，放在原形状下面；负数往里缩，放在原形状上面",
+      "apply": "确定",
+      "cancel": "取消"
+    },
     "mask": {
       "create": "创建蒙版",
       "createHint": "选中两个以上的对象，最上面的那个用作蒙版，遮住下面的。",
@@ -400,6 +419,9 @@
     "svgExport": {
       "title": "导出 SVG",
       "scope": "范围",
+      "selection": "选中的对象（{{count}} 个）",
+      "selectionHint": "合成一个 SVG 文件，画面正好框住它们",
+      "noSelection": "选中的对象（没有选中对象）",
       "current": "当前画板：{{name}}",
       "noCurrent": "当前画板（没有选中画板）",
       "all": "全部画板（{{count}} 个）",
