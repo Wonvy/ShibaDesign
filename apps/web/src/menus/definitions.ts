@@ -9,6 +9,7 @@ import {
   type SceneNode,
 } from '@shiba/core';
 import {
+  exportBySettings,
   exportHtml,
   exportImage,
   exportPdf,
@@ -67,7 +68,7 @@ function clipboardItems(ctx: MenuContext, here: boolean): MenuEntry[] {
     cmd('edit.paste', undefined, { shortcut: 'mod+v' }),
     ...(here ? [cmd('edit.pasteHere', ctx.info.world)] : []),
     cmd('edit.pasteInPlace', undefined, { shortcut: 'mod+shift+v' }),
-    sub('copyAs', 'menu.copyAs', () => [cmd('edit.copyAsPng'), cmd('edit.copyAsSvg')]),
+    sub('copyAs', 'menu.copyAs', () => [cmd('edit.copyAsPng'), cmd('edit.copyAsSvg'), cmd('edit.copyAsCss')]),
     cmd('edit.copyProperties'),
     cmd('edit.pasteProperties'),
   ];
@@ -565,6 +566,8 @@ export function registerBuiltinMenus(): void {
     { id: 'file.exportJpeg2x', labelKey: 'file.exportJpeg2x', run: (c) => void exportImage(c.editor, 'jpeg', 2) },
     { id: 'file.exportHtml', labelKey: 'file.exportHtml', run: (c) => void exportHtml(c.editor) },
     { id: 'file.exportVideo', labelKey: 'file.exportVideo', run: () => openFileDialog('video') },
+    'separator',
+    { id: 'file.exportAll', labelKey: 'export.all', run: (c) => void exportBySettings(c.editor) },
   ]);
 
   registerMenu('bar.edit', (ctx) => [

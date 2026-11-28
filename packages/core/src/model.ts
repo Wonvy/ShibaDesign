@@ -2,6 +2,7 @@ import type { AutoLayout, ItemLayoutSizing } from './auto-layout';
 import type { Constraints } from './constraints';
 import type { CornerStyle } from './corners';
 import type { Effect } from './effects';
+import type { ExportSetting } from './export-settings';
 import type { LayoutGrid } from './layout-grid';
 import type { ArrowHead } from './stroke';
 /**
@@ -232,6 +233,8 @@ export interface BaseNode {
   layoutSizing?: ItemLayoutSizing;
   /** 在自动布局的画框里时不参与排列，照常按自己的位置放。省略表示参与 */
   layoutIgnore?: boolean;
+  /** 导出设置（倍率、格式、后缀），"导出全部"时按它导出。省略表示没有。见 export-settings.ts */
+  exports?: readonly ExportSetting[];
 }
 
 export interface ShapeStyle {

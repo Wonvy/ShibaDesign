@@ -63,7 +63,9 @@
       "polygon": "Polygon",
       "frame": "Frame",
       "effects": "Effects",
-      "layoutGrids": "Layout grids"
+      "layoutGrids": "Layout grids",
+      "inspect": "Inspect",
+      "export": "Export"
     },
     "slide": {
       "add": "New slide",
@@ -767,7 +769,8 @@
       "readDenied": "Can't read the clipboard. Paste with ⌘V (Ctrl+V on Windows), or allow this site to read the clipboard in your browser",
       "writeFailed": "Couldn't write to the clipboard",
       "copiedPng": "Copied as PNG",
-      "copiedSvg": "Copied as SVG code"
+      "copiedSvg": "Copied as SVG code",
+      "copiedCss": "CSS copied"
     },
     "menu": {
       "menu": "Menu",
@@ -891,7 +894,8 @@
       "moveLayers": "Move layers",
       "reorderSlides": "Reorder slides",
       "scaleUniform": "Scale proportionally",
-      "layoutGrids": "Layout grids"
+      "layoutGrids": "Layout grids",
+      "copyAsCss": "Copy as CSS"
     },
     "guide": {
       "vertical": "Vertical guide",
@@ -965,6 +969,30 @@
       "show": "Show this grid",
       "hide": "Hide this grid",
       "type": "Grid type"
+    },
+    "inspect": {
+      "empty": "Select an object to see its size, colors, fonts and CSS here.",
+      "many": "{{count}} objects selected; their CSS is listed in order.",
+      "size": "Size",
+      "position": "Position",
+      "rotation": "Rotation",
+      "colors": "Colors",
+      "typography": "Text",
+      "copy": "Copy CSS",
+      "copied": "Copied",
+      "css": "CSS"
+    },
+    "export": {
+      "none": "Nothing has export settings yet. Add some in the Export section of the properties panel.",
+      "exporting": "Exporting {{count}} files…",
+      "all": "Export all (by export settings)…",
+      "add": "Add export",
+      "scale": "Scale",
+      "format": "Format",
+      "suffix": "Suffix",
+      "suffixHint": "Leave empty to add one from the scale, like @2x",
+      "run": "Export",
+      "pdfOnlyBoards": "PDF works for artboards only"
     }
   }
 }

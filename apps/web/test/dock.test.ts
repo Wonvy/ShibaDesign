@@ -14,7 +14,7 @@ import {
   type DockLayout,
 } from '../src/dock/layout';
 
-const KNOWN = new Set(['slides', 'layers', 'assets', 'properties', 'notes', 'image']);
+const KNOWN = new Set(['slides', 'layers', 'assets', 'properties', 'inspect', 'notes', 'image']);
 const VIEW = { width: 1400, height: 900 };
 
 describe('面板布局', () => {
@@ -25,8 +25,11 @@ describe('面板布局', () => {
   });
 
   it('并进别的组；原来的组空了就去掉', () => {
-    const next = moveTab(DEFAULT_LAYOUT, 'properties', { kind: 'tabs', group: 'left-1', index: 1 });
-    expect(next.zones.left.groups[0]!.tabs).toEqual(['slides', 'properties', 'layers', 'assets']);
+    const moved = moveTab(DEFAULT_LAYOUT, 'properties', { kind: 'tabs', group: 'left-1', index: 1 });
+    expect(moved.zones.left.groups[0]!.tabs).toEqual(['slides', 'properties', 'layers', 'assets']);
+    // 右边还剩"检查"；把它也挪走，右边的组就空了，去掉
+    expect(moved.zones.right.groups[0]!.tabs).toEqual(['inspect']);
+    const next = moveTab(moved, 'inspect', { kind: 'tabs', group: 'left-1', index: 2 });
     expect(next.zones.right.groups).toEqual([]);
   });
 

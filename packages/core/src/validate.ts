@@ -1,6 +1,7 @@
 import { isAutoLayout, isItemSizing } from './auto-layout';
 import { isConstraints } from './constraints';
 import { isEffectList } from './effects';
+import { isExportList } from './export-settings';
 import { isLayoutGridList } from './layout-grid';
 import { CORNER_STYLES } from './corners';
 import { CURVE_CHANNELS, MAX_CURVE_POINTS } from './curves';
@@ -175,6 +176,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
   if (node.effects !== undefined && !isEffectList(node.effects)) fail('effects');
   if (node.layoutSizing !== undefined && !isItemSizing(node.layoutSizing)) fail('layoutSizing');
   if (node.layoutIgnore !== undefined && typeof node.layoutIgnore !== 'boolean') fail('layoutIgnore');
+  if (node.exports !== undefined && !isExportList(node.exports)) fail('exports');
 
   if ('fill' in node && node.fill !== null && !isFill(node.fill)) fail('fill');
   if ('stroke' in node && node.stroke !== null) {

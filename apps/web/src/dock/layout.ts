@@ -79,7 +79,7 @@ export const DEFAULT_LAYOUT: DockLayout = {
     right: {
       size: 284,
       collapsed: false,
-      groups: [{ id: 'right-1', tabs: ['properties'], active: 'properties', weight: 1 }],
+      groups: [{ id: 'right-1', tabs: ['properties', 'inspect'], active: 'properties', weight: 1 }],
     },
     bottom: { size: 160, collapsed: true, groups: [{ id: 'bottom-1', tabs: ['notes'], active: 'notes', weight: 1 }] },
   },
@@ -384,7 +384,7 @@ export function presetLayout(preset: WorkspacePreset, viewport: { width: number;
       { id: 'left-2', tabs: ['layers', 'assets'], active: 'layers', weight: 0.6 },
     ];
     base.zones.right.groups = [
-      { id: 'right-1', tabs: ['properties'], active: 'properties', weight: 1 },
+      { id: 'right-1', tabs: ['properties', 'inspect'], active: 'properties', weight: 1 },
       { id: 'right-2', tabs: ['inspector:animation'], active: 'inspector:animation', weight: 0.8 },
     ];
     base.zones.bottom.collapsed = false;

@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import {
+  exportFileName,
+  type ExportSetting,
+  type SceneNode,
   DocStore,
   artboards,
   referencedAssetIds,
@@ -631,6 +634,78 @@ export async function exportSvg(editor: Editor, choice: SvgExportChoice): Promis
   );
 }
 
+/** 一条导出设置导出成的文件内容；做不成（比如不是画板却要 PDF）时返回 null */
+async function renderExport(editor: Editor, node: SceneNode, setting: ExportSetting): Promise<Uint8Array | null> {
+  const title = displayName(node, t);
+  switch (setting.format) {
+    case 'png':
+      return editor.exportPng(node.id, setting.scale);
+    case 'jpeg': {
+      const png = await editor.exportPng(node.id, setting.scale);
+      return png ? pngToJpeg(png) : null;
+    }
+    case 'svg': {
+      const svg =
+        node.type === 'artboard'
+          ? await editor.exportSvg(node.id, { text: 'text', title })
+          : await editor.exportSvgNodes([node.id], { text: 'text', title });
+      return new TextEncoder().encode(svg);
+    }
+    case 'pdf':
+      return node.type === 'artboard' ? editor.exportPdf([node.id], { title }) : null;
+  }
+}
+
+const EXPORT_TYPES: Record<ExportSetting['format'], { types: PickerType[]; mime: string }> = {
+  png: { types: PNG_TYPES, mime: 'image/png' },
+  jpeg: { types: JPEG_TYPES, mime: 'image/jpeg' },
+  svg: { types: SVG_TYPES, mime: SVG_MIME },
+  pdf: { types: PDF_TYPES, mime: PDF_MIME },
+};
+
+/**
+ * 按对象上的导出设置导出（属性面板"导出"一节的按钮、文件菜单的"导出全部"）：ids 省略时是文档里所有设置了导出的对象。
+ * 只有一个文件时直接存，多个打成一个 ZIP，重名的文件后面加序号
+ */
+export async function exportBySettings(editor: Editor, ids?: readonly NodeId[]): Promise<void> {
+  const { store } = editor;
+  const nodes = (ids ? ids.map((id) => store.get(id)) : [...store.all()]).filter(
+    (n): n is SceneNode => !!n && (n.exports?.length ?? 0) > 0,
+  );
+  const jobs = nodes.flatMap((node) => node.exports!.map((setting) => ({ node, setting })));
+  if (jobs.length === 0) {
+    toast(t('export.none'), 'error');
+    return;
+  }
+  const single = jobs.length === 1 ? jobs[0]! : null;
+  const name = single
+    ? exportFileName(fileSafe(displayName(single.node, t)), single.setting)
+    : `${fileSafe(documentTitle())}.zip`;
+  const kind = single ? EXPORT_TYPES[single.setting.format] : { types: ZIP_TYPES, mime: ZIP_MIME };
+  await saveExported(
+    name,
+    kind.types,
+    kind.mime,
+    t('export.exporting', { count: jobs.length }),
+    async () => {
+      const files: { name: string; bytes: Uint8Array }[] = [];
+      const used = new Map<string, number>();
+      for (const { node, setting } of jobs) {
+        const bytes = await renderExport(editor, node, setting);
+        if (!bytes) continue;
+        let fileName = exportFileName(fileSafe(displayName(node, t)), setting);
+        const seen = used.get(fileName) ?? 0;
+        used.set(fileName, seen + 1);
+        if (seen > 0) fileName = fileName.replace(/(\.[a-z]+)$/, ` (${seen + 1})$1`);
+        files.push({ name: fileName, bytes });
+      }
+      if (files.length === 0) throw new Error('没有导出任何文件');
+      return single ? files[0]!.bytes : zipFiles(files);
+    },
+    t('file.exportFailed'),
+  );
+}
+
 /**
  * 导出 SVG 的公共步骤：先选保存位置（能直接写文件的浏览器），再显示"正在导出"并生成内容，最后写文件或者下载
  */
@@ -640,6 +715,7 @@ async function saveExported(
   mime: string,
   busyMessage: string,
   produce: () => Promise<Uint8Array>,
+  failMessage = t('file.exportSvgFailed'),
 ): Promise<void> {
   let out: SaveHandle | null = null;
   try {
@@ -656,7 +732,7 @@ async function saveExported(
   } catch (error) {
     console.error(error);
     busy.close();
-    toast(t('file.exportSvgFailed'), 'error');
+    toast(failMessage, 'error');
     return;
   }
   busy.close();

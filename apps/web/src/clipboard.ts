@@ -12,6 +12,7 @@ import {
 } from '@shiba/editor';
 import { isDocumentFile, isImageFile, openDroppedDocument, placeImageFiles } from './files';
 import { i18n } from './i18n';
+import { selectionCss } from './inspect';
 import { toast } from './ui/toast';
 
 /**
@@ -191,6 +192,16 @@ export function installClipboard(editor: Editor): () => void {
         navigator.clipboard
           .write([new ClipboardItem({ 'image/png': selectionPng(e, ids) })])
           .then(() => toast(t('clipboard.copiedPng')))
+          .catch(() => toast(t('clipboard.writeFailed'), 'error'));
+      },
+    })
+    .register({
+      id: 'edit.copyAsCss',
+      enabled: hasSelection,
+      run(e) {
+        navigator.clipboard
+          .writeText(selectionCss(e))
+          .then(() => toast(t('clipboard.copiedCss')))
           .catch(() => toast(t('clipboard.writeFailed'), 'error'));
       },
     })

@@ -3,6 +3,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ImageFill, NodeId, SceneNode } from '@shiba/core';
 import { AssetsPanel } from '../components/AssetsPanel';
+import { InspectPanel } from '../components/InspectPanel';
 import { Inspector } from '../components/Inspector';
 import { LayersPanel } from '../components/LayersPanel';
 import { SlideStrip } from '../components/SlideStrip';
@@ -12,7 +13,7 @@ import { SlideNotes } from '../panels/AnimationPanel';
 import { ImagePanel } from '../panels/ImagePanel';
 import { registerDockPanel, registerDockPanelFactory } from './registry';
 
-/** 注册内置的面板：幻灯片、图层、资源、属性、备注、图片调整，以及属性栏里弹出来的各个分区 */
+/** 注册内置的面板：幻灯片、图层、资源、属性、检查、备注、图片调整，以及属性栏里弹出来的各个分区 */
 export function registerBuiltinDockPanels(): void {
   registerDockPanel({ id: 'slides', titleKey: 'panel.slides', component: SlideStrip, defaultPlace: { zone: 'left' } });
   registerDockPanel({ id: 'layers', titleKey: 'panel.layers', component: LayersPanel, defaultPlace: { zone: 'left' } });
@@ -21,6 +22,12 @@ export function registerBuiltinDockPanels(): void {
     id: 'properties',
     titleKey: 'panel.properties',
     component: Inspector,
+    defaultPlace: { zone: 'right' },
+  });
+  registerDockPanel({
+    id: 'inspect',
+    titleKey: 'panel.inspect',
+    component: InspectPanel,
     defaultPlace: { zone: 'right' },
   });
   registerDockPanel({ id: 'notes', titleKey: 'panel.notes', component: NotesPanel, defaultPlace: { zone: 'bottom' } });

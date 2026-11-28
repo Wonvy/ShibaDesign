@@ -3116,3 +3116,106 @@ button.template-card:hover,
 .layout-toggle {
   justify-content: space-between;
 }
+
+/* ───────── 检查、导出设置 ───────── */
+
+.inspect {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  font-size: 12px;
+}
+
+.inspect-name {
+  font-weight: 600;
+}
+
+.inspect-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.inspect-list dt {
+  color: var(--text-dim);
+}
+
+.inspect-list dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.inspect-colors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inspect-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.inspect-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.inspect-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-dim);
+}
+
+.inspect-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+}
+
+.inspect-code {
+  margin: 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+
+.export-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.export-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 72px auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.export-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.export-actions .text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

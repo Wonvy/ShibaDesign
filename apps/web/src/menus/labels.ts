@@ -30,6 +30,7 @@ export const COMMAND_LABELS: Record<string, string> = {
   'edit.pasteHere': 'menu.pasteHere',
   'edit.copyAsPng': 'menu.copyAsPng',
   'edit.copyAsSvg': 'menu.copyAsSvg',
+  'edit.copyAsCss': 'menu.copyAsCss',
   'edit.copyProperties': 'menu.copyProperties',
   'edit.pasteProperties': 'menu.pasteProperties',
   'edit.duplicate': 'menu.duplicate',

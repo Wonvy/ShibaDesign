@@ -5,6 +5,7 @@ import { AppearancePanel } from './AppearancePanel';
 import { AlignPanel, BooleanPanel, MaskPanel, OrderPanel } from './ArrangePanels';
 import { ComponentPanel, showComponentPanel } from './ComponentPanel';
 import { EffectsPanel } from './EffectsPanel';
+import { ExportPanel } from './ExportPanel';
 import { FramePanel } from './FramePanel';
 import { ImagePanel } from './ImagePanel';
 import { LayoutGridPanel } from './LayoutGridPanel';
@@ -98,6 +99,7 @@ export function registerBuiltinPanels(): void {
     when: ({ nodes }) => nodes.some((n) => 'fill' in n && n.fill?.type === 'image'),
     component: ImagePanel,
   });
+  registerPanel({ id: 'export', titleKey: 'panel.export', order: 65, component: ExportPanel });
   registerPanel({
     id: 'animation',
     titleKey: 'panel.animation',

@@ -63,7 +63,9 @@
       "polygon": "多边形",
       "frame": "画框",
       "effects": "效果",
-      "layoutGrids": "版面网格"
+      "layoutGrids": "版面网格",
+      "inspect": "检查",
+      "export": "导出"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -767,7 +769,8 @@
       "readDenied": "读不到剪贴板。请用 ⌘V（Windows 上是 Ctrl+V）粘贴，或者在浏览器里允许这个网站读取剪贴板",
       "writeFailed": "写入剪贴板失败",
       "copiedPng": "已复制为 PNG",
-      "copiedSvg": "已复制为 SVG 代码"
+      "copiedSvg": "已复制为 SVG 代码",
+      "copiedCss": "已复制 CSS"
     },
     "menu": {
       "menu": "菜单",
@@ -891,7 +894,8 @@
       "moveLayers": "移动图层",
       "reorderSlides": "调整幻灯片顺序",
       "scaleUniform": "等比缩放",
-      "layoutGrids": "版面网格"
+      "layoutGrids": "版面网格",
+      "copyAsCss": "复制为 CSS"
     },
     "guide": {
       "vertical": "竖辅助线",
@@ -965,6 +969,30 @@
       "show": "显示这个网格",
       "hide": "暂时关掉这个网格",
       "type": "网格类型"
+    },
+    "inspect": {
+      "empty": "选中一个对象，这里显示它的尺寸、颜色、字体和 CSS。",
+      "many": "选中了 {{count}} 个对象，CSS 按顺序列出。",
+      "size": "尺寸",
+      "position": "位置",
+      "rotation": "旋转",
+      "colors": "颜色",
+      "typography": "文字",
+      "copy": "复制 CSS",
+      "copied": "已复制",
+      "css": "CSS"
+    },
+    "export": {
+      "none": "没有设置了导出的对象。先在属性面板的“导出”一节里加导出设置。",
+      "exporting": "正在导出 {{count}} 个文件…",
+      "all": "导出全部（按导出设置）…",
+      "add": "添加导出",
+      "scale": "倍率",
+      "format": "格式",
+      "suffix": "后缀",
+      "suffixHint": "空着时按倍率自动加，比如 @2x",
+      "run": "导出",
+      "pdfOnlyBoards": "PDF 只能导出画板"
     }
   }
 }
