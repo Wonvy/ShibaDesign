@@ -23,3 +23,4 @@ export * from './layouts';
 export * from './corners';
 export * from './polygon';
 export * from './arrows';
+export * from './constraints';

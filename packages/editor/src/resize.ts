@@ -1,13 +1,17 @@
 import {
+  DEFAULT_CONSTRAINTS,
   applyToPoint,
   around,
+  constrainAxis,
   descendants,
   invert,
   multiply,
   parentWorldTransform,
   rotation,
   scaling,
+  transformRect,
   translation,
+  unionRects,
   type DocStore,
   type Matrix,
   type NodeId,
@@ -29,6 +33,14 @@ export const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const;
 export type Handle = (typeof HANDLES)[number];
 
 const MIN_SIZE = 1;
+
+/**
+ * 画框、画板改大小时里面的东西怎么办：
+ * constraints 按各自的约束跟着变（默认靠左靠上，也就是不动）；
+ * fixed 都不动（拖控制柄时按住 ⌘）；
+ * scale 像编组一样整体按比例缩放（等比缩放工具 K）
+ */
+export type ContentMode = 'constraints' | 'fixed' | 'scale';
 
 /** 控制柄在外接矩形上的位置，结果是 0–1 的比例 */
 export function handleAnchor(handle: Handle): Point {
@@ -99,7 +111,8 @@ function resizeFromCenter(start: Rect, handle: Handle, pointer: Point, keepAspec
 }
 
 /**
- * 变换开始时记下的原始状态：选中的节点，以及编组和布尔组内部的所有后代。
+ * 变换开始时记下的原始状态：选中的节点，以及编组、布尔组、画框、画板内部的所有后代
+ * （画框和画板改大小时里面的东西按约束跟着变，也要从原样算）。
  * 自动宽度的文本在文档里不存宽度，所以要靠 textWidth 把排版出来的实际宽度补上。
  */
 export function captureOriginals(
@@ -115,7 +128,9 @@ export function captureOriginals(
     const node = store.get(id);
     if (!node) continue;
     add(node);
-    if (node.type === 'group' || node.type === 'boolean') descendants(store, id).forEach(add);
+    const container =
+      node.type === 'group' || node.type === 'boolean' || node.type === 'frame' || node.type === 'artboard';
+    if (container) descendants(store, id).forEach(add);
   }
   return out;
 }
@@ -132,6 +147,7 @@ export function resizeLocal(
   id: NodeId,
   oldBox: Rect,
   newBox: Rect,
+  mode: ContentMode = 'constraints',
 ): void {
   const orig = originals.get(id);
   if (!orig) return;
@@ -143,7 +159,7 @@ export function resizeLocal(
   const dx = target.x - oldBox.x * sx;
   const dy = target.y - oldBox.y * sy;
   tx.update(id, { transform: multiply(orig.transform, translation(dx, dy)) });
-  scaleContent(tx, store, originals, id, sx, sy);
+  scaleContent(tx, store, originals, id, sx, sy, mode);
 }
 
 /**
@@ -158,6 +174,7 @@ export function resizeInWorld(
   ids: readonly NodeId[],
   from: Rect,
   to: Rect,
+  mode: ContentMode = 'constraints',
 ): void {
   const sx = from.w > 0 ? to.w / from.w : 1;
   const sy = from.h > 0 ? to.h / from.h : 1;
@@ -172,7 +189,7 @@ export function resizeInWorld(
     const t = orig.transform;
     tx.update(id, { transform: [t[0], t[1], t[2], t[3], px, py] });
     const [fx, fy] = localFactors(world, sx, sy);
-    scaleContent(tx, store, originals, id, fx, fy);
+    scaleContent(tx, store, originals, id, fx, fy, mode);
   }
 }
 
@@ -231,6 +248,7 @@ function scaleContent(
   id: NodeId,
   sx: number,
   sy: number,
+  mode: ContentMode,
 ): void {
   const orig = originals.get(id);
   if (!orig) return;
@@ -239,11 +257,28 @@ function scaleContent(
     case 'rect':
     case 'ellipse':
     case 'polygon':
-    case 'artboard':
-    case 'frame':
-      // 画板、画框只改自己的大小，里面的内容不跟着缩放（以后按约束跟着变，见 interaction-plan.md 的 UI-2）
       tx.update(id, { size: [w * sx, h * sy] });
       break;
+    case 'artboard':
+    case 'frame': {
+      // 画板、画框改自己的大小；里面的东西按约束跟着变，或者不动，或者整体按比例缩放
+      const size: [number, number] = [w * sx, h * sy];
+      tx.update(id, { size });
+      if (mode === 'fixed') break;
+      for (const child of store.children(id)) {
+        const c = originals.get(child.id);
+        if (!c) continue;
+        if (mode === 'scale') {
+          const t = c.transform;
+          tx.update(child.id, { transform: [t[0], t[1], t[2], t[3], t[4] * sx, t[5] * sy] });
+          const [cx, cy] = localFactors(t, sx, sy);
+          scaleContent(tx, store, originals, child.id, cx, cy, mode);
+        } else {
+          constrainChild(tx, store, originals, c, orig.size, size, mode);
+        }
+      }
+      break;
+    }
     case 'path':
       tx.update(id, {
         size: [w * sx, h * sy],
@@ -282,9 +317,51 @@ function scaleContent(
         const t = c.transform;
         tx.update(child.id, { transform: [t[0], t[1], t[2], t[3], t[4] * sx, t[5] * sy] });
         const [cx, cy] = localFactors(t, sx, sy);
-        scaleContent(tx, store, originals, child.id, cx, cy);
+        scaleContent(tx, store, originals, child.id, cx, cy, mode);
       }
       break;
+  }
+}
+
+/** 节点在父坐标里的外接框，按原样算：编组、布尔组是里面的东西合起来的范围，其余是自己的盒子 */
+function boxInParent(store: DocStore, originals: ReadonlyMap<NodeId, SceneNode>, node: SceneNode): Rect {
+  if (node.type === 'group' || node.type === 'boolean') {
+    const inner = store
+      .children(node.id)
+      .filter((c) => c.visible)
+      .map((c) => boxInParent(store, originals, originals.get(c.id) ?? c));
+    return transformRect(node.transform, unionRects(inner) ?? { x: 0, y: 0, w: 0, h: 0 });
+  }
+  return transformRect(node.transform, { x: 0, y: 0, w: node.size[0], h: node.size[1] });
+}
+
+/**
+ * 容器从 oldSize 变成 newSize 时，按子节点的约束挪它、改它的大小（见 core 的 constraints.ts）。
+ * 外接框在两个方向上各自按约束算出新的起点和长度，再像多选缩放那样换算到子节点上（转过角度的按自己的方向近似）
+ */
+function constrainChild(
+  tx: Transaction,
+  store: DocStore,
+  originals: ReadonlyMap<NodeId, SceneNode>,
+  child: SceneNode,
+  oldSize: readonly [number, number],
+  newSize: readonly [number, number],
+  mode: ContentMode,
+): void {
+  const constraints = child.constraints ?? DEFAULT_CONSTRAINTS;
+  if (constraints.h === 'left' && constraints.v === 'top') return;
+  const box = boxInParent(store, originals, child);
+  const h = constrainAxis(constraints.h, box.x, box.w, oldSize[0], newSize[0]);
+  const v = constrainAxis(constraints.v, box.y, box.h, oldSize[1], newSize[1]);
+  const sx = box.w > 0 ? h.length / box.w : 1;
+  const sy = box.h > 0 ? v.length / box.h : 1;
+  const t = child.transform;
+  tx.update(child.id, {
+    transform: [t[0], t[1], t[2], t[3], h.start + (t[4] - box.x) * sx, v.start + (t[5] - box.y) * sy],
+  });
+  if (sx !== 1 || sy !== 1) {
+    const [fx, fy] = localFactors(t, sx, sy);
+    scaleContent(tx, store, originals, child.id, fx, fy, mode);
   }
 }
 

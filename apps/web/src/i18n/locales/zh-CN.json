@@ -163,7 +163,18 @@
       "sides": "边数",
       "points": "角数",
       "innerRatio": "内径",
-      "clipContent": "裁剪内容"
+      "clipContent": "裁剪内容",
+      "constraints": "约束",
+      "constraintH": "水平约束",
+      "constraintV": "垂直约束",
+      "constraint_left": "靠左",
+      "constraint_right": "靠右",
+      "constraint_leftRight": "左右",
+      "constraint_center": "居中",
+      "constraint_scale": "按比例",
+      "constraint_top": "靠上",
+      "constraint_bottom": "靠下",
+      "constraint_topBottom": "上下"
     },
     "blend": {
       "normal": "正常",

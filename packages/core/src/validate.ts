@@ -1,3 +1,4 @@
+import { isConstraints } from './constraints';
 import { CORNER_STYLES } from './corners';
 import { CURVE_CHANNELS, MAX_CURVE_POINTS } from './curves';
 import { MAX_GRADIENT_STOPS } from './gradient';
@@ -167,6 +168,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
   if (typeof node.visible !== 'boolean' || typeof node.locked !== 'boolean') fail('visible/locked');
   if (node.source !== undefined && typeof node.source !== 'string') fail('source');
   if (node.overrides !== undefined && !isStringList(node.overrides, 100)) fail('overrides');
+  if (node.constraints !== undefined && !isConstraints(node.constraints)) fail('constraints');
 
   if ('fill' in node && node.fill !== null && !isFill(node.fill)) fail('fill');
   if ('stroke' in node && node.stroke !== null) {

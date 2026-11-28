@@ -90,7 +90,7 @@ export function scaleUniform(
     w: from.w * k,
     h: from.h * k,
   };
-  resizeInWorld(tx, store, originals, ids, from, to);
+  resizeInWorld(tx, store, originals, ids, from, to, 'scale');
   for (const [id, original] of originals) {
     const current = tx.get(id);
     if (!current) continue;

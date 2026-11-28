@@ -2933,3 +2933,50 @@ button.template-card:hover,
   margin: 0;
   accent-color: var(--accent);
 }
+
+/* ───────── 约束 ───────── */
+
+.constraint-fields {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.constraint-diagram {
+  width: 56px;
+  height: 56px;
+  flex: none;
+}
+
+.constraint-frame {
+  fill: var(--panel-2);
+  stroke: var(--border);
+}
+
+.constraint-box {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-dasharray: 2 2;
+}
+
+.constraint-bar {
+  fill: var(--border);
+  cursor: pointer;
+}
+
+.constraint-bar:hover {
+  fill: var(--text-dim);
+}
+
+.constraint-bar.is-on {
+  fill: var(--accent);
+}
+
+.constraint-selects {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}

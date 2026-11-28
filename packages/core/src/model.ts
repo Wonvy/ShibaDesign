@@ -1,3 +1,4 @@
+import type { Constraints } from './constraints';
 import type { CornerStyle } from './corners';
 import type { ArrowHead } from './stroke';
 /**
@@ -220,6 +221,8 @@ export interface BaseNode {
   source?: NodeId;
   /** 实例里的副本上改过的属性名：同步时保留自己的值，不跟主组件走。省略表示没改过 */
   overrides?: readonly string[];
+  /** 在画框、画板里时：容器改大小时自己怎么跟着变。省略是靠左靠上（不动）。见 constraints.ts */
+  constraints?: Constraints;
 }
 
 export interface ShapeStyle {

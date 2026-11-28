@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { artboardOf, rotationOf, topLevelOnly } from '@shiba/core';
 import { captureOriginals, resizeInWorld, resizeLocal, translateNode } from '@shiba/editor';
 import { IconButton, NumberField } from '../ui/controls';
+import { ConstraintFields, constrainable } from './ConstraintFields';
 import { CornerFields, roundable } from './CornerFields';
 import type { PanelProps } from './registry';
 
@@ -114,6 +115,7 @@ export function TransformPanel({ editor, nodes }: PanelProps): ReactNode {
         )}
       </div>
       {corners && <CornerFields editor={editor} nodes={corners} />}
+      {constrainable(editor, nodes) && <ConstraintFields editor={editor} nodes={nodes} />}
       {frame.rotatable && (
         <div className="button-row transform-actions">
           <IconButton title={t('transform.rotate90')} onClick={() => editor.commands.run('arrange.rotate', 90)}>

@@ -44,7 +44,7 @@ describe('画框工具', () => {
     expect(slides(s.store).at(-1)?.id).toBe(board.id);
   });
 
-  it('画框里画的形状放进画框；画框改大小时里面的东西不动', () => {
+  it('画框里画的形状放进画框；等比缩放画框时里面的东西整体按比例变', () => {
     const s = scene(ck);
     const frame = addFrame(s);
     s.editor.setTool('rect');
@@ -54,9 +54,9 @@ describe('画框工具', () => {
     expect(s.store.get(rect)?.transform).toEqual(translation(50, 50));
     s.editor.select([frame]);
     s.editor.commands.run('arrange.scale', 200);
-    // 等比缩放画框只改它自己（里面的东西以后按约束跟着变）
     expect(s.store.get(frame)?.size).toEqual([600, 400]);
-    expect(s.store.get(rect)?.size).toEqual([50, 50]);
+    expect(s.store.get(rect)?.size).toEqual([100, 100]);
+    expect(s.store.get(rect)?.transform).toEqual(translation(100, 100));
   });
 });
 

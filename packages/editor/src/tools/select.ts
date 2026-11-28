@@ -525,7 +525,9 @@ export function createSelectTool(): Tool {
         const pointer = snapResizePointer(editor, drag.targets, drag.handle, e);
         const [lx, ly] = applyToPoint(drag.toLocal, pointer.x, pointer.y);
         const next = resizeBounds(box, drag.handle, { x: lx, y: ly }, e.shift, e.alt);
-        store.transact('resize', (tx) => resizeLocal(tx, store, originals, id, box, next), { mergeKey: key });
+        // 按住 ⌘：画框、画板里的东西不按约束跟着变
+        const mode = e.mod ? 'fixed' : 'constraints';
+        store.transact('resize', (tx) => resizeLocal(tx, store, originals, id, box, next, mode), { mergeKey: key });
         return;
       }
 
@@ -533,7 +535,10 @@ export function createSelectTool(): Tool {
         const { ids, originals, from, key } = drag;
         const pointer = snapResizePointer(editor, drag.targets, drag.handle, e);
         const to = resizeBounds(from, drag.handle, pointer, e.shift, e.alt);
-        store.transact('resize', (tx) => resizeInWorld(tx, store, originals, ids, from, to), { mergeKey: key });
+        const mode = e.mod ? 'fixed' : 'constraints';
+        store.transact('resize', (tx) => resizeInWorld(tx, store, originals, ids, from, to, mode), {
+          mergeKey: key,
+        });
         return;
       }
 
