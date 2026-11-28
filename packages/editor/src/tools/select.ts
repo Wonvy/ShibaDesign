@@ -643,6 +643,12 @@ export function createSelectTool(): Tool {
         editor.commands.run('text.edit', { id: hit.id, world: e.world });
         return;
       }
+      // 双击钢笔路径：改它的锚点
+      if (hit.type === 'path' && !hit.locked) {
+        editor.select([hit.id]);
+        editor.setTool('direct');
+        return;
+      }
       // 双击编组：进入这个组，选中鼠标下面的那个成员。之后单击组里的其他成员也是选成员。
       // 蒙版组也一样：蒙版本身点不中，选中的是被遮住的内容，拖动它时蒙版不动
       if (hit.type === 'group') {

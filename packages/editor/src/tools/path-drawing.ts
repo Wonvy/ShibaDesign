@@ -20,6 +20,12 @@ export interface PathDrawingOptions {
   finish(editor: Editor, anchors: Anchor[], closed: boolean): void;
   /** 什么都没画（不到两个锚点）就结束了 */
   cancel?(editor: Editor): void;
+  /**
+   * 还没开始画的时候按下：返回 true 表示这一下已经处理了（钢笔在选中的路径上加、删锚点），不再开始画新路径
+   */
+  editExisting?(editor: Editor, e: PointerInfo): boolean;
+  /** 还没开始画时鼠标停在这里的指针样子；null 用默认的十字 */
+  hoverCursor?(editor: Editor, e: PointerInfo): string | null;
 }
 
 const corner = (p: Point): Anchor => ({ x: p.x, y: p.y, inX: p.x, inY: p.y, outX: p.x, outY: p.y });
@@ -82,6 +88,7 @@ export function createPathDrawingTool(options: PathDrawingOptions): Tool {
     },
 
     onPointerDown(e, editor) {
+      if (anchors.length === fixed && options.editExisting?.(editor, e)) return;
       const first = anchors[0];
       const last = anchors[anchors.length - 1];
       if (first && anchors.length >= 2 && isNear(editor, first, e)) {
@@ -105,6 +112,9 @@ export function createPathDrawingTool(options: PathDrawingOptions): Tool {
     },
 
     onPointerMove(e, editor) {
+      if (!e.down && anchors.length === fixed && options.hoverCursor) {
+        editor.setCursor(options.hoverCursor(editor, e) ?? 'crosshair');
+      }
       hover = e.world;
       const last = anchors[anchors.length - 1];
       if (dragging && e.down && last) {

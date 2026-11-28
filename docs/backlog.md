@@ -95,7 +95,7 @@
 动作路径（直线、弧线、圆形、自定义）、在画布上拖锚点和控制柄、多条路径接着走已经有了（见 architecture.md"动画"一节），还可以补：
 
 - 沿路径转向：对象跟着路径的切线方向转。在采样时顺带算切线角度，写进最内层元素的旋转关键帧（`core/src/animation.ts` 的 `motionFrames`）。
-- 画布上的路径编辑：加锚点、删锚点、尖角和平滑互相切换、整条路径拖动、Shift 吸附方向（`editor/src/motion-handles.ts`、`tools/select.ts`）。普通钢笔路径也还没有锚点编辑，可以一起做成一个直接选择工具。
+- 画布上的路径编辑：加锚点、删锚点、尖角和平滑互相切换、整条路径拖动、Shift 吸附方向（`editor/src/motion-handles.ts`、`tools/select.ts`）。普通钢笔路径的直接选择工具已经有了（`editor/src/tools/direct-select.ts`、`path-edit.ts`），动作路径可以接过去用。
 - 在终点画一个半透明的对象，看得出停在哪里（PPT 有）；在画布上直接预览一条动画。
 - 平滑切换时，对象被动作路径挪过的位置不算：下一页从它原来的位置补间。
 

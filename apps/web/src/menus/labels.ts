@@ -5,6 +5,7 @@
  */
 export const COMMAND_LABELS: Record<string, string> = {
   'tool.set|"select"': 'tool.select',
+  'tool.set|"direct"': 'tool.direct',
   'tool.set|"hand"': 'tool.hand',
   'tool.set|"rect"': 'tool.rect',
   'tool.set|"ellipse"': 'tool.ellipse',

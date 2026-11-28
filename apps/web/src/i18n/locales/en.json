@@ -17,7 +17,8 @@
       "rect": "Rectangle",
       "ellipse": "Ellipse",
       "pen": "Pen",
-      "text": "Text"
+      "text": "Text",
+      "direct": "Direct selection (edit anchors)"
     },
     "action": {
       "undo": "Undo",

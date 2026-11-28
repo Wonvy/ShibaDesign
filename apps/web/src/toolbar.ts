@@ -1,4 +1,4 @@
-import { Circle, Hand, MousePointer2, PenTool, Square, Type, type LucideIcon } from 'lucide-react';
+import { Circle, Hand, MousePointer, MousePointer2, PenTool, Square, Type, type LucideIcon } from 'lucide-react';
 
 /**
  * 顶栏上的工具按钮。
@@ -13,6 +13,7 @@ export interface ToolbarItem {
 
 export const toolbarItems: ToolbarItem[] = [
   { tool: 'select', icon: MousePointer2, labelKey: 'tool.select' },
+  { tool: 'direct', icon: MousePointer, labelKey: 'tool.direct' },
   { tool: 'hand', icon: Hand, labelKey: 'tool.hand' },
   { tool: 'rect', icon: Square, labelKey: 'tool.rect' },
   { tool: 'ellipse', icon: Circle, labelKey: 'tool.ellipse' },

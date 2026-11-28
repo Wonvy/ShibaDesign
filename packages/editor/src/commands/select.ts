@@ -22,17 +22,22 @@ export const selectParent: Command = {
   },
 };
 
-/** 选择子级（↵）：选中编组里的东西；选中的是一个文本时开始编辑它 */
+/** 选择子级（↵）：选中编组里的东西；选中的是一个文本时开始编辑它，是一条路径时改它的锚点 */
 export const selectChildren: Command = {
   id: 'select.children',
   enabled: (editor) => {
     const nodes = editor.selectedNodes();
-    return (nodes.length === 1 && nodes[0]!.type === 'text') || nodes.some(isContainer);
+    const single = nodes.length === 1 ? nodes[0]! : null;
+    return single?.type === 'text' || single?.type === 'path' || nodes.some(isContainer);
   },
   run(editor) {
     const nodes = editor.selectedNodes();
     if (nodes.length === 1 && nodes[0]!.type === 'text') {
       editor.commands.run('text.edit', { id: nodes[0]!.id });
+      return;
+    }
+    if (nodes.length === 1 && nodes[0]!.type === 'path') {
+      editor.setTool('direct');
       return;
     }
     const ids = nodes.flatMap((n) => (isContainer(n) ? editor.store.children(n.id).map((c) => c.id) : [n.id]));
