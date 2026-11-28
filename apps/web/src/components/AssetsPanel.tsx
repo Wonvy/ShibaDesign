@@ -14,6 +14,7 @@ import {
 } from '@shiba/core';
 import { selectionColor, type Editor } from '@shiba/editor';
 import { useEditor, useEditorState, useSelectedNodes } from '../editor/context';
+import { openPanelMenu } from '../menus/context';
 import { displayName } from '../names';
 import { nextStyleName as nextName } from '../panels/StylePickers';
 
@@ -186,6 +187,7 @@ export function AssetsPanel(): ReactNode {
             <div
               key={main.id}
               className="layer-row asset-row is-component"
+              onContextMenu={(event) => openPanelMenu(event, editor, 'asset.component', main.id)}
               draggable
               title={t('component.placeHint')}
               onDragStart={(e) => {
@@ -229,7 +231,11 @@ export function AssetsPanel(): ReactNode {
         </h3>
         {colors.length === 0 && <p className="empty-note">{t('style.noColors')}</p>}
         {colors.map((style) => (
-          <div key={style.id} className="layer-row asset-row">
+          <div
+            key={style.id}
+            className="layer-row asset-row"
+            onContextMenu={(event) => openPanelMenu(event, editor, 'asset.colorStyle', style.id)}
+          >
             <StyleSwatch editor={editor} style={style} />
             <EditableName
               value={style.name}
@@ -267,7 +273,11 @@ export function AssetsPanel(): ReactNode {
         </h3>
         {texts.length === 0 && <p className="empty-note">{t('style.noTexts')}</p>}
         {texts.map((style) => (
-          <div key={style.id} className="layer-row asset-row text-style-row">
+          <div
+            key={style.id}
+            className="layer-row asset-row text-style-row"
+            onContextMenu={(event) => openPanelMenu(event, editor, 'asset.textStyle', style.id)}
+          >
             <span
               className="text-style-sample"
               aria-hidden="true"

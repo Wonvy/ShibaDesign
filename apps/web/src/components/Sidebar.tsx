@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AssetsPanel } from './AssetsPanel';
+import { onRenameRequest } from '../ui/rename';
 import { LayersPanel } from './LayersPanel';
 
 type Tab = 'layers' | 'assets';
@@ -27,6 +28,9 @@ export function Sidebar(): ReactNode {
       // 存不了（隐私模式等）就只在这次打开里记着
     }
   };
+
+  // 重命名要在图层页里进行：在资源页时先切过去
+  useEffect(() => onRenameRequest(() => setTab('layers')), []);
 
   return (
     <div className="panel layers">

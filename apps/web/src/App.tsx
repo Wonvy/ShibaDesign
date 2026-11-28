@@ -8,6 +8,11 @@ import { Sidebar } from './components/Sidebar';
 import { SlideStrip } from './components/SlideStrip';
 import { TopBar } from './components/TopBar';
 import { installClipboard } from './clipboard';
+import { CommandPalette } from './menus/CommandPalette';
+import { ContextMenuHost } from './menus/ContextMenuHost';
+import { installMenus } from './menus/install';
+import { useOverlay } from './menus/overlays';
+import { ShortcutSheet } from './menus/ShortcutSheet';
 import { createApp } from './editor/bootstrap';
 import { EditorProvider, useEditor, useEditorState } from './editor/context';
 import { Presenter } from './present/Presenter';
@@ -28,6 +33,8 @@ function Workspace(): ReactNode {
   const stop = useCallback(() => setPresenting(null), []);
 
   useEffect(() => installClipboard(editor), [editor]);
+  useEffect(() => installMenus(editor), [editor]);
+  const overlay = useOverlay();
 
   // 演示的两个命令在界面层注册（要打开演示界面），快捷键 ⌘↵、⇧⌘↵ 在快捷键表里
   useEffect(() => {
@@ -53,6 +60,9 @@ function Workspace(): ReactNode {
         <Inspector />
       </div>
       <Toasts />
+      <ContextMenuHost />
+      {overlay === 'palette' && <CommandPalette />}
+      {overlay === 'shortcuts' && <ShortcutSheet />}
       {presenting !== null && <Presenter startSlide={presenting} onClose={stop} />}
     </div>
   );

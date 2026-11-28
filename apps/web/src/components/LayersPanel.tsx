@@ -15,12 +15,14 @@ import {
   Type,
   type LucideIcon,
 } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isComponent, isInstance, type DocStore, type NodeId, type SceneNode } from '@shiba/core';
 import { isMaskNode } from '@shiba/editor';
 import { useEditor, useEditorState } from '../editor/context';
+import { openPanelMenu } from '../menus/context';
 import { displayName } from '../names';
+import { onRenameRequest } from '../ui/rename';
 
 const ICONS: Record<string, LucideIcon> = {
   artboard: Frame,
@@ -66,6 +68,9 @@ export function LayersPanel(): ReactNode {
   );
   const selected = new Set(selection);
 
+  // 重命名（⌘R、菜单）：那一行进入改名状态
+  useEffect(() => onRenameRequest((id) => setRenaming(id)), []);
+
   const rename = (id: NodeId, value: string): void => {
     setRenaming(null);
     const name = value.trim();
@@ -106,6 +111,12 @@ export function LayersPanel(): ReactNode {
             key={node.id}
             className={`layer-row${selected.has(node.id) ? ' is-selected' : ''}${node.visible ? '' : ' is-hidden'}${tone}`}
             style={{ paddingLeft: 8 + depth * 14 }}
+            onContextMenu={(event) => {
+              if (!selected.has(node.id)) editor.select([node.id]);
+              openPanelMenu(event, editor, 'layer.row', node.id);
+            }}
+            onMouseEnter={() => editor.setHover(node.id)}
+            onMouseLeave={() => editor.setHover(null)}
           >
             {renaming === node.id ? (
               <input

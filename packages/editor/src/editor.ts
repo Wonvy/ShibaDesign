@@ -7,6 +7,7 @@ import {
   artboardOf,
   artboards,
   descendants,
+  isDescendantOf,
   hasShapeStyle,
   rectContainsPoint,
   slides,
@@ -50,7 +51,7 @@ import { DEFAULT_BINDINGS, Keymap } from './keymap';
 import { Overlay } from './overlay';
 import { Registry } from './registry';
 import type { Tool } from './tools/tool';
-import type { CanvasTheme, EditorState, TextEditing, ViewMode } from './types';
+import type { CanvasTheme, ContextInfo, EditorState, TextEditing, ViewMode } from './types';
 import type { FillEditing } from './fill-handles';
 
 const MIN_ZOOM = 0.02;
@@ -498,6 +499,76 @@ export class Editor {
     const hit = this.geometry.hitTest(world.x, world.y, this.roots(), 4 / this.camera.zoom);
     return hit && hit.type !== 'artboard' ? hit : null;
   }
+
+  /**
+   * 右键点到了什么，并按设计软件的习惯调整选区：点在没选中的对象上先选中它；点在已经选中的对象上（或者选区框里）
+   * 保持选区；点在画板空白处、画布空白处取消选区。正在编辑文字时是文字菜单，选区不动
+   */
+  contextAt(x: number, y: number): ContextInfo {
+    const world = this.screenToWorld(x, y);
+    const stack = this.nodesAt(world).map((n) => n.id);
+    const editing = this.state.textEditing;
+    if (editing) return { target: { kind: 'text', id: editing.nodeId }, world, stack };
+    const label = this.overlay?.hitArtboardLabel(x, y);
+    if (label) {
+      this.select([label]);
+      return { target: { kind: 'artboard', id: label }, world, stack };
+    }
+    const picked = this.pick(world);
+    const node = picked.node;
+    if (node) {
+      const inSelection =
+        this.selection.includes(node.id) || this.selection.some((id) => isDescendantOf(this.store, id, node.id));
+      if (!inSelection) this.select([node.id]);
+      return { target: { kind: 'object', ids: [...this.selection] }, world, stack };
+    }
+    const bounds = this.selectionBounds();
+    const onBoards = this.selectedNodes().every((n) => n.type !== 'artboard');
+    if (bounds && onBoards && rectContainsPoint(bounds, world.x, world.y)) {
+      return { target: { kind: 'object', ids: [...this.selection] }, world, stack };
+    }
+    this.select([]);
+    if (picked.artboard) return { target: { kind: 'artboard', id: picked.artboard.id }, world, stack };
+    return { target: { kind: 'canvas' }, world, stack };
+  }
+
+  /** 键盘打开菜单（菜单键、Shift+F10）时：选区的菜单，位置在选区中间 */
+  contextForSelection(): ContextInfo {
+    const editing = this.state.textEditing;
+    const bounds = this.selectionBounds();
+    const world = bounds
+      ? { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 }
+      : this.screenToWorld(this.viewport.width / 2, this.viewport.height / 2);
+    if (editing) return { target: { kind: 'text', id: editing.nodeId }, world, stack: [] };
+    const nodes = this.selectedNodes();
+    if (nodes.length === 1 && nodes[0]!.type === 'artboard') {
+      return { target: { kind: 'artboard', id: nodes[0]!.id }, world, stack: [] };
+    }
+    if (nodes.length > 0) return { target: { kind: 'object', ids: [...this.selection] }, world, stack: [] };
+    const board = this.viewMode === 'slides' ? this.activeArtboard : null;
+    return board
+      ? { target: { kind: 'artboard', id: board.id }, world, stack: [] }
+      : { target: { kind: 'canvas' }, world, stack: [] };
+  }
+
+  /** 这个点下面所有看得见、没锁定的对象（不含画板），从上到下 */
+  nodesAt(world: Point, limit = 30): SceneNode[] {
+    const tolerance = 4 / this.camera.zoom;
+    const out: SceneNode[] = [];
+    const walk = (parentId: NodeId): void => {
+      for (const child of this.store.children(parentId)) {
+        if (!child.visible || child.locked) continue;
+        if (child.type !== 'artboard' && this.geometry.hitTest(world.x, world.y, [child.id], tolerance))
+          out.push(child);
+        walk(child.id);
+      }
+    };
+    for (const root of this.roots()) walk(root);
+    return out.reverse().slice(0, limit);
+  }
+
+  /** 界面层设置：右键（或者键盘打开菜单）时调用，带着点到了什么和屏幕位置 */
+  contextMenuHandler: ((info: ContextInfo & { clientX: number; clientY: number }) => void) | null = null;
 
   /** 鼠标停在哪个对象上（画布上用细线描出来）。只影响覆盖层，不进状态 */
   get hover(): NodeId | null {

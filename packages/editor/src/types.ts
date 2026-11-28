@@ -60,3 +60,22 @@ export interface PointerInfo {
   /** 按着空格：拖动中按住空格时，挪动的是正在画的东西（形状、选框），而不是继续改大小 */
   space?: boolean;
 }
+
+/** 右键点到了什么。界面层按它决定弹哪个菜单 */
+export type ContextTarget =
+  /** 正在编辑的文字 */
+  | { kind: 'text'; id: NodeId }
+  /** 对象：右键之后的选区 */
+  | { kind: 'object'; ids: readonly NodeId[] }
+  /** 画板的空白处或画板名 */
+  | { kind: 'artboard'; id: NodeId }
+  /** 画板外的空白处 */
+  | { kind: 'canvas' };
+
+export interface ContextInfo {
+  target: ContextTarget;
+  /** 右键位置的世界坐标（"粘贴到这里"用） */
+  world: Point;
+  /** 鼠标下所有的对象，从上到下（"选择图层"子菜单用） */
+  stack: readonly NodeId[];
+}

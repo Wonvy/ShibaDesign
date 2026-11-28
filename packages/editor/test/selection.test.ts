@@ -232,7 +232,14 @@ describe('拖动的修饰键', () => {
 describe('快捷键表', () => {
   it('每条绑定都指向已经注册的命令（界面层注册的几个除外）', () => {
     const s = scene(ck, []);
-    const fromWeb = new Set(['edit.copyAsPng', 'present.play', 'present.playFromStart']);
+    const fromWeb = new Set([
+      'edit.copyAsPng',
+      'present.play',
+      'present.playFromStart',
+      'node.rename',
+      'help.commandPalette',
+      'help.shortcuts',
+    ]);
     const missing = DEFAULT_BINDINGS.filter((b) => !fromWeb.has(b.command) && !s.editor.commands.has(b.command));
     expect(missing).toEqual([]);
   });

@@ -1996,3 +1996,249 @@ button.template-card:hover,
 .user-card .field-input:focus {
   border-color: var(--accent);
 }
+
+/* ───────── 菜单栏、右键菜单、子菜单 ───────── */
+
+.menubar {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+.menubar-full {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.menubar-compact {
+  position: relative;
+  display: none;
+}
+
+/* 窗口窄时菜单栏收进一个按钮，每一栏变成子菜单 */
+@media (max-width: 1180px) {
+  .menubar-full {
+    display: none;
+  }
+
+  .menubar-compact {
+    display: block;
+  }
+}
+
+.menubar-item {
+  position: relative;
+}
+
+.menubar-button {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  white-space: nowrap;
+}
+
+.menubar-button:hover,
+.menubar-button.is-active {
+  background: var(--panel-2);
+}
+
+.menubar-popover {
+  left: 0;
+  top: calc(100% + 4px);
+}
+
+.menu-list {
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  outline: none;
+}
+
+.context-menu {
+  z-index: 50;
+}
+
+.context-menu > .menu-list,
+.menu-submenu > .menu-list {
+  position: static;
+}
+
+.menu-submenu {
+  z-index: 55;
+}
+
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.menu-item:disabled:hover {
+  background: transparent;
+}
+
+.menu-item.is-open {
+  background: var(--panel-2);
+}
+
+.menu-item:focus-visible {
+  outline: none;
+  background: var(--panel-2);
+}
+
+.menu-chevron {
+  flex: none;
+  margin-left: 12px;
+  color: var(--text-dim);
+}
+
+.menu-entry .menu-text {
+  white-space: nowrap;
+}
+
+/* ───────── 命令面板、快捷键表 ───────── */
+
+.palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: 64vh;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.palette-input {
+  flex: none;
+  height: 46px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font-size: 15px;
+  outline: none;
+  user-select: text;
+}
+
+.palette-list {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+
+.palette-item.is-active {
+  background: var(--panel-2);
+}
+
+.palette-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.palette-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcut-sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(780px, 100%);
+  max-height: 84vh;
+}
+
+.shortcut-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.shortcut-head .dialog-title {
+  flex: none;
+  margin: 0;
+}
+
+.shortcut-head .field-input {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.shortcut-groups {
+  overflow-y: auto;
+  columns: 2 300px;
+  column-gap: 28px;
+}
+
+.shortcut-group {
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+
+.shortcut-group h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.shortcut-keys {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.shortcut-keys kbd {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel-2);
+  font:
+    12px/18px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+/* 右键菜单项多，排得紧一点 */
+.menu-list .menu-item {
+  min-height: 26px;
+  padding: 3px 8px;
+}
+
+.menu-list .menu-separator {
+  margin: 4px 2px;
+}

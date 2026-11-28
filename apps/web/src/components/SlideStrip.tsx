@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { slides, type ArtboardNode } from '@shiba/core';
 import { useEditor, useEditorState } from '../editor/context';
+import { openPanelMenu } from '../menus/context';
 import { displayName } from '../names';
 import { LayoutMenu } from './LayoutMenu';
 
@@ -32,7 +33,13 @@ function SlideThumb(props: { slide: ArtboardNode; index: number; active: boolean
 
   const name = displayName(slide, t);
   return (
-    <div className={`slide${props.active ? ' is-active' : ''}`}>
+    <div
+      className={`slide${props.active ? ' is-active' : ''}`}
+      onContextMenu={(event) => {
+        editor.setActiveArtboard(slide.id);
+        openPanelMenu(event, editor, 'slide.thumb', slide.id);
+      }}
+    >
       <span className="slide-number">{props.index + 1}</span>
       <button
         type="button"
@@ -81,7 +88,7 @@ export function SlideStrip(): ReactNode {
         {t('panel.slides')}
         <LayoutMenu />
       </h2>
-      <div className="panel-body">
+      <div className="panel-body" onContextMenu={(event) => openPanelMenu(event, editor, 'slide.empty')}>
         {deck.length === 0 && <p className="empty-note">{t('slide.empty')}</p>}
         {deck.map((slide, index) => (
           <SlideThumb key={slide.id} slide={slide} index={index} active={slide.id === activeId} />

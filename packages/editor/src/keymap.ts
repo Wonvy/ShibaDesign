@@ -65,6 +65,13 @@ export class Keymap {
     return undefined;
   }
 
+  /** 当前生效的全部绑定（同一个键后加的覆盖先加的），快捷键表用 */
+  list(): KeyBinding[] {
+    const byKey = new Map<string, KeyBinding>();
+    for (const binding of this.bindings) byKey.set(binding.key, binding);
+    return [...byKey.values()];
+  }
+
   /** 某个命令当前绑定的快捷键，用于在界面上显示 */
   keyFor(command: string, args?: unknown): string | undefined {
     for (let i = this.bindings.length - 1; i >= 0; i--) {
@@ -183,4 +190,7 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: 'mod+shift+c', command: 'edit.copyAsPng' },
   { key: 'mod+enter', command: 'present.play' },
   { key: 'mod+shift+enter', command: 'present.playFromStart' },
+  { key: 'mod+r', command: 'node.rename' },
+  { key: 'mod+k', command: 'help.commandPalette' },
+  { key: 'shift+/', command: 'help.shortcuts' },
 ];

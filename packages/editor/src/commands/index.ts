@@ -15,6 +15,7 @@ import { createComponent, detachInstances, goToMainComponent, placeInstance, res
 import { createGroup, releaseGroup } from './group';
 import { placeImage, setImageFill } from './image';
 import { createMask, releaseMask, setMaskMode, toggleMask } from './mask';
+import { fitArtboard, moveSlide, moveToSlide, resetImageRatio, selectByStyle, soloNode, toggleSlide } from './organize';
 import { flattenShapes, offsetPath, outlineStroke, outlineText } from './path';
 import { copyProperties, pasteProperties } from './properties';
 import {
@@ -133,13 +134,21 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(toggleLock)
     .register(toggleVisible)
     .register(unlockAll)
-    .register(showAll);
+    .register(showAll)
+    .register(moveToSlide)
+    .register(moveSlide)
+    .register(toggleSlide)
+    .register(fitArtboard)
+    .register(soloNode)
+    .register(selectByStyle)
+    .register(resetImageRatio);
 }
 
 export type { Command } from './command';
 export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
 export type { SameKind } from './select';
+export type { SlideMove } from './organize';
 export { cloneNodes } from './edit';
 export type { OffsetPathArgs } from './path';
 export type { AddArtboardArgs } from './artboard';

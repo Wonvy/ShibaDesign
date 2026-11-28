@@ -7,6 +7,7 @@ import { pickAndPlaceImages } from '../files';
 import { toolbarItems } from '../toolbar';
 import { IconButton } from '../ui/controls';
 import { formatShortcut } from '../ui/shortcut';
+import { MenuBar } from '../menus/MenuBar';
 import { FileMenu } from './FileMenu';
 import { LanguageMenu } from './LanguageMenu';
 import { ThemeMenu } from './ThemeMenu';
@@ -34,7 +35,9 @@ export function TopBar(props: { onPlay: () => void }): ReactNode {
         ShibaDesign
       </div>
 
-      <div className="group">
+      <MenuBar />
+
+      <div className="group file-group">
         <FileMenu />
       </div>
 

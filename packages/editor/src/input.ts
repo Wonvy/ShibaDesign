@@ -28,7 +28,7 @@ export class InputController {
     element.addEventListener('dblclick', this.onDoubleClick, options);
     element.addEventListener('mousedown', this.onMouseDown, options);
     element.addEventListener('wheel', this.onWheel, { ...options, passive: false });
-    element.addEventListener('contextmenu', (e) => e.preventDefault(), options);
+    element.addEventListener('contextmenu', this.onContextMenu, options);
     window.addEventListener('keydown', this.onKeyDown, options);
     window.addEventListener('keyup', this.onKeyUp, options);
     window.addEventListener(
@@ -116,6 +116,17 @@ export class InputController {
     if (this.editor.keyboardTarget) event.preventDefault();
   };
 
+  /** 右键（Mac 上也是 Ctrl+单击、触控板双指轻点）：浏览器自己的菜单不要，换成界面层的菜单 */
+  private onContextMenu = (event: MouseEvent): void => {
+    event.preventDefault();
+    const handler = this.editor.contextMenuHandler;
+    if (this.pointerDown || this.panning || !handler) return;
+    const rect = this.element.getBoundingClientRect();
+    const info = this.editor.contextAt(event.clientX - rect.left, event.clientY - rect.top);
+    this.editor.requestRender();
+    handler({ ...info, clientX: event.clientX, clientY: event.clientY });
+  };
+
   private onDoubleClick = (event: MouseEvent): void => {
     if (event.button !== 0) return;
     this.editor.tool.onDoubleClick?.(this.info(event), this.editor);
@@ -132,6 +143,8 @@ export class InputController {
       return;
     }
     if (event.button !== 0) return;
+    // Mac 上 Ctrl+单击是右键：接着会来 contextmenu 事件，这里不交给工具
+    if (event.ctrlKey && !event.metaKey && IS_MAC) return;
     this.pointerDown = true;
     this.pointerId = event.pointerId;
     this.editor.tool.onPointerDown?.(this.info(event), this.editor);
@@ -229,6 +242,8 @@ export class InputController {
     }
   };
 }
+
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 function isModifier(key: string): boolean {
   return key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta';
