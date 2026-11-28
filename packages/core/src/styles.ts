@@ -22,10 +22,23 @@ import { normalizeSpans, setBaseStyle } from './text-spans';
  * - 对象上链接着样式、值却和样式对不上，说明用户手动改过：断开链接。所以界面改颜色时不用专门去掉链接。
  */
 
+/**
+ * 颜色样式的用途。幻灯片版式按用途取样式（见 layouts.ts）：模板定好"背景""文字""强调色"，
+ * 新建的幻灯片就用模板的配色，并且链接到这些样式
+ */
+export const COLOR_ROLES = ['background', 'text', 'accent', 'muted'] as const;
+export type ColorRole = (typeof COLOR_ROLES)[number];
+
+/** 文字样式的用途，同上 */
+export const TEXT_ROLES = ['title', 'subtitle', 'body', 'caption'] as const;
+export type TextRole = (typeof TEXT_ROLES)[number];
+
 export interface ColorStyleDef {
   id: string;
   name: string;
   color: Color;
+  /** 用途。省略表示没有特别的用途 */
+  role?: ColorRole;
 }
 
 export interface TextStyleDef {
@@ -33,6 +46,8 @@ export interface TextStyleDef {
   name: string;
   /** 字体、字号、字重、行高、字距、斜体、下划线、删除线。颜色不在里面，和常见的设计软件一样 */
   style: TextStyle;
+  /** 用途。省略表示没有特别的用途 */
+  role?: TextRole;
 }
 
 /** 每种样式最多几个 */
@@ -59,6 +74,16 @@ export function findColorStyle(store: DocStore, id: string | undefined): ColorSt
 
 export function findTextStyle(store: DocStore, id: string | undefined): TextStyleDef | null {
   return id === undefined ? null : (textStyles(store).find((s) => s.id === id) ?? null);
+}
+
+/** 某个用途的颜色样式（有几个时取第一个） */
+export function colorStyleFor(styles: readonly ColorStyleDef[], role: ColorRole): ColorStyleDef | null {
+  return styles.find((s) => s.role === role) ?? null;
+}
+
+/** 某个用途的文字样式（有几个时取第一个） */
+export function textStyleFor(styles: readonly TextStyleDef[], role: TextRole): TextStyleDef | null {
+  return styles.find((s) => s.role === role) ?? null;
 }
 
 export function newStyleId(): string {

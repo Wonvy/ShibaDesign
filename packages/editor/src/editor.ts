@@ -112,6 +112,8 @@ export class Editor {
   private state: EditorState;
   private listeners = new Set<() => void>();
   private renderer: Renderer | null = null;
+  /** 没挂载时画缩略图用的渲染器，见 renderThumbnail */
+  private offscreen: Renderer | null = null;
   private overlay: Overlay | null = null;
   private input: InputController | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -823,13 +825,33 @@ export class Editor {
     return data ? { width, height, data } : null;
   }
 
-  /** 把一个节点画成缩略图；编辑器未挂载时返回 null */
+  /**
+   * 把一个节点画成缩略图。缩略图画在离屏的位图上，不需要挂载：没挂载的编辑器（比如给模板画预览时临时建的）
+   * 用一个只做离屏绘制的渲染器。没有 DOM 的环境里、编辑器又没挂载时返回 null
+   */
   renderThumbnail(id: NodeId, maxWidth: number, maxHeight: number): Bitmap | null {
-    return this.renderer?.renderToBitmap(id, maxWidth, maxHeight) ?? null;
+    return this.thumbnailRenderer()?.renderToBitmap(id, maxWidth, maxHeight) ?? null;
+  }
+
+  private thumbnailRenderer(): Renderer | null {
+    if (this.renderer) return this.renderer;
+    if (!this.offscreen && typeof document !== 'undefined') {
+      this.offscreen = new Renderer(
+        this.ck,
+        document.createElement('canvas'),
+        this.store,
+        this.nodeTypes,
+        this.geometry,
+        this.images,
+      );
+    }
+    return this.offscreen;
   }
 
   dispose(): void {
     this.unmount();
+    this.offscreen?.dispose();
+    this.offscreen = null;
     this.textLayouts.dispose();
     this.textAppearances.dispose();
     this.images.dispose();

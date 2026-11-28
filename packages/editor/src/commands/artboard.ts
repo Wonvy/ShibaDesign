@@ -1,6 +1,9 @@
 import {
   artboards,
+  buildLayout,
   cloneSubtree,
+  colorStyleFor,
+  colorStyles,
   createId,
   createNode,
   descendants,
@@ -9,8 +12,11 @@ import {
   rgba,
   slides,
   solid,
+  textStyles,
   translation,
   type ArtboardNode,
+  type Color,
+  type LayoutTexts,
   type NodeId,
   type SlideAnimation,
   type SlideDeck,
@@ -30,24 +36,61 @@ function nextPosition(editor: Editor, alignTo: ArtboardNode | undefined): { x: n
   return { x: right + GAP, y: alignTo ? alignTo.transform[5] : boards[0]!.transform[5] };
 }
 
-/** 新建一个画板，同时也是幻灯片的最后一页 */
-export const addArtboard: Command = {
+export interface AddArtboardArgs {
+  /** 版式的 id，见 core 的 layouts.ts。省略表示空白的一页 */
+  layout?: string;
+  /** 版式里的占位文字，界面层按当前语言给 */
+  texts?: LayoutTexts;
+}
+
+/** 背景的代表色：纯色就是它，渐变取第一个色标。版式按它决定文字用深色还是浅色 */
+function backgroundColor(fill: ArtboardNode['fill']): Color {
+  if (!fill) return rgba(1, 1, 1);
+  return fill.type === 'solid' ? fill.color : fill.stops[0]!.color;
+}
+
+/**
+ * 新建一个画板，同时也是幻灯片的最后一页。大小和背景沿用当前这一页（文档里有"背景"颜色样式时链接它），
+ * 可以按版式摆好标题、正文、图片占位框
+ */
+export const addArtboard: Command<AddArtboardArgs | undefined> = {
   id: 'artboard.add',
-  run(editor) {
+  run(editor, args) {
     const { store } = editor;
     const deck = slides(store);
     const last = editor.activeArtboard ?? deck.at(-1);
     const position = nextPosition(editor, last);
+    const backgroundStyle = colorStyleFor(colorStyles(store), 'background');
     const board = createNode('artboard', {
       parent: store.root.id,
       index: store.indexOnTop(store.root.id),
       seq: nextSeq(store, 'artboard'),
       transform: translation(position.x, position.y),
       size: last?.size ?? DEFAULT_SIZE,
-      fill: solid(rgba(1, 1, 1)),
+      fill: backgroundStyle
+        ? { type: 'solid', color: backgroundStyle.color, colorStyle: backgroundStyle.id }
+        : (last?.fill ?? solid(rgba(1, 1, 1))),
       deck: { order: keyBetween(deck.at(-1)?.deck?.order ?? null, null), notes: '' },
     });
-    store.transact('add artboard', (tx) => tx.create(board));
+    const content = args?.layout
+      ? buildLayout(
+          args.layout,
+          {
+            parent: board.id,
+            size: board.size,
+            texts: args.texts ?? {},
+            fonts: editor.defaultTextStyle.fontFamily,
+            colorStyles: colorStyles(store),
+            textStyles: textStyles(store),
+            background: backgroundColor(board.fill),
+          },
+          (type) => nextSeq(store, type),
+        )
+      : [];
+    store.transact('add artboard', (tx) => {
+      tx.create(board);
+      for (const node of content) tx.create(node);
+    });
     store.sealHistory();
     editor.select([]);
     editor.setActiveArtboard(board.id);

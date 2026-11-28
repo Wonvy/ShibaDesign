@@ -1,9 +1,10 @@
-import { Copy, Plus, Trash2 } from 'lucide-react';
+import { Copy, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { slides, type ArtboardNode } from '@shiba/core';
 import { useEditor, useEditorState } from '../editor/context';
 import { displayName } from '../names';
+import { LayoutMenu } from './LayoutMenu';
 
 const THUMB_SIZE = 360;
 const THUMB_DELAY = 150;
@@ -78,15 +79,7 @@ export function SlideStrip(): ReactNode {
     <div className="panel slide-strip">
       <h2 className="panel-title">
         {t('panel.slides')}
-        <button
-          type="button"
-          className="icon-btn"
-          title={t('slide.add')}
-          aria-label={t('slide.add')}
-          onClick={() => editor.commands.run('artboard.add')}
-        >
-          <Plus size={15} />
-        </button>
+        <LayoutMenu />
       </h2>
       <div className="panel-body">
         {deck.length === 0 && <p className="empty-note">{t('slide.empty')}</p>}

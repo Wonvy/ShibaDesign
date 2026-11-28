@@ -105,6 +105,11 @@ function checkComponents(nodes: Record<string, Record<string, unknown>>): void {
   for (const id of uses.keys()) if (!state.has(id)) visit(id);
 }
 
+/** 样式的用途：省略，或者是一个短字符串。不认识的用途（更新的版本加的）不拒绝，版式取样式时用不上它而已 */
+function isRole(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && value.length <= 32);
+}
+
 function isStringList(value: unknown, max: number): boolean {
   return Array.isArray(value) && value.length <= max && value.every((v) => typeof v === 'string' && v.length <= 64);
 }
@@ -185,10 +190,13 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       if (node.component === true && node.instanceOf !== undefined) fail('component/instanceOf');
       break;
     case 'page':
-      if (node.colorStyles !== undefined && !isStyleList(node.colorStyles, (s) => isColor(s.color))) {
+      if (node.colorStyles !== undefined && !isStyleList(node.colorStyles, (s) => isColor(s.color) && isRole(s.role))) {
         fail('colorStyles');
       }
-      if (node.textStyles !== undefined && !isStyleList(node.textStyles, (s) => isTextStyle(s.style))) {
+      if (
+        node.textStyles !== undefined &&
+        !isStyleList(node.textStyles, (s) => isTextStyle(s.style) && isRole(s.role))
+      ) {
         fail('textStyles');
       }
       break;

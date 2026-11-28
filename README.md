@@ -31,8 +31,8 @@ npm run dev
 ## 目录结构
 
 ```
-packages/core       数据模型、文档存储与撤销（带整理器：样式和组件的同步）、颜色样式和文字样式、组件与实例、矩阵、
-                    对齐分布、路径数据转锚点、曲线、滤镜预设。纯 TypeScript，无依赖
+packages/core       数据模型、文档存储与撤销（带整理器：样式和组件的同步）、颜色样式和文字样式、组件与实例、幻灯片版式、
+                    矩阵、对齐分布、路径数据转锚点、曲线、滤镜预设。纯 TypeScript，无依赖
 packages/renderer   CanvasKit 渲染器、节点类型注册表、几何缓存、布尔运算、命中测试、字体与文本排版、描边转轮廓和偏移路径、
                     图片的曲线锐化滤镜（SkSL 着色器）；
                     导出 PDF、SVG，文字转轮廓（单独的入口 @shiba/renderer/pdf、@shiba/renderer/svg、
@@ -42,7 +42,8 @@ packages/io         .shiba 文件格式的打包、解包与校验；PDF 导入�
                     PDF 写出器（对象、内容流、字体、图片）；字体工具（子集、WOFF 封装、读字形轮廓）；
                     写 SVG 的小工具（元素树、网页字体）；MP4 装箱、GIF 编码。都不依赖渲染引擎
 packages/player     HTML5 播放器：独立运行时，应用内演示和导出的网页都用它；按虚拟时钟逐帧录下画面，导出视频用
-apps/web            React 界面：顶栏、图层和资源（组件、样式）、幻灯片条、属性面板、多语言、主题
+apps/web            React 界面：顶栏、图层和资源（组件、样式）、幻灯片条、属性面板、模板（新建对话框、内置模板、
+                    我的模板）、多语言、主题；test 里是不依赖浏览器的部分的测试（内置模板）
 docs                方案与架构
 ```
 
@@ -52,17 +53,19 @@ docs                方案与架构
 
 所有可扩展的东西都放在注册表里。新增功能是"加一个文件再注册"，不需要改已有代码。
 
-| 想加什么 | 怎么加                                                                                     | 参考                                      |
-| -------- | ------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| 工具     | 实现 `Tool` 接口，`editor.tools.register(tool)`；再到 `apps/web/src/toolbar.ts` 加一个按钮 | `packages/editor/src/tools/shape.ts`      |
-| 命令     | 写一个 `Command`，`editor.commands.register(command)`。按钮和快捷键只引用命令 id           | `packages/editor/src/commands/arrange.ts` |
-| 快捷键   | `editor.keymap.add({ key, command, args })`，后加的优先                                    | `packages/editor/src/keymap.ts`           |
-| 节点类型 | 用声明合并往 `NodeTypeMap` 加类型；写一个 `NodeTypeDef`，`editor.nodeTypes.register(def)`  | `packages/renderer/src/nodes/boolean.ts`  |
-| 属性面板 | 写一个接收 `PanelProps` 的组件，`registerPanel({ id, titleKey, order, when, component })`  | `apps/web/src/panels/index.ts`            |
-| 内置语言 | 在 `apps/web/src/i18n/locales/` 加一个 JSON，并加进 `i18n/index.ts` 的 `BUILTIN`           | `locales/en.json`                         |
-| 主题     | 在 `apps/web/src/theme/themes.ts` 的 `THEMES` 里加一项。样式表只用主题变量，不用改         | `themes.ts`                               |
-| 内置字体 | 安装对应的 `@fontsource` 包，在 `apps/web/src/fonts.ts` 里仿照现有写法登记一个家族         | `apps/web/src/fonts.ts`                   |
-| 动画效果 | 写一个 `EffectDef`，调用 `registerEffect(def)`；再到两个语言包的 `effect` 下加上它的名字   | `packages/core/src/animation.ts`          |
+| 想加什么   | 怎么加                                                                                        | 参考                                      |
+| ---------- | --------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| 工具       | 实现 `Tool` 接口，`editor.tools.register(tool)`；再到 `apps/web/src/toolbar.ts` 加一个按钮    | `packages/editor/src/tools/shape.ts`      |
+| 命令       | 写一个 `Command`，`editor.commands.register(command)`。按钮和快捷键只引用命令 id              | `packages/editor/src/commands/arrange.ts` |
+| 快捷键     | `editor.keymap.add({ key, command, args })`，后加的优先                                       | `packages/editor/src/keymap.ts`           |
+| 节点类型   | 用声明合并往 `NodeTypeMap` 加类型；写一个 `NodeTypeDef`，`editor.nodeTypes.register(def)`     | `packages/renderer/src/nodes/boolean.ts`  |
+| 属性面板   | 写一个接收 `PanelProps` 的组件，`registerPanel({ id, titleKey, order, when, component })`     | `apps/web/src/panels/index.ts`            |
+| 内置语言   | 在 `apps/web/src/i18n/locales/` 加一个 JSON，并加进 `i18n/index.ts` 的 `BUILTIN`              | `locales/en.json`                         |
+| 主题       | 在 `apps/web/src/theme/themes.ts` 的 `THEMES` 里加一项。样式表只用主题变量，不用改            | `themes.ts`                               |
+| 内置字体   | 安装对应的 `@fontsource` 包，在 `apps/web/src/fonts.ts` 里仿照现有写法登记一个家族            | `apps/web/src/fonts.ts`                   |
+| 动画效果   | 写一个 `EffectDef`，调用 `registerEffect(def)`；再到两个语言包的 `effect` 下加上它的名字      | `packages/core/src/animation.ts`          |
+| 幻灯片版式 | 写一个 `SlideLayout`，调用 `registerLayout(layout)`；再到两个语言包的 `layout` 下加上它的名字 | `packages/core/src/layouts.ts`            |
+| 内置模板   | 在 `BUILTIN_TEMPLATES` 里加一项；再到两个语言包的 `template` 下加名字、说明和示例文字         | `apps/web/src/templates/builtin.ts`       |
 
 用户不改代码也能加语言：在语言菜单里导出当前语言包，翻译 `strings` 里的文字，把 `meta` 里的 `code` 和 `name` 改成新语言，再导入。
 
@@ -75,6 +78,6 @@ docs                方案与架构
 
 ## 当前状态
 
-已经能用的：自由画布与幻灯片双视图、矩形、椭圆、钢笔、文本（中英文混排、输入法输入、按字设置字体字号粗细斜体颜色下划线删除线、按段设置对齐段距缩进和列表）、图片（导入、作为任意形状的填充、调色、曲线、锐化、模糊、滤镜预设）、选择与框选、移动、缩放、旋转、翻转、编组、蒙版（按形状、透明度或亮度遮，双击可以单独移动里面的内容）、对齐分布、层序、非破坏性布尔运算、文字转轮廓、轮廓化描边、偏移路径、纯色和渐变填充（线性、径向，可以在画布上拖动起点终点）、描边（虚线、端点、拐角）、在画布上挪动缩放形状里的图片、不透明度、16 种混合模式、图层面板、组件（主组件和实例，实例里可以改颜色文字等属性、整体缩放、嵌套，主组件改了实例跟着变）、颜色样式和文字样式、撤销重做、幻灯片动画（进入、强调、退出、动作路径）与页面切换、演示模式（可以另开窗口显示演讲者视图：当前页、下一页、备注、计时）、导出可播放的 HTML（矢量，文字可以选中和搜索）、导出 MP4 视频和 GIF 动图、保存和打开 .shiba 文件、打开 PDF（每页一个画板，图形、图片、渐变转成对象，裁剪和透明蒙版还原成蒙版组，文字拼回段落、可以直接改字）、导出 PDF（矢量，文字可以搜索和复制）、导出 SVG（选中的对象，或者每个画板一个文件；文字可以保留成文字、内嵌字体子集，也可以转成轮廓）、导出 PNG 和 JPEG、中英文界面、语言包导入导出、亮暗主题。
+已经能用的：自由画布与幻灯片双视图、矩形、椭圆、钢笔、文本（中英文混排、输入法输入、按字设置字体字号粗细斜体颜色下划线删除线、按段设置对齐段距缩进和列表）、图片（导入、作为任意形状的填充、调色、曲线、锐化、模糊、滤镜预设）、选择与框选、移动、缩放、旋转、翻转、编组、蒙版（按形状、透明度或亮度遮，双击可以单独移动里面的内容）、对齐分布、层序、非破坏性布尔运算、文字转轮廓、轮廓化描边、偏移路径、纯色和渐变填充（线性、径向，可以在画布上拖动起点终点）、描边（虚线、端点、拐角）、在画布上挪动缩放形状里的图片、不透明度、16 种混合模式、图层面板、组件（主组件和实例，实例里可以改颜色文字等属性、整体缩放、嵌套，主组件改了实例跟着变）、颜色样式和文字样式、模板（新建时选空白尺寸或内置模板，存为模板，新建幻灯片时选版式）、撤销重做、幻灯片动画（进入、强调、退出、动作路径）与页面切换、演示模式（可以另开窗口显示演讲者视图：当前页、下一页、备注、计时）、导出可播放的 HTML（矢量，文字可以选中和搜索）、导出 MP4 视频和 GIF 动图、保存和打开 .shiba 文件、打开 PDF（每页一个画板，图形、图片、渐变转成对象，裁剪和透明蒙版还原成蒙版组，文字拼回段落、可以直接改字）、导出 PDF（矢量，文字可以搜索和复制）、导出 SVG（选中的对象，或者每个画板一个文件；文字可以保留成文字、内嵌字体子集，也可以转成轮廓）、导出 PNG 和 JPEG、中英文界面、语言包导入导出、亮暗主题。
 
 还没有的：抠图，以及 [docs/backlog.md](docs/backlog.md) 里列的其他功能。

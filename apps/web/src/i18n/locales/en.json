@@ -220,7 +220,7 @@
     },
     "file": {
       "menu": "File",
-      "new": "New",
+      "new": "New…",
       "open": "Open…",
       "save": "Save",
       "saveAs": "Save as…",
@@ -265,7 +265,8 @@
         "pdfTooLarge": "the file is too large"
       },
       "exportHtml": "Export HTML (playable)",
-      "exportVideo": "Export video…"
+      "exportVideo": "Export video…",
+      "saveAsTemplate": "Save as template…"
     },
     "image": {
       "place": "Place image",
@@ -562,6 +563,108 @@
       "textStyle": "Text style",
       "none": "None",
       "newFromText": "New text style from this text"
+    },
+    "template": {
+      "title": "New",
+      "close": "Close",
+      "blank": "Blank",
+      "builtinTitle": "Templates",
+      "mine": "My templates",
+      "import": "Import template file…",
+      "unavailable": "This browser cannot store templates (private browsing?)",
+      "mineEmpty": "None yet. Choose \"Save as template\" in the File menu to keep the current document as a template.",
+      "backupHint": "My templates are stored in this browser and are deleted with its site data, so export the important ones as a backup.",
+      "rename": "Double-click to rename",
+      "export": "Export as a .shiba file",
+      "delete": "Delete template",
+      "deleteConfirm": "Delete the template \"{{name}}\"? This cannot be undone.",
+      "slideCount": "Slides: {{count}}",
+      "design": "Design",
+      "exporting": "Exporting template…",
+      "saved": "Saved as template \"{{name}}\"",
+      "saveFailed": "Could not save the template",
+      "imported": "Imported template \"{{name}}\"",
+      "defaultName": "My template",
+      "saveTitle": "Save as template",
+      "save": "Save",
+      "cancel": "Cancel",
+      "nameLabel": "Template name",
+      "saveHint": "Keeps the current document, with its images, in \"My templates\" so you can start new documents from it. Stored in this browser.",
+      "footerName": "Footer",
+      "preset": {
+        "slides169": "Presentation 16:9",
+        "slides43": "Presentation 4:3",
+        "a4Portrait": "A4 portrait",
+        "a4Landscape": "A4 landscape",
+        "poster": "Poster A2",
+        "square": "Square post",
+        "story": "Phone story",
+        "banner": "Banner"
+      },
+      "builtin": {
+        "minimal": "Minimal deck",
+        "minimalHint": "White with a blue accent, 7 slides",
+        "dark": "Dark deck",
+        "darkHint": "Dark background, serif titles, 5 slides",
+        "poster": "Event poster",
+        "posterHint": "A4 portrait with a gradient",
+        "social": "Quote card",
+        "socialHint": "1080 × 1080"
+      },
+      "styleName": {
+        "background": "Background",
+        "text": "Text",
+        "accent": "Accent",
+        "muted": "Muted text",
+        "title": "Title",
+        "subtitle": "Subtitle",
+        "body": "Body",
+        "caption": "Caption"
+      },
+      "sample": {
+        "deckTitle": "Product launch",
+        "deckSubtitle": "Autumn 2026 · Product team",
+        "agendaTitle": "Agenda",
+        "agendaBody": "Why we built it\nWhat we built\nWhat comes next",
+        "sectionTitle": "What we built",
+        "compareTitle": "Before and after",
+        "compareLeft": "Before: three apps back and forth\nExport, import, styles drift",
+        "compareRight": "Now: one file does it all\nChange it once, everywhere",
+        "imageTitle": "A picture says it all",
+        "imageBody": "Select the placeholder on the left\nSwitch its fill to an image",
+        "quote": "Good tools make you forget the tool.",
+        "quoteBy": "— A designer",
+        "thanks": "Thank you",
+        "thanksSub": "Questions welcome",
+        "footer": "ShibaDesign · Product launch",
+        "posterTitle": "Design weekend\nworkshop",
+        "posterDate": "December 6–7 · Shanghai",
+        "posterBody": "Two hands-on days of layout, color, animation and presenting. Places are limited.",
+        "posterCta": "Sign up",
+        "socialQuote": "Make the complex\nfeel simple.",
+        "socialHandle": "@shibadesign"
+      }
+    },
+    "layout": {
+      "heading": "Choose a layout",
+      "blank": "Blank",
+      "title": "Title",
+      "titleContent": "Title and content",
+      "twoColumns": "Two columns",
+      "imageText": "Image and text",
+      "section": "Section",
+      "titleOnly": "Title only",
+      "quote": "Quote"
+    },
+    "layoutText": {
+      "title": "Title",
+      "subtitle": "Subtitle",
+      "body": "First point\nSecond point\nThird point",
+      "body2": "First point\nSecond point",
+      "caption": "Caption",
+      "quote": "Write something memorable here",
+      "number": "01",
+      "image": "Image"
     }
   }
 }

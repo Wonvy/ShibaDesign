@@ -220,7 +220,7 @@
     },
     "file": {
       "menu": "文件",
-      "new": "新建",
+      "new": "新建…",
       "open": "打开…",
       "save": "保存",
       "saveAs": "另存为…",
@@ -265,7 +265,8 @@
         "pdfTooLarge": "文件过大"
       },
       "exportHtml": "导出 HTML（可播放）",
-      "exportVideo": "导出视频…"
+      "exportVideo": "导出视频…",
+      "saveAsTemplate": "存为模板…"
     },
     "image": {
       "place": "插入图片",
@@ -562,6 +563,108 @@
       "textStyle": "文字样式",
       "none": "无",
       "newFromText": "用这段文字新建文字样式"
+    },
+    "template": {
+      "title": "新建",
+      "close": "关闭",
+      "blank": "空白",
+      "builtinTitle": "模板",
+      "mine": "我的模板",
+      "import": "导入模板文件…",
+      "unavailable": "这个浏览器不能存模板（可能是隐私模式）",
+      "mineEmpty": "还没有。在文件菜单里选\"存为模板\"，就能把当前文档存成模板。",
+      "backupHint": "我的模板存在这个浏览器里，清理网站数据时会一起删掉，重要的记得导出备份。",
+      "rename": "双击改名",
+      "export": "导出成 .shiba 文件",
+      "delete": "删除模板",
+      "deleteConfirm": "删除模板「{{name}}」？删了就找不回来了。",
+      "slideCount": "{{count}} 页幻灯片",
+      "design": "设计稿",
+      "exporting": "正在导出模板…",
+      "saved": "已存为模板「{{name}}」",
+      "saveFailed": "模板没存上",
+      "imported": "已导入模板「{{name}}」",
+      "defaultName": "我的模板",
+      "saveTitle": "存为模板",
+      "save": "存为模板",
+      "cancel": "取消",
+      "nameLabel": "模板名",
+      "saveHint": "把当前文档连同用到的图片存进\"我的模板\"，以后新建时可以从它开始。存在这个浏览器里。",
+      "footerName": "页脚",
+      "preset": {
+        "slides169": "演示 16:9",
+        "slides43": "演示 4:3",
+        "a4Portrait": "A4 竖版",
+        "a4Landscape": "A4 横版",
+        "poster": "海报 A2",
+        "square": "社交方图",
+        "story": "手机竖屏",
+        "banner": "横幅"
+      },
+      "builtin": {
+        "minimal": "简约演示",
+        "minimalHint": "白底、蓝色强调，七页",
+        "dark": "深色演示",
+        "darkHint": "深色背景、衬线标题，五页",
+        "poster": "活动海报",
+        "posterHint": "A4 竖版，渐变背景",
+        "social": "社交方图",
+        "socialHint": "1080 × 1080"
+      },
+      "styleName": {
+        "background": "背景",
+        "text": "文字",
+        "accent": "强调色",
+        "muted": "次要文字",
+        "title": "标题",
+        "subtitle": "副标题",
+        "body": "正文",
+        "caption": "注释"
+      },
+      "sample": {
+        "deckTitle": "新产品发布",
+        "deckSubtitle": "2026 年秋季 · 产品团队",
+        "agendaTitle": "今天讲什么",
+        "agendaBody": "为什么要做\n我们做了什么\n接下来的计划",
+        "sectionTitle": "我们做了什么",
+        "compareTitle": "之前和现在",
+        "compareLeft": "之前：三个软件来回切换\n导出再导入，样式对不上",
+        "compareRight": "现在：一个文件做完\n改一处，处处跟着变",
+        "imageTitle": "一张图胜过千言",
+        "imageBody": "选中左边的占位框\n在外观面板里换成图片",
+        "quote": "好的工具让人忘了工具本身。",
+        "quoteBy": "—— 一位设计师",
+        "thanks": "谢谢",
+        "thanksSub": "欢迎提问",
+        "footer": "ShibaDesign · 新产品发布",
+        "posterTitle": "设计周末\n工作坊",
+        "posterDate": "12 月 6 日 – 7 日 · 上海",
+        "posterBody": "两天动手实践：版式、配色、动画和演示。名额有限，欢迎报名。",
+        "posterCta": "立即报名",
+        "socialQuote": "把复杂的事\n做得简单。",
+        "socialHandle": "@shibadesign"
+      }
+    },
+    "layout": {
+      "heading": "选择版式",
+      "blank": "空白",
+      "title": "标题页",
+      "titleContent": "标题和正文",
+      "twoColumns": "两栏",
+      "imageText": "图文",
+      "section": "节标题",
+      "titleOnly": "只有标题",
+      "quote": "引用"
+    },
+    "layoutText": {
+      "title": "标题",
+      "subtitle": "副标题",
+      "body": "要点一\n要点二\n要点三",
+      "body2": "要点一\n要点二",
+      "caption": "说明文字",
+      "quote": "在这里写一句想让人记住的话",
+      "number": "01",
+      "image": "图片"
     }
   }
 }

@@ -99,6 +99,7 @@ export type { Command } from './command';
 export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
 export type { OffsetPathArgs } from './path';
+export type { AddArtboardArgs } from './artboard';
 export { pruneAnimations, setAnimationPath, setSlideNotes, slideLayerOf } from './animation';
 export { isMaskNode } from './mask';
 export { mainOf } from './component';

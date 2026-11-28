@@ -5,6 +5,8 @@ export function Menu(props: {
   label: string;
   trigger: ReactNode;
   align?: 'left' | 'right';
+  /** 弹出层额外的 class，比如要改它的宽度 */
+  popoverClassName?: string;
   children: (close: () => void) => ReactNode;
 }): ReactNode {
   const [open, setOpen] = useState(false);
@@ -40,7 +42,10 @@ export function Menu(props: {
         {props.trigger}
       </button>
       {open && (
-        <div className={`menu-popover align-${props.align ?? 'right'}`} role="menu">
+        <div
+          className={`menu-popover align-${props.align ?? 'right'}${props.popoverClassName ? ` ${props.popoverClassName}` : ''}`}
+          role="menu"
+        >
           {props.children(() => setOpen(false))}
         </div>
       )}

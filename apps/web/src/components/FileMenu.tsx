@@ -8,7 +8,6 @@ import {
   exportPdf,
   exportImage,
   isImageFile,
-  newDocument,
   openDocument,
   placeImageFiles,
   saveDocument,
@@ -18,6 +17,8 @@ import {
 import { Menu } from '../ui/Menu';
 import { ExportSvgDialog } from './ExportSvgDialog';
 import { ExportVideoDialog } from './ExportVideoDialog';
+import { NewDocumentDialog } from './NewDocumentDialog';
+import { SaveTemplateDialog } from './SaveTemplateDialog';
 
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -35,6 +36,8 @@ function shortcut(keys: string): string {
 
 /** 菜单项要打开的对话框 */
 interface MenuActions {
+  newDocument(): void;
+  saveTemplate(): void;
   exportSvg(): void;
   exportVideo(): void;
 }
@@ -47,12 +50,13 @@ interface Item {
 
 const GROUPS: Item[][] = [
   [
-    { labelKey: 'file.new', run: (editor) => newDocument(editor) },
+    { labelKey: 'file.new', run: (_editor, actions) => actions.newDocument() },
     { labelKey: 'file.open', keys: 'mod+o', run: (editor) => void openDocument(editor) },
   ],
   [
     { labelKey: 'file.save', keys: 'mod+s', run: (editor) => void saveDocument(editor) },
     { labelKey: 'file.saveAs', keys: 'mod+shift+s', run: (editor) => void saveDocumentAs(editor) },
+    { labelKey: 'file.saveAsTemplate', run: (_editor, actions) => actions.saveTemplate() },
   ],
   [
     { labelKey: 'file.exportPdf', run: (editor) => void exportPdf(editor) },
@@ -107,8 +111,10 @@ export function FileMenu(): ReactNode {
   const editor = useEditor();
   const { t } = useTranslation();
   const file = useFileState();
-  const [dialog, setDialog] = useState<'svg' | 'video' | null>(null);
+  const [dialog, setDialog] = useState<'new' | 'template' | 'svg' | 'video' | null>(null);
   const [actions] = useState<MenuActions>(() => ({
+    newDocument: () => setDialog('new'),
+    saveTemplate: () => setDialog('template'),
     exportSvg: () => setDialog('svg'),
     exportVideo: () => setDialog('video'),
   }));
@@ -144,6 +150,8 @@ export function FileMenu(): ReactNode {
         {file.name ?? t('file.untitled')}
         {file.dirty && <span className="dirty-dot" role="img" aria-label={t('file.unsaved')} />}
       </span>
+      {dialog === 'new' && <NewDocumentDialog onClose={() => setDialog(null)} />}
+      {dialog === 'template' && <SaveTemplateDialog onClose={() => setDialog(null)} />}
       {dialog === 'svg' && <ExportSvgDialog onClose={() => setDialog(null)} />}
       {dialog === 'video' && <ExportVideoDialog onClose={() => setDialog(null)} />}
     </>

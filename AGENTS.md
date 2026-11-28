@@ -19,14 +19,14 @@ npm run dev          # 开发服务器，http://localhost:5173
 npm test             # 全部单元测试（vitest，在 Node 里跑）
 npm run typecheck
 npm run build
-npx prettier --check apps/web/src packages/*/src packages/*/test docs README.md
+npx prettier --check apps/web/src apps/web/test packages/*/src packages/*/test docs README.md
 ```
 
 一项改动做完之前，类型检查、全部测试、格式检查都要通过。
 
 ## 验证
 
-- 单元测试在 Node 里跑，CanvasKit（`canvaskit-wasm`）和 fontsource 的字体文件直接从 `node_modules` 读，可以真的排版、渲染、导出。导出类的功能尽量和画布逐像素比较，写明差异有多大、差在哪。
+- 单元测试在 Node 里跑（`packages/*/test`，以及 `apps/web/test` 里不依赖浏览器的部分），CanvasKit（`canvaskit-wasm`）和 fontsource 的字体文件直接从 `node_modules` 读，可以真的排版、渲染、导出。导出类的功能尽量和画布逐像素比较，写明差异有多大、差在哪。
 - 能在浏览器里看到的改动要实际打开看。开发版里 `window.shiba` 是编辑器实例，可以在控制台里造数据、调命令、导出。
 - 只在 Chromium 内核的浏览器里验证过的，在文档里写明。
 

@@ -2,13 +2,11 @@ import { useSyncExternalStore } from 'react';
 import {
   DocStore,
   artboards,
-  createNode,
   referencedAssetIds,
-  rgba,
   slides,
-  solid,
   sortByZOrder,
   topLevelOnly,
+  type Asset,
   type DocumentData,
   type NodeId,
   type Point,
@@ -28,6 +26,10 @@ import { buildPresentationHtml } from '@shiba/player';
 import { i18n } from './i18n';
 import { displayName } from './names';
 import { compilePresentation } from './present/compile';
+import type { TemplateDef } from './templates/builtin';
+import { addTemplate, templateFile, type TemplateMeta } from './templates/library';
+import { BLANK_PRESETS, blankDocument, type BlankPreset } from './templates/presets';
+import { bitmapToPng, coverOf, documentThumbnail } from './templates/preview';
 import { VideoUnsupportedError, type VideoSettings } from './present/video-settings';
 import { busyToast, toast } from './ui/toast';
 
@@ -120,6 +122,8 @@ const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp';
 /** 图片长边超过这个值就在导入时缩小。解码后的图片整张放在内存和显存里，太大会拖垮整个画布 */
 const MAX_IMAGE_SIDE = 4096;
 const MAX_IMAGE_BYTES = 64 * 1024 * 1024;
+/** 模板缩略图的最大边长，像素 */
+const TEMPLATE_THUMB = 480;
 
 function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
@@ -152,23 +156,10 @@ export function pickFiles(accept: string, multiple: boolean): Promise<File[]> {
 }
 
 function starterDocument(): DocumentData {
-  const store = DocStore.create();
-  store.transact('init', (tx) =>
-    tx.create(
-      createNode('artboard', {
-        parent: store.root.id,
-        index: 'a0',
-        seq: 1,
-        size: [1280, 720],
-        fill: solid(rgba(1, 1, 1)),
-        deck: { order: 'a0', notes: '' },
-      }),
-    ),
-  );
-  return store.toJSON();
+  return blankDocument(BLANK_PRESETS[0]!);
 }
 
-/** 一个只有一张空白画板的新文档 */
+/** 一个只有一张空白画板（一页 16:9 的幻灯片）的新文档 */
 export function createStarterDocument(): DocumentData {
   return starterDocument();
 }
@@ -180,14 +171,101 @@ function confirmDiscard(): boolean {
 
 // ───────────── 新建、打开、保存 ─────────────
 
-export function newDocument(editor: Editor): void {
-  if (!confirmDiscard()) return;
+/**
+ * 从模板或空白尺寸新建：换掉当前文档（有没保存的修改时先问），是一份还没保存过的新文档。
+ * 有幻灯片的进幻灯片视图，没有的进画布视图。返回是否换了
+ */
+function startFrom(editor: Editor, document: DocumentData, assets: readonly Asset[]): boolean {
+  if (!confirmDiscard()) return false;
   editor.setTool('select');
-  editor.assets.replaceAll([]);
-  editor.store.load(starterDocument());
+  editor.assets.replaceAll([...assets]);
+  editor.store.load(document);
+  editor.setViewMode(slides(editor.store).length > 0 ? 'slides' : 'canvas');
   editor.zoomToFit();
   handle = null;
   setState({ name: null, dirty: false });
+  return true;
+}
+
+/** 按空白尺寸新建 */
+export function newBlankDocument(editor: Editor, preset: BlankPreset): boolean {
+  return startFrom(editor, blankDocument(preset), []);
+}
+
+/** 从内置模板新建，示例文字用当前的语言 */
+export function newFromBuiltin(editor: Editor, template: TemplateDef): boolean {
+  return startFrom(editor, template.build(t), []);
+}
+
+/** 从"我的模板"新建。模板文件坏了时提示原因 */
+export async function newFromUserTemplate(editor: Editor, template: TemplateMeta): Promise<boolean> {
+  try {
+    const bytes = await templateFile(template.id);
+    if (!bytes) return false;
+    const parsed = unpackShiba(bytes);
+    return startFrom(editor, parsed.document, parsed.assets);
+  } catch (error) {
+    const reason = error instanceof ShibaFileError ? error.reason : 'badDocument';
+    if (!(error instanceof ShibaFileError)) console.error(error);
+    toast(t('file.openFailed', { reason: t(`file.reason.${reason}`) }), 'error');
+    return false;
+  }
+}
+
+/** 把当前文档存成"我的模板"：连同用到的图片打包，再画一张封面的缩略图 */
+export async function saveAsTemplate(editor: Editor, name: string): Promise<void> {
+  try {
+    const cover = coverOf(editor.store);
+    if (cover) await editor.fontsReady(cover);
+    const bitmap = cover ? editor.renderThumbnail(cover, TEMPLATE_THUMB, TEMPLATE_THUMB) : null;
+    await addTemplate({
+      name,
+      file: buildFile(editor),
+      thumbnail: bitmap ? await bitmapToPng(bitmap) : null,
+      slides: slides(editor.store).length,
+    });
+    toast(t('template.saved', { name }));
+  } catch (error) {
+    console.error(error);
+    toast(t('template.saveFailed'), 'error');
+  }
+}
+
+/** 把"我的模板"导出成 .shiba 文件（备份、发给别人） */
+export async function exportUserTemplate(template: TemplateMeta): Promise<void> {
+  await saveExported(
+    `${fileSafe(template.name)}${SHIBA_EXTENSION}`,
+    SHIBA_TYPES,
+    SHIBA_MIME,
+    t('template.exporting'),
+    async () => {
+      const bytes = await templateFile(template.id);
+      if (!bytes) throw new Error(`模板 ${template.id} 不存在`);
+      return bytes;
+    },
+  );
+}
+
+/** 把 .shiba 文件导入成"我的模板"。文件按不可信输入解包、校验，坏的提示原因 */
+export async function importTemplateFiles(editor: Editor): Promise<void> {
+  const files = await pickFiles(SHIBA_EXTENSION, true);
+  for (const file of files) {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const parsed = unpackShiba(bytes);
+      const thumbnail = await documentThumbnail(editor.ck, parsed.document, parsed.assets, TEMPLATE_THUMB);
+      const count = parsed.document.nodes
+        ? Object.values(parsed.document.nodes).filter((n) => n.type === 'artboard' && n.deck).length
+        : 0;
+      const name = file.name.replace(/\.shiba$/i, '');
+      await addTemplate({ name, file: bytes, thumbnail, slides: count });
+      toast(t('template.imported', { name }));
+    } catch (error) {
+      const reason = error instanceof ShibaFileError ? error.reason : 'badDocument';
+      if (!(error instanceof ShibaFileError)) console.error(error);
+      toast(t('file.openFailed', { reason: t(`file.reason.${reason}`) }), 'error');
+    }
+  }
 }
 
 /** 把一个 .shiba 文件的内容装进编辑器。文件有问题时提示原因，当前文档不受影响 */

@@ -293,3 +293,34 @@ describe('样式命令', () => {
     expect(store.get(copy.id)!.overrides).toBeUndefined();
   });
 });
+
+describe('按版式新建幻灯片', () => {
+  it('沿用当前页的大小和背景，摆好版式里的对象，是一步撤销', () => {
+    const { editor, store, board } = setup();
+    store.transact('dark', (tx) => tx.update(board, { fill: solid(rgba(0.1, 0.1, 0.15)) }));
+    editor.setActiveArtboard(board);
+    editor.commands.run('artboard.add', { layout: 'titleContent', texts: { title: '议程', body: '一\n二' } });
+    const created = editor.activeArtboard!;
+    expect(created.id).not.toBe(board);
+    expect(created.size).toEqual([1280, 720]);
+    expect(created.fill).toEqual(solid(rgba(0.1, 0.1, 0.15)));
+    const kids = store.children(created.id) as TextNode[];
+    expect(kids.map((k) => k.text)).toEqual(['议程', '一\n二']);
+    // 深色背景上默认用白字
+    expect(kids[0]!.fill?.color).toEqual(rgba(1, 1, 1));
+    store.undo();
+    expect(store.has(created.id)).toBe(false);
+    expect(kids.every((k) => !store.has(k.id))).toBe(true);
+  });
+
+  it('文档里有"背景"颜色样式时，新幻灯片的背景链接它', () => {
+    const { editor, store } = setup();
+    editor.commands.run('style.color.add', { id: 'bg', name: '背景', color: rgba(0.9, 0.95, 1) });
+    store.transact('role', (tx) =>
+      tx.update(store.root.id, { colorStyles: colorStyles(store).map((s) => ({ ...s, role: 'background' as const })) }),
+    );
+    editor.commands.run('artboard.add');
+    expect(editor.activeArtboard!.fill).toEqual({ type: 'solid', color: rgba(0.9, 0.95, 1), colorStyle: 'bg' });
+    expect(store.children(editor.activeArtboard!.id)).toHaveLength(0);
+  });
+});
