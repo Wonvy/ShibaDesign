@@ -4,6 +4,7 @@ import {
   dashPattern,
   gradientGeometry,
   hasShapeStyle,
+  rectNeedsCorners,
   invert,
   maskParts,
   multiply,
@@ -472,7 +473,9 @@ class SvgExporter {
    */
   private geometry(node: SceneNode, asPath = false): { tag: string; attrs: Attrs } | null {
     const [w, h] = node.size;
-    if ((node.type === 'rect' || node.type === 'artboard') && w > 0 && h > 0 && !asPath) {
+    // 四个角不一样、反向圆角、倒角、有平滑度的矩形写成路径（<rect> 只能表示四个角一样的普通圆角）
+    const plainRect = node.type === 'artboard' || (node.type === 'rect' && !rectNeedsCorners(node));
+    if (plainRect && w > 0 && h > 0 && !asPath) {
       const r = node.type === 'rect' ? Math.max(0, Math.min(node.cornerRadius, w / 2, h / 2)) : 0;
       return { tag: 'rect', attrs: { width: w, height: h, rx: r > 0 ? r : null, ry: r > 0 ? r : null } };
     }

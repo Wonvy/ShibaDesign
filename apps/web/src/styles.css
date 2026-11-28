@@ -2840,3 +2840,28 @@ button.template-card:hover,
     box-shadow: 2px 0 0 var(--accent);
   }
 }
+
+/* ───────── 圆角 ───────── */
+
+.corner-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.corner-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.corner-row > :first-child {
+  flex: 1;
+}
+
+.corner-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+}

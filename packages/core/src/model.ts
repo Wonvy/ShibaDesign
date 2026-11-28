@@ -1,3 +1,4 @@
+import type { CornerStyle } from './corners';
 /**
  * 文档数据模型。
  *
@@ -271,6 +272,12 @@ export interface ArtboardNode extends BaseNode {
 export interface RectNode extends BaseNode, ShapeStyle {
   type: 'rect';
   cornerRadius: number;
+  /** 四个角分别的半径：左上、右上、右下、左下。省略表示四个角都是 cornerRadius。见 corners.ts */
+  cornerRadii?: readonly [number, number, number, number];
+  /** 圆角样式：圆角、反向圆角、倒角。省略是圆角 */
+  cornerStyle?: CornerStyle;
+  /** 平滑度 0 到 1（像 iOS 图标那样连续的圆角）。省略是 0 */
+  cornerSmoothing?: number;
 }
 
 export interface EllipseNode extends BaseNode, ShapeStyle {
@@ -285,6 +292,8 @@ export interface Anchor {
   inY: number;
   outX: number;
   outY: number;
+  /** 这个尖角的圆角半径（两边都是直线时才起作用）。省略表示不圆。见 corners.ts */
+  radius?: number;
 }
 
 export interface Subpath {
@@ -296,6 +305,9 @@ export interface PathNode extends BaseNode, ShapeStyle {
   type: 'path';
   subpaths: readonly Subpath[];
   fillRule: 'nonzero' | 'evenodd';
+  /** 锚点圆角的样式和平滑度，同矩形。省略是圆角、不平滑 */
+  cornerStyle?: CornerStyle;
+  cornerSmoothing?: number;
 }
 
 export const BOOLEAN_OPS = ['union', 'subtract', 'intersect', 'exclude'] as const;

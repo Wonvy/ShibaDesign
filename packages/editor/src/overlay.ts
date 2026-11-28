@@ -15,6 +15,7 @@ import {
 } from '@shiba/core';
 import type { Editor } from './editor';
 import { gradientHandlePoints, imageRect, type GradientPoint } from './fill-handles';
+import { drawCornerWidgets } from './corner-handles';
 import { drawMotionPaths } from './motion-handles';
 import {
   drawGuides,
@@ -432,6 +433,7 @@ export class Overlay {
         ctx.strokeRect(-HANDLE_SIZE / 2 + 0.5, -HANDLE_SIZE / 2 + 0.5, HANDLE_SIZE - 1, HANDLE_SIZE - 1);
         ctx.restore();
       }
+      drawCornerWidgets(ctx, editor, null);
       // 按住 Alt 测距时不画尺寸标签，免得和距离的数字叠在一起
       if (editor.view.sizeLabel && !editor.measuring) this.drawSizeLabel(frame);
     }

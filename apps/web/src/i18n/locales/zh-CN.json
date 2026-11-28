@@ -128,7 +128,17 @@
       "rotation": "旋转",
       "fillSolid": "纯色",
       "fillGradient": "渐变",
-      "fillImage": "图片"
+      "fillImage": "图片",
+      "cornersSeparate": "四个角分开设置",
+      "cornerTopLeft": "左上",
+      "cornerTopRight": "右上",
+      "cornerBottomRight": "右下",
+      "cornerBottomLeft": "左下",
+      "cornerStyle": "圆角样式",
+      "corner_round": "圆角",
+      "corner_inverted": "反向",
+      "corner_chamfer": "倒角",
+      "cornerSmoothing": "平滑"
     },
     "blend": {
       "normal": "正常",

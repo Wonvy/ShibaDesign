@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { artboardOf, rotationOf, topLevelOnly } from '@shiba/core';
 import { captureOriginals, resizeInWorld, resizeLocal, translateNode } from '@shiba/editor';
 import { IconButton, NumberField } from '../ui/controls';
+import { CornerFields, roundable } from './CornerFields';
 import type { PanelProps } from './registry';
 
 /** 翻转图标：一条虚线对称轴，两侧各一个三角形 */
@@ -74,8 +75,7 @@ export function TransformPanel({ editor, nodes }: PanelProps): ReactNode {
     store.sealHistory();
   };
 
-  const rects = nodes.filter((n) => n.type === 'rect');
-  const allRects = rects.length === nodes.length;
+  const corners = roundable(nodes);
 
   return (
     <>
@@ -112,18 +112,8 @@ export function TransformPanel({ editor, nodes }: PanelProps): ReactNode {
             onCommit={(v) => editor.commands.run('arrange.rotate', v - angle)}
           />
         )}
-        {allRects && (
-          <NumberField
-            label={t('prop.radius')}
-            value={rects[0]!.cornerRadius}
-            min={0}
-            onCommit={(v) => {
-              editor.updateSelection('radius', (node) => (node.type === 'rect' ? { cornerRadius: v } : null));
-              store.sealHistory();
-            }}
-          />
-        )}
       </div>
+      {corners && <CornerFields editor={editor} nodes={corners} />}
       {frame.rotatable && (
         <div className="button-row transform-actions">
           <IconButton title={t('transform.rotate90')} onClick={() => editor.commands.run('arrange.rotate', 90)}>

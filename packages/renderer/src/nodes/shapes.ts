@@ -1,5 +1,14 @@
 import type { CanvasKit, Path } from 'canvaskit-wasm';
-import type { EllipseNode, PathNode, RectNode } from '@shiba/core';
+import {
+  hasRoundedAnchors,
+  rectCornerRadii,
+  rectNeedsCorners,
+  rectOutline,
+  roundSubpaths,
+  type EllipseNode,
+  type PathNode,
+  type RectNode,
+} from '@shiba/core';
 import type { NodeTypeDef } from '../node-types';
 
 export const rectType: NodeTypeDef<RectNode> = {
@@ -7,6 +16,11 @@ export const rectType: NodeTypeDef<RectNode> = {
   children: 'none',
   outline(node, { ck }) {
     const [w, h] = node.size;
+    // 四个角不一样、反向圆角、倒角、平滑度：按 corners.ts 生成锚点
+    if (rectNeedsCorners(node)) {
+      const options = { style: node.cornerStyle, smoothing: node.cornerSmoothing };
+      return buildPath(ck, [rectOutline(w, h, rectCornerRadii(node), options)], 'nonzero');
+    }
     const builder = new ck.PathBuilder();
     const r = Math.max(0, Math.min(node.cornerRadius, w / 2, h / 2));
     if (r > 0) builder.addRRect(ck.RRectXY(ck.XYWHRect(0, 0, w, h), r, r));
@@ -29,7 +43,11 @@ export const pathType: NodeTypeDef<PathNode> = {
   type: 'path',
   children: 'none',
   outline(node, { ck }) {
-    return buildPath(ck, node.subpaths, node.fillRule);
+    // 锚点带圆角半径时先换成普通锚点
+    const subpaths = hasRoundedAnchors(node.subpaths)
+      ? roundSubpaths(node.subpaths, { style: node.cornerStyle, smoothing: node.cornerSmoothing })
+      : node.subpaths;
+    return buildPath(ck, subpaths, node.fillRule);
   },
 };
 

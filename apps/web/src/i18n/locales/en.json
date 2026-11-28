@@ -128,7 +128,17 @@
       "rotation": "Rotation",
       "fillSolid": "Solid",
       "fillGradient": "Gradient",
-      "fillImage": "Image"
+      "fillImage": "Image",
+      "cornersSeparate": "Set corners separately",
+      "cornerTopLeft": "TL",
+      "cornerTopRight": "TR",
+      "cornerBottomRight": "BR",
+      "cornerBottomLeft": "BL",
+      "cornerStyle": "Corner style",
+      "corner_round": "Round",
+      "corner_inverted": "Inverted",
+      "corner_chamfer": "Chamfer",
+      "cornerSmoothing": "Smoothing"
     },
     "blend": {
       "normal": "Normal",

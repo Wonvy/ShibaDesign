@@ -248,6 +248,8 @@ function scaleContent(
         subpaths: orig.subpaths.map((sub) => ({
           closed: sub.closed,
           anchors: sub.anchors.map((a) => ({
+            // 圆角半径留着（缩放只改几何，圆角不变形）
+            ...a,
             x: a.x * sx,
             y: a.y * sy,
             inX: a.inX * sx,

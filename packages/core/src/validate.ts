@@ -1,3 +1,4 @@
+import { CORNER_STYLES } from './corners';
 import { CURVE_CHANNELS, MAX_CURVE_POINTS } from './curves';
 import { MAX_GRADIENT_STOPS } from './gradient';
 import { DOCUMENT_VERSION, TEXT_ALIGNS, type DocumentData } from './model';
@@ -191,9 +192,17 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
   switch (node.type) {
     case 'rect':
       if (!isFiniteNumber(node.cornerRadius)) fail('cornerRadius');
+      if (
+        node.cornerRadii !== undefined &&
+        !(Array.isArray(node.cornerRadii) && node.cornerRadii.length === 4 && node.cornerRadii.every(isNonNegative))
+      ) {
+        fail('cornerRadii');
+      }
+      if (!isCornerLook(node)) fail('cornerStyle');
       break;
     case 'path':
       if (!Array.isArray(node.subpaths) || !node.subpaths.every(isSubpath)) fail('subpaths');
+      if (!isCornerLook(node)) fail('cornerStyle');
       break;
     case 'boolean':
       if (typeof node.op !== 'string') fail('op');
@@ -428,6 +437,23 @@ function isSubpath(value: unknown): boolean {
     isObject(value) &&
     typeof value.closed === 'boolean' &&
     Array.isArray(value.anchors) &&
-    value.anchors.every((a) => isObject(a) && [a.x, a.y, a.inX, a.inY, a.outX, a.outY].every(isFiniteNumber))
+    value.anchors.every(
+      (a) =>
+        isObject(a) &&
+        [a.x, a.y, a.inX, a.inY, a.outX, a.outY].every(isFiniteNumber) &&
+        (a.radius === undefined || isNonNegative(a.radius)),
+    )
   );
+}
+
+function isNonNegative(value: unknown): boolean {
+  return isFiniteNumber(value) && value >= 0;
+}
+
+/** 圆角样式只能是认识的那几种，平滑度在 0 到 1 之间 */
+function isCornerLook(node: Record<string, unknown>): boolean {
+  const style = node.cornerStyle;
+  const smoothing = node.cornerSmoothing;
+  if (style !== undefined && !(CORNER_STYLES as readonly unknown[]).includes(style)) return false;
+  return smoothing === undefined || (isFiniteNumber(smoothing) && smoothing >= 0 && smoothing <= 1);
 }

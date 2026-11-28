@@ -22,6 +22,15 @@ import {
 } from '@shiba/core';
 import { pruneAnimations, setAnimationPath } from '../commands/animation';
 import { cloneNodes } from '../commands/edit';
+import {
+  cornerPatch,
+  hitCornerWidget,
+  nextCornerStyle,
+  radiusFromDrag,
+  toNodeLocal,
+  type CornerTarget,
+  type CornerWidget,
+} from '../corner-handles';
 import { drawPill, formatNumber } from '../overlay-guides';
 import { snapMove, snapPoint, type SnapTargets } from '../snap';
 import type { PointerInfo } from '../types';
@@ -133,6 +142,20 @@ type Drag =
       center: Point;
       distance: number;
       key: string;
+    }
+  // 拖圆角控件：所有的角一起，或者（按着 Alt）只改这一个
+  | {
+      kind: 'corner';
+      id: NodeId;
+      target: CornerTarget;
+      widget: CornerWidget;
+      startLocal: Point;
+      single: boolean;
+      moved: boolean;
+      key: string;
+      /** 鼠标在屏幕上的位置，旁边显示半径 */
+      at: Point;
+      radius: number;
     }
   // 拖动作路径上的锚点或控制柄
   | {
@@ -294,6 +317,26 @@ export function createSelectTool(): Tool {
 
     onPointerDown(e, editor) {
       if (beginFillEdit(editor, e.world, e.x, e.y)) return;
+      // 圆角控件在形状里面，离控制柄远，先看它
+      const corner = hitCornerWidget(editor, e.x, e.y);
+      if (corner) {
+        const local = toNodeLocal(corner.target, e.world);
+        if (local) {
+          drag = {
+            kind: 'corner',
+            id: corner.target.node.id,
+            target: corner.target,
+            widget: corner.widget,
+            startLocal: local,
+            single: e.alt,
+            moved: false,
+            key: editor.newMergeKey('corner'),
+            at: { x: e.x, y: e.y },
+            radius: corner.widget.radius,
+          };
+          return;
+        }
+      }
       // 动作路径的手柄优先：路径的起点在对象中心，终点常常落在别的控制柄附近
       const motion = hitMotionHandle(editor, e.x, e.y);
       if (motion) {
@@ -361,6 +404,11 @@ export function createSelectTool(): Tool {
         const overlay = editor.overlayLayer;
         if (hitMotionHandle(editor, e.x, e.y)) {
           editor.setCursor('move');
+          return;
+        }
+        if (hitCornerWidget(editor, e.x, e.y)) {
+          editor.setCursor('pointer');
+          editor.setHover(null);
           return;
         }
         const hit = editor.selection.length > 0 ? overlay?.hitHandle(e.x, e.y) : null;
@@ -511,6 +559,20 @@ export function createSelectTool(): Tool {
         return;
       }
 
+      if (drag.kind === 'corner') {
+        const local = toNodeLocal(drag.target, e.world);
+        if (!local) return;
+        drag.moved = true;
+        drag.at = { x: e.x, y: e.y };
+        const radius = radiusFromDrag(drag.widget, drag.widget.radius, drag.startLocal, local);
+        drag.radius = radius;
+        const node = store.get(drag.id);
+        if (node?.type !== 'rect' && node?.type !== 'path') return;
+        const patch = cornerPatch(node, drag.widget.key, radius, drag.single);
+        store.transact('corner radius', (tx) => tx.update(node.id, patch), { mergeKey: drag.key });
+        return;
+      }
+
       if (drag.kind === 'motion') {
         const { view, index, part, original, key } = drag;
         const to = toPathPoint(view, e.world);
@@ -545,6 +607,13 @@ export function createSelectTool(): Tool {
       editor.setSnapFeedback(null);
       if (!finished) return;
       if (finished.kind === 'pending' && finished.collapseTo) editor.select([finished.collapseTo]);
+      if (finished.kind === 'corner' && !finished.moved && finished.single) {
+        // Alt 单击控件：换圆角样式
+        const node = editor.store.get(finished.id);
+        if (node?.type === 'rect' || node?.type === 'path') {
+          editor.store.transact('corner style', (tx) => tx.update(node.id, { cornerStyle: nextCornerStyle(node) }));
+        }
+      }
       if (finished.kind === 'move') {
         const moved = finished.copies ? [...finished.copies.values()] : [...finished.originals.keys()];
         editor.store.transact(
@@ -595,6 +664,10 @@ export function createSelectTool(): Tool {
     },
 
     drawOverlay(ctx, editor) {
+      if (drag?.kind === 'corner' && drag.moved) {
+        drawPill(ctx, `R ${formatNumber(drag.radius)}`, drag.at.x + 22, drag.at.y + 18, editor.theme.accent);
+        return;
+      }
       if (drag?.kind === 'rotate' && drag.at && drag.ids[0]) {
         // 旋转时鼠标旁边显示第一个对象现在转了多少度
         const degrees = (rotationOf(worldTransform(editor.store, drag.ids[0])) * 180) / Math.PI;

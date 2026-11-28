@@ -20,3 +20,4 @@ export * from './motion';
 export * from './styles';
 export * from './components';
 export * from './layouts';
+export * from './corners';
