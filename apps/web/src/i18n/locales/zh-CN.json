@@ -667,7 +667,12 @@
         "poster": "海报 A2",
         "square": "社交方图",
         "story": "手机竖屏",
-        "banner": "横幅"
+        "banner": "横幅",
+        "phone": "手机",
+        "android": "安卓",
+        "tablet": "平板",
+        "desktop": "桌面",
+        "web": "网页"
       },
       "builtin": {
         "minimal": "简约演示",
@@ -677,7 +682,9 @@
         "poster": "活动海报",
         "posterHint": "A4 竖版，渐变背景",
         "social": "社交方图",
-        "socialHint": "1080 × 1080"
+        "socialHint": "1080 × 1080",
+        "login": "登录页（手机）",
+        "loginHint": "393 × 852，自动布局的表单"
       },
       "styleName": {
         "background": "背景",
@@ -710,8 +717,16 @@
         "posterBody": "两天动手实践：版式、配色、动画和演示。名额有限，欢迎报名。",
         "posterCta": "立即报名",
         "socialQuote": "把复杂的事\n做得简单。",
-        "socialHandle": "@shibadesign"
-      }
+        "socialHandle": "@shibadesign",
+        "loginForm": "表单",
+        "loginTitle": "欢迎回来",
+        "loginSubtitle": "登录你的账号，继续上次的工作。",
+        "loginEmail": "邮箱",
+        "loginPassword": "密码",
+        "loginButton": "登录",
+        "loginForgot": "忘记密码？"
+      },
+      "uiTitle": "界面"
     },
     "layout": {
       "heading": "选择版式",
@@ -1005,6 +1020,17 @@
       "duration": "时长",
       "direction": "方向",
       "hint": "演示时点这个对象跳过去，导出的网页里也能点。"
+    },
+    "icons": {
+      "title": "图标",
+      "search": "搜索图标（英文名，比如 arrow、user）",
+      "none": "没有找到图标",
+      "more": "只列出前 {{shown}} 个，一共 {{count}} 个，再缩小一下范围",
+      "loading": "正在加载图标…"
+    },
+    "framePresets": {
+      "hintFrame": "在画板上拖出一个画框，或者点一个尺寸放在这一页中间。",
+      "hintBoard": "在画板外拖出一个新画板，在画板里拖出画框；也可以点一个尺寸放一个新画板。"
     }
   }
 }

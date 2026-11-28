@@ -1,7 +1,7 @@
 import { useEffect, useRef, type DragEvent, type ReactNode } from 'react';
 import { useEditor } from '../editor/context';
 import { isDocumentFile, isImageFile, openDroppedDocument, placeImageFiles } from '../files';
-import { COMPONENT_DRAG_TYPE } from './AssetsPanel';
+import { COMPONENT_DRAG_TYPE, ICON_DRAG_TYPE } from './AssetsPanel';
 
 /** 编辑器画布的容器。编辑器自己在里面创建和管理 canvas 元素 */
 export function CanvasHost(): ReactNode {
@@ -16,13 +16,21 @@ export function CanvasHost(): ReactNode {
 
   const onDragOver = (event: DragEvent<HTMLDivElement>): void => {
     const types = event.dataTransfer.types;
-    if (!types.includes('Files') && !types.includes(COMPONENT_DRAG_TYPE)) return;
+    if (!types.includes('Files') && !types.includes(COMPONENT_DRAG_TYPE) && !types.includes(ICON_DRAG_TYPE)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   };
 
-  /** 拖进来的图片放在松手的位置；拖进来的 .shiba 或 PDF 文件直接打开；从资源里拖来的组件在松手处放一个实例 */
+  /** 拖进来的图片放在松手的位置；拖进来的 .shiba 或 PDF 文件直接打开；从资源里拖来的组件在松手处放一个实例、图标放在松手处 */
   const onDrop = (event: DragEvent<HTMLDivElement>): void => {
+    const icon = event.dataTransfer.getData(ICON_DRAG_TYPE);
+    if (icon) {
+      event.preventDefault();
+      const box = event.currentTarget.getBoundingClientRect();
+      const at = editor.screenToWorld(event.clientX - box.left, event.clientY - box.top);
+      void import('./IconLibrary').then((m) => m.insertIconByName(editor, icon, at));
+      return;
+    }
     const componentId = event.dataTransfer.getData(COMPONENT_DRAG_TYPE);
     if (componentId) {
       event.preventDefault();

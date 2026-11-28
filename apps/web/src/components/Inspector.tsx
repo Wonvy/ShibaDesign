@@ -7,6 +7,7 @@ import { SlidePanel, listPanels } from '../panels';
 import { findTab } from '../dock/layout';
 import { focusPanel, showPanel, useDockLayout } from '../dock/store';
 import { Section } from '../ui/controls';
+import { FramePresets } from './FramePresets';
 
 /** 右侧属性栏：按注册表依次渲染对当前选区有意义的面板 */
 export function Inspector(): ReactNode {
@@ -14,6 +15,7 @@ export function Inspector(): ReactNode {
   const { t } = useTranslation();
   const nodes = useSelectedNodes();
   const viewMode = useEditorState((s) => s.viewMode);
+  const tool = useEditorState((s) => s.tool);
   const layout = useDockLayout();
   // 订阅这两项是为了在切换幻灯片、修改动画后重新渲染
   useEditorState((s) => s.activeArtboardId);
@@ -24,6 +26,14 @@ export function Inspector(): ReactNode {
     return (
       <aside className="inspector">
         <SlidePanel editor={editor} slide={slide} />
+      </aside>
+    );
+  }
+
+  if (nodes.length === 0 && tool === 'frame') {
+    return (
+      <aside className="inspector">
+        <FramePresets />
       </aside>
     );
   }

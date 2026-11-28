@@ -9,10 +9,11 @@ import {
   updateAnimation,
 } from './animation';
 import { alignSelection, distributeSelection, orderSelection } from './arrange';
-import { addArtboard, deleteArtboard, duplicateActiveArtboard } from './artboard';
+import { addArtboard, deleteArtboard, duplicateActiveArtboard, placeFrame } from './artboard';
 import { createBoolean, releaseBoolean, setBooleanOp } from './boolean';
 import { createComponent, detachInstances, goToMainComponent, placeInstance, resetInstances } from './component';
 import { addAutoLayout, createGroup, releaseGroup, removeAutoLayout, wrapInFrame } from './group';
+import { insertIcon } from './icon';
 import { placeImage, setImageFill } from './image';
 import { createMask, releaseMask, setMaskMode, toggleMask } from './mask';
 import {
@@ -113,6 +114,8 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(wrapInFrame)
     .register(addAutoLayout)
     .register(removeAutoLayout)
+    .register(insertIcon)
+    .register(placeFrame)
     .register(createMask)
     .register(releaseMask)
     .register(setMaskMode)
@@ -188,7 +191,8 @@ export { playableSlides } from './organize';
 export type { ViewToggle } from './view';
 export { cloneNodes } from './edit';
 export type { OffsetPathArgs } from './path';
-export type { AddArtboardArgs } from './artboard';
+export type { AddArtboardArgs, PlaceFrameArgs } from './artboard';
+export { iconPathData, insertIconNode, type IconNode, type InsertIconArgs } from './icon';
 export { pruneAnimations, setAnimationPath, setSlideNotes, slideLayerOf } from './animation';
 export { isMaskNode } from './mask';
 export { mainOf } from './component';

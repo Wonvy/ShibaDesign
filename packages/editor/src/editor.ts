@@ -13,6 +13,7 @@ import {
   isInstanceCopy,
   hasShapeStyle,
   stripeBands,
+  rectCenter,
   rectContainsPoint,
   slides,
   unionRects,
@@ -827,6 +828,13 @@ export class Editor {
       y: this.viewport.height / 2 - (bounds.y + bounds.h / 2) * zoom,
     };
     this.requestRender();
+  }
+
+  /** 没指定位置时新东西放在哪：幻灯片视图里是这一页的中间，画布视图里是视口的中间 */
+  defaultInsertPoint(): Point {
+    const board = this.activeArtboard;
+    if (board && this.state.viewMode === 'slides') return rectCenter(this.geometry.worldBounds(board));
+    return this.screenToWorld(this.viewport.width / 2, this.viewport.height / 2);
   }
 
   /**

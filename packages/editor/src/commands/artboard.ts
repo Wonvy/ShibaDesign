@@ -74,6 +74,50 @@ export function newArtboard(
   });
 }
 
+export interface PlaceFrameArgs {
+  size: readonly [number, number];
+  /** 新画框（画板）的名字，比如"手机" */
+  name?: string;
+}
+
+/**
+ * 按预设尺寸放一个画框（画框工具选中时属性面板里的预设）：幻灯片视图里放在这一页中间（是画框）；
+ * 画布视图里放在最右边那个画板的右侧（是新画板，也是幻灯片的最后一页）
+ */
+export const placeFrame: Command<PlaceFrameArgs> = {
+  id: 'frame.place',
+  run(editor, { size, name }) {
+    const { store } = editor;
+    const board = editor.viewMode === 'slides' ? editor.activeArtboard : null;
+    let id: NodeId;
+    if (board) {
+      const node = createNode('frame', {
+        parent: board.id,
+        index: store.indexOnTop(board.id),
+        seq: nextSeq(store, 'frame'),
+        ...(name ? { name } : {}),
+        transform: translation((board.size[0] - size[0]) / 2, (board.size[1] - size[1]) / 2),
+        size,
+        fill: solid(rgba(1, 1, 1)),
+        stroke: null,
+        cornerRadius: 0,
+        clip: true,
+      });
+      store.transact('place frame', (tx) => tx.create(node));
+      id = node.id;
+    } else {
+      const position = nextPosition(editor, undefined);
+      const node = { ...newArtboard(editor, { ...position, size }), ...(name ? { name } : {}) };
+      store.transact('place artboard', (tx) => tx.create(node));
+      id = node.id;
+      editor.reveal(id);
+    }
+    store.sealHistory();
+    editor.select([id]);
+    editor.setTool('select');
+  },
+};
+
 /**
  * 新建一个画板，同时也是幻灯片的最后一页。大小和背景沿用当前这一页（文档里有"背景"颜色样式时链接它），
  * 可以按版式摆好标题、正文、图片占位框

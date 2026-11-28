@@ -237,7 +237,14 @@ export function NewDocumentDialog(props: { onClose: () => void }): ReactNode {
 
         <h3 className="gallery-heading">{t('template.blank')}</h3>
         <div className="template-grid presets">
-          {BLANK_PRESETS.map((preset) => (
+          {BLANK_PRESETS.filter((p) => !p.group).map((preset) => (
+            <PresetCard key={preset.id} preset={preset} onPick={() => finish(newBlankDocument(editor, preset))} />
+          ))}
+        </div>
+
+        <h3 className="gallery-heading">{t('template.uiTitle')}</h3>
+        <div className="template-grid presets">
+          {BLANK_PRESETS.filter((p) => p.group === 'ui').map((preset) => (
             <PresetCard key={preset.id} preset={preset} onPick={() => finish(newBlankDocument(editor, preset))} />
           ))}
         </div>

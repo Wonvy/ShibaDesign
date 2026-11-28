@@ -449,4 +449,155 @@ const SOCIAL: TemplateDef = {
   },
 };
 
-export const BUILTIN_TEMPLATES: readonly TemplateDef[] = [MINIMAL, DARK, POSTER, SOCIAL];
+/**
+ * 界面模板：手机上的登录页。表单是一个竖排的自动布局画框，里面的输入框、按钮也是自动布局的画框，
+ * 宽度都是"填满"，改一处间距、改按钮文字，其余的跟着排好
+ */
+const LOGIN: TemplateDef = {
+  id: 'login',
+  slides: false,
+  build(t) {
+    const look = theme(
+      t,
+      { background: hex('#ffffff'), text: hex('#111827'), accent: hex('#2563eb'), muted: hex('#6b7280') },
+      {
+        title: type('Inter', 'Noto Sans SC', 28, 700, 1.25),
+        subtitle: type('Inter', 'Noto Sans SC', 16, 600, 1.4),
+        body: type('Inter', 'Noto Sans SC', 15, 400, 1.5),
+        caption: type('Inter', 'Noto Sans SC', 14, 400, 1.4),
+      },
+    );
+    const s = (key: string): string => t(`template.sample.${key}`);
+    const width = 329;
+    const fill = { h: 'fill', v: 'fixed' } as const;
+    /** 输入框、按钮：横排的自动布局画框，里面一段文字 */
+    const field = (
+      store: DocStore,
+      parent: NodeId,
+      y: number,
+      boxFill: SolidFill,
+      stroke: boolean,
+      justify: 'start' | 'center',
+    ): SceneNode =>
+      createNode('frame', {
+        parent,
+        index: store.indexOnTop(parent),
+        seq: nextSeq(store, 'frame'),
+        transform: translation(0, y),
+        size: [width, 48],
+        fill: boxFill,
+        stroke: stroke ? { color: hex('#d1d5db'), width: 1 } : null,
+        cornerRadius: 10,
+        clip: true,
+        layoutSizing: fill,
+        layout: {
+          direction: 'horizontal',
+          gap: 8,
+          padding: [0, 16, 0, 16],
+          justify,
+          align: 'center',
+          sizing: { h: 'fixed', v: 'fixed' },
+        },
+      });
+    const label = (store: DocStore, parent: NodeId, text: string, role: TextRole, color: SolidFill): SceneNode => {
+      const def = textOf(look, role);
+      return createNode('text', {
+        parent,
+        index: store.indexOnTop(parent),
+        seq: nextSeq(store, 'text'),
+        transform: translation(16, 13),
+        size: [0, 0],
+        text,
+        style: def.style,
+        align: 'left',
+        sizing: 'auto',
+        fill: color,
+        textStyle: def.id,
+      });
+    };
+    let form = '';
+    let email = '';
+    let password = '';
+    let button = '';
+    return design(look, [393, 852], colorOf(look, 'background'), (store, board) => [
+      () => {
+        const node = createNode('frame', {
+          parent: board,
+          index: store.indexOnTop(board),
+          seq: nextSeq(store, 'frame'),
+          name: s('loginForm'),
+          transform: translation(32, 200),
+          size: [width, 300],
+          fill: null,
+          stroke: null,
+          cornerRadius: 0,
+          clip: false,
+          layout: {
+            direction: 'vertical',
+            gap: 16,
+            padding: [0, 0, 0, 0],
+            justify: 'start',
+            align: 'start',
+            sizing: { h: 'fixed', v: 'hug' },
+          },
+        });
+        form = node.id;
+        return node;
+      },
+      () => ({
+        ...textNode(store, form, look, {
+          x: 0,
+          y: 0,
+          w: width,
+          text: s('loginTitle'),
+          role: 'title',
+          color: colorOf(look, 'text'),
+        }),
+        layoutSizing: fill,
+      }),
+      () => ({
+        ...textNode(store, form, look, {
+          x: 0,
+          y: 51,
+          w: width,
+          text: s('loginSubtitle'),
+          role: 'body',
+          color: colorOf(look, 'muted'),
+        }),
+        layoutSizing: fill,
+      }),
+      () => {
+        const node = field(store, form, 90, { type: 'solid', color: hex('#ffffff') }, true, 'start');
+        email = node.id;
+        return node;
+      },
+      () => label(store, email, s('loginEmail'), 'body', colorOf(look, 'muted')),
+      () => {
+        const node = field(store, form, 154, { type: 'solid', color: hex('#ffffff') }, true, 'start');
+        password = node.id;
+        return node;
+      },
+      () => label(store, password, s('loginPassword'), 'body', colorOf(look, 'muted')),
+      () => {
+        const node = field(store, form, 218, colorOf(look, 'accent'), false, 'center');
+        button = node.id;
+        return node;
+      },
+      () => label(store, button, s('loginButton'), 'subtitle', { type: 'solid', color: hex('#ffffff') }),
+      () => ({
+        ...textNode(store, form, look, {
+          x: 0,
+          y: 282,
+          w: width,
+          text: s('loginForgot'),
+          role: 'caption',
+          color: colorOf(look, 'accent'),
+          align: 'center',
+        }),
+        layoutSizing: fill,
+      }),
+    ]);
+  },
+};
+
+export const BUILTIN_TEMPLATES: readonly TemplateDef[] = [MINIMAL, DARK, POSTER, SOCIAL, LOGIN];

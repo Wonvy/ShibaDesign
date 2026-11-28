@@ -667,7 +667,12 @@
         "poster": "Poster A2",
         "square": "Square post",
         "story": "Phone story",
-        "banner": "Banner"
+        "banner": "Banner",
+        "phone": "Phone",
+        "android": "Android",
+        "tablet": "Tablet",
+        "desktop": "Desktop",
+        "web": "Web"
       },
       "builtin": {
         "minimal": "Minimal deck",
@@ -677,7 +682,9 @@
         "poster": "Event poster",
         "posterHint": "A4 portrait with a gradient",
         "social": "Quote card",
-        "socialHint": "1080 × 1080"
+        "socialHint": "1080 × 1080",
+        "login": "Sign-in (phone)",
+        "loginHint": "393 × 852, auto layout form"
       },
       "styleName": {
         "background": "Background",
@@ -710,8 +717,16 @@
         "posterBody": "Two hands-on days of layout, color, animation and presenting. Places are limited.",
         "posterCta": "Sign up",
         "socialQuote": "Make the complex\nfeel simple.",
-        "socialHandle": "@shibadesign"
-      }
+        "socialHandle": "@shibadesign",
+        "loginForm": "Form",
+        "loginTitle": "Welcome back",
+        "loginSubtitle": "Sign in to pick up where you left off.",
+        "loginEmail": "Email",
+        "loginPassword": "Password",
+        "loginButton": "Sign in",
+        "loginForgot": "Forgot password?"
+      },
+      "uiTitle": "Interface"
     },
     "layout": {
       "heading": "Choose a layout",
@@ -1005,6 +1020,17 @@
       "duration": "Duration",
       "direction": "Direction",
       "hint": "Click this object while presenting to jump there; it also works in exported HTML."
+    },
+    "icons": {
+      "title": "Icons",
+      "search": "Search icons (e.g. arrow, user)",
+      "none": "No icons found",
+      "more": "Showing the first {{shown}} of {{count}}; narrow it down",
+      "loading": "Loading icons…"
+    },
+    "framePresets": {
+      "hintFrame": "Drag on the slide to draw a frame, or pick a size to place one in the middle.",
+      "hintBoard": "Drag outside artboards to draw a new artboard, inside one to draw a frame, or pick a size to add an artboard."
     }
   }
 }

@@ -1,5 +1,5 @@
 import { Crosshair, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   colorStyles,
@@ -20,6 +20,11 @@ import { nextStyleName as nextName } from '../panels/StylePickers';
 
 /** 拖组件到画布上时 dataTransfer 里用的类型，CanvasHost 认这个 */
 export const COMPONENT_DRAG_TYPE = 'application/x-shiba-component';
+/** 从图标库拖到画布上的图标名 */
+export const ICON_DRAG_TYPE = 'application/x-shiba-icon';
+
+/** 图标库用到时才加载（两千多个图标的索引不放进主包） */
+const IconLibrary = lazy(() => import('./IconLibrary'));
 
 const THUMB_SIZE = 72;
 const THUMB_DELAY = 150;
@@ -316,6 +321,12 @@ export function AssetsPanel(): ReactNode {
             </button>
           </div>
         ))}
+      </section>
+      <section className="asset-section">
+        <h3 className="asset-heading">{t('icons.title')}</h3>
+        <Suspense fallback={<p className="empty-note">{t('icons.loading')}</p>}>
+          <IconLibrary />
+        </Suspense>
       </section>
     </div>
   );
