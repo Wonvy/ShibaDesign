@@ -50,6 +50,31 @@ function backgroundColor(fill: ArtboardNode['fill']): Color {
 }
 
 /**
+ * 一个新画板（还没放进文档），排在幻灯片的最后一页。文档里有"背景"颜色样式时链接它，
+ * 否则沿用 like（通常是当前这一页）的背景，都没有时是白色
+ */
+export function newArtboard(
+  editor: Editor,
+  box: { x: number; y: number; size: readonly [number, number] },
+  like?: ArtboardNode,
+): ArtboardNode {
+  const { store } = editor;
+  const deck = slides(store);
+  const backgroundStyle = colorStyleFor(colorStyles(store), 'background');
+  return createNode('artboard', {
+    parent: store.root.id,
+    index: store.indexOnTop(store.root.id),
+    seq: nextSeq(store, 'artboard'),
+    transform: translation(box.x, box.y),
+    size: box.size,
+    fill: backgroundStyle
+      ? { type: 'solid', color: backgroundStyle.color, colorStyle: backgroundStyle.id }
+      : (like?.fill ?? solid(rgba(1, 1, 1))),
+    deck: { order: keyBetween(deck.at(-1)?.deck?.order ?? null, null), notes: '' },
+  });
+}
+
+/**
  * 新建一个画板，同时也是幻灯片的最后一页。大小和背景沿用当前这一页（文档里有"背景"颜色样式时链接它），
  * 可以按版式摆好标题、正文、图片占位框
  */
@@ -60,18 +85,7 @@ export const addArtboard: Command<AddArtboardArgs | undefined> = {
     const deck = slides(store);
     const last = editor.activeArtboard ?? deck.at(-1);
     const position = nextPosition(editor, last);
-    const backgroundStyle = colorStyleFor(colorStyles(store), 'background');
-    const board = createNode('artboard', {
-      parent: store.root.id,
-      index: store.indexOnTop(store.root.id),
-      seq: nextSeq(store, 'artboard'),
-      transform: translation(position.x, position.y),
-      size: last?.size ?? DEFAULT_SIZE,
-      fill: backgroundStyle
-        ? { type: 'solid', color: backgroundStyle.color, colorStyle: backgroundStyle.id }
-        : (last?.fill ?? solid(rgba(1, 1, 1))),
-      deck: { order: keyBetween(deck.at(-1)?.deck?.order ?? null, null), notes: '' },
-    });
+    const board = newArtboard(editor, { ...position, size: last?.size ?? DEFAULT_SIZE }, last);
     const content = args?.layout
       ? buildLayout(
           args.layout,

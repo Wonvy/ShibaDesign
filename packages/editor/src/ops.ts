@@ -1,7 +1,9 @@
 import {
   applyToPoint,
   applyToVector,
+  breaksComponentRules,
   invert,
+  isInstanceCopy,
   multiply,
   parentWorldTransform,
   rectCenter,
@@ -51,21 +53,23 @@ export function translateFromOriginals(
 }
 
 /**
- * 拖动结束后按位置重新归属：对象的中心落在哪个画板里，就成为那个画板的子节点；
- * 落在所有画板之外就归页面。只在自由画布视图里生效。
+ * 拖动结束后按位置重新归属：对象的中心落在哪个画框里就放进那个画框（最里层的），否则落在哪个画板里
+ * 就成为那个画板的子节点，落在所有画板之外就归页面。幻灯片视图里只在这一页和它里面的画框之间换。
  */
 export function reparentByPosition(editor: Editor, tx: Transaction, ids: Iterable<NodeId>): void {
-  if (editor.viewMode !== 'canvas') return;
   const { store } = editor;
-  for (const id of ids) {
+  const list = [...ids];
+  // 拖动的画框不能放进自己里面
+  const moving = new Set(list);
+  for (const id of list) {
     const node = tx.get(id);
-    if (!node || node.type === 'artboard' || !node.parent) continue;
-    // 只管直接放在画板或页面上的对象。编组（包括蒙版组）、布尔组里的成员挪动以后还留在组里，
+    if (!node || node.type === 'artboard' || !node.parent || isInstanceCopy(node)) continue;
+    // 只管直接放在画板、画框或页面上的对象。编组（包括蒙版组）、布尔组里的成员挪动以后还留在组里，
     // 否则在组里拖一下成员，它就被拽出组、蒙版也遮不住它了
     const parent = tx.get(node.parent);
-    if (parent?.type !== 'artboard' && parent?.type !== 'page') continue;
-    const target = editor.containerAt(rectCenter(editor.geometry.worldBounds(node)));
-    if (target.id === node.parent) continue;
+    if (parent?.type !== 'artboard' && parent?.type !== 'page' && parent?.type !== 'frame') continue;
+    const target = editor.containerAt(rectCenter(editor.geometry.worldBounds(node)), moving);
+    if (target.id === node.parent || breaksComponentRules(store, [id], target.id)) continue;
     const inverse = invert(worldTransform(store, target.id));
     if (!inverse) continue;
     tx.update(id, {

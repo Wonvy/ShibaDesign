@@ -12,6 +12,7 @@ import {
   BringToFront,
   Crop,
   Group,
+  Hash,
   SendToBack,
   SquaresExclude,
   SquaresIntersect,
@@ -113,6 +114,13 @@ export function OrderPanel({ editor }: PanelProps): ReactNode {
         onClick={() => editor.commands.run('group.release')}
       >
         <Ungroup size={16} />
+      </IconButton>
+      <IconButton
+        title={withKey(editor, t('frame.wrap'), 'frame.wrap')}
+        disabled={!editor.commands.canRun('frame.wrap')}
+        onClick={() => editor.commands.run('frame.wrap')}
+      >
+        <Hash size={16} />
       </IconButton>
     </div>
   );

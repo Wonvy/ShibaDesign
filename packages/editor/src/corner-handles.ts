@@ -2,12 +2,14 @@ import {
   CORNER_STYLES,
   applyToPoint,
   canRoundAnchor,
+  hasBoxCorners,
   invert,
   isInstance,
   maxRectRadius,
   rectCornerRadii,
   worldTransform,
   type CornerStyle,
+  type FrameNode,
   type Matrix,
   type NodePatch,
   type PathNode,
@@ -43,7 +45,7 @@ export interface CornerWidget {
 }
 
 export interface CornerTarget {
-  node: RectNode | PathNode;
+  node: RectNode | FrameNode | PathNode;
   world: Matrix;
   widgets: CornerWidget[];
 }
@@ -59,16 +61,16 @@ export function cornerTarget(editor: Editor): CornerTarget | null {
   const nodes = editor.selectedNodes();
   if (nodes.length !== 1) return null;
   const node = nodes[0]!;
-  if (node.locked || isInstance(node) || (node.type !== 'rect' && node.type !== 'path')) return null;
+  if (node.locked || isInstance(node) || (!hasBoxCorners(node) && node.type !== 'path')) return null;
   const world = worldTransform(editor.store, node.id);
   const scale = Math.sqrt(Math.abs(world[0] * world[3] - world[1] * world[2])) * editor.camera.zoom;
   const [w, h] = node.size;
   if (Math.min(w, h) * scale < MIN_SCREEN_SIZE) return null;
-  const widgets = node.type === 'rect' ? rectWidgets(node) : pathWidgets(node);
+  const widgets = hasBoxCorners(node) ? rectWidgets(node) : pathWidgets(node);
   return widgets.length > 0 ? { node, world, widgets } : null;
 }
 
-function rectWidgets(node: RectNode): CornerWidget[] {
+function rectWidgets(node: RectNode | FrameNode): CornerWidget[] {
   const [w, h] = node.size;
   const radii = rectCornerRadii(node);
   const max = maxRectRadius(w, h);
@@ -153,8 +155,13 @@ export function radiusFromDrag(widget: CornerWidget, start: number, startLocal: 
  * 改圆角：所有的角一起，或者只改一个（Alt）。矩形四个角一样时只写 cornerRadius，不一样时写 cornerRadii；
  * 路径改锚点的 radius
  */
-export function cornerPatch(node: RectNode | PathNode, key: string, radius: number, single: boolean): NodePatch {
-  if (node.type === 'rect') {
+export function cornerPatch(
+  node: RectNode | FrameNode | PathNode,
+  key: string,
+  radius: number,
+  single: boolean,
+): NodePatch {
+  if (hasBoxCorners(node)) {
     if (!single) return { cornerRadius: radius, cornerRadii: undefined };
     const radii = rectCornerRadii(node);
     radii[Number(key)] = radius;
@@ -174,7 +181,7 @@ export function cornerPatch(node: RectNode | PathNode, key: string, radius: numb
 }
 
 /** Alt 单击控件：圆角 → 反向圆角 → 倒角 → 圆角 */
-export function nextCornerStyle(node: RectNode | PathNode): CornerStyle {
+export function nextCornerStyle(node: RectNode | FrameNode | PathNode): CornerStyle {
   const current = node.cornerStyle ?? 'round';
   return CORNER_STYLES[(CORNER_STYLES.indexOf(current) + 1) % CORNER_STYLES.length]!;
 }

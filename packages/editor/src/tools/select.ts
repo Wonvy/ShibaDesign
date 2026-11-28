@@ -1,4 +1,5 @@
 import {
+  hasBoxCorners,
   hasLiveAppearance,
   applyToPoint,
   isInstanceCopy,
@@ -610,7 +611,7 @@ export function createSelectTool(): Tool {
       if (finished.kind === 'corner' && !finished.moved && finished.single) {
         // Alt 单击控件：换圆角样式
         const node = editor.store.get(finished.id);
-        if (node?.type === 'rect' || node?.type === 'path') {
+        if (hasBoxCorners(node) || node?.type === 'path') {
           editor.store.transact('corner style', (tx) => tx.update(node.id, { cornerStyle: nextCornerStyle(node) }));
         }
       }
@@ -649,12 +650,16 @@ export function createSelectTool(): Tool {
         editor.setTool('direct');
         return;
       }
-      // 双击编组：进入这个组，选中鼠标下面的那个成员。之后单击组里的其他成员也是选成员。
-      // 蒙版组也一样：蒙版本身点不中，选中的是被遮住的内容，拖动它时蒙版不动
-      if (hit.type === 'group') {
+      // 双击编组、画框：进入它，选中鼠标下面的那个成员。之后单击里面的其他成员也是选成员。
+      // 蒙版组也一样：蒙版本身点不中，选中的是被遮住的内容，拖动它时蒙版不动。
+      // 双击画框的空白处（下面没有它里面的东西）：画框填了渐变或图片时在画布上调整它
+      if (hit.type === 'group' || hit.type === 'frame') {
         const inner = editor.pickInside(e.world, hit.id);
-        if (inner) editor.select([inner.id]);
-        return;
+        if (inner) {
+          editor.select([inner.id]);
+          return;
+        }
+        if (hit.type === 'group') return;
       }
       // 双击填了渐变或图片的形状：在画布上调整渐变的起点终点，或者图片在形状里的位置和大小
       const fill = 'fill' in hit ? hit.fill : null;
@@ -727,7 +732,9 @@ function groupMembersOf(editor: Editor, nodes: readonly SceneNode[]): SceneNode[
   const out: SceneNode[] = [];
   const visit = (node: SceneNode): void => {
     if (!node.visible || node.locked) return;
-    if (node.type === 'group') editor.store.children(node.id).forEach(visit);
+    // 画框里有东西时也展开；空的画框自己算一个
+    const kids = node.type === 'group' || node.type === 'frame' ? editor.store.children(node.id) : [];
+    if (kids.length > 0) kids.forEach(visit);
     else out.push(node);
   };
   nodes.forEach(visit);

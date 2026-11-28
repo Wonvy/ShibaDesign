@@ -26,7 +26,8 @@
       "star": "星形",
       "pencil": "铅笔",
       "eyedropper": "吸管（套用点到的对象的外观）",
-      "zoom": "视图缩放"
+      "zoom": "视图缩放",
+      "frame": "画框（画板外画的是画板）"
     },
     "action": {
       "undo": "撤销",
@@ -59,7 +60,8 @@
       "component": "组件",
       "properties": "属性",
       "notes": "备注",
-      "polygon": "多边形"
+      "polygon": "多边形",
+      "frame": "画框"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -160,7 +162,8 @@
       "arrow_bar": "横杠",
       "sides": "边数",
       "points": "角数",
-      "innerRatio": "内径"
+      "innerRatio": "内径",
+      "clipContent": "裁剪内容"
     },
     "blend": {
       "normal": "正常",
@@ -194,7 +197,8 @@
       "component": "组件",
       "instance": "实例",
       "polygon": "多边形",
-      "star": "星形"
+      "star": "星形",
+      "frame": "画框"
     },
     "inspector": {
       "empty": "未选中对象",
@@ -877,6 +881,9 @@
     },
     "toolbar": {
       "lockHint": "双击锁住，可以连续画"
+    },
+    "frame": {
+      "wrap": "用画框包起来"
     }
   }
 }

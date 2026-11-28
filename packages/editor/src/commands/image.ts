@@ -66,9 +66,9 @@ export const setImageFill: Command<{ assetId: string; fit?: ImageFit }> = {
   },
 };
 
-/** 形状类节点才能用图片作填充；画板和文本目前只支持纯色 */
+/** 形状类节点和画框才能用图片作填充；画板和文本目前只支持纯色 */
 function canHoldImage(node: { type: string }): boolean {
-  return node.type === 'rect' || node.type === 'ellipse' || node.type === 'path' || node.type === 'boolean';
+  return ['rect', 'ellipse', 'polygon', 'path', 'boolean', 'frame'].includes(node.type);
 }
 
 /** 没指定位置时：放在当前画板的中央；没有画板就放在视口中央 */

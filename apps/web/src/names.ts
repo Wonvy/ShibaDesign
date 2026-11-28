@@ -23,7 +23,7 @@ export function displayName(node: SceneNode, t: (key: string) => string, store?:
     if (isComponent(main)) return displayName(main, t);
   }
   const kind =
-    'fill' in node && node.fill?.type === 'image'
+    'fill' in node && node.type !== 'frame' && node.fill?.type === 'image'
       ? 'image'
       : isComponent(node)
         ? 'component'

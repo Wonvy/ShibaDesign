@@ -2,6 +2,7 @@ import {
   createNode,
   nextSeq,
   rectFromPoints,
+  rgba,
   solid,
   translation,
   type NodeId,
@@ -9,6 +10,7 @@ import {
   type Rect,
   type SceneNode,
 } from '@shiba/core';
+import { newArtboard } from '../commands/artboard';
 import type { Editor } from '../editor';
 import { DEFAULT_FILL, localOrigin } from '../ops';
 import { snapPoint, type SnapTargets } from '../snap';
@@ -58,10 +60,11 @@ export function dragRect(start: Point, current: Point, square: boolean, fromCent
 }
 
 /**
- * 形状工具：拖出一个矩形或椭圆；单击不拖动时创建默认大小。
- * 按住 Shift 约束为正方形或正圆，按住 Alt 从中心画，拖动中按住空格挪动正在画的形状
+ * 形状工具：拖出一个矩形、椭圆、多边形、星形或画框；单击不拖动时创建默认大小。
+ * 按住 Shift 约束为正方形或正圆，按住 Alt 从中心画，拖动中按住空格挪动正在画的形状。
+ * 画框工具（F）在画板里（或者画框里）画的是画框，在所有画板外面（画布视图）画的是新画板
  */
-export type ShapeKind = 'rect' | 'ellipse' | 'polygon' | 'star';
+export type ShapeKind = 'rect' | 'ellipse' | 'polygon' | 'star' | 'frame';
 
 /** 新画的星形内顶点到中心的距离是外顶点的几倍（黄金比例附近，像常见的五角星） */
 const STAR_RATIO = 0.382;
@@ -72,6 +75,20 @@ export function createShapeTool(kind: ShapeKind): Tool {
   const build = (editor: Editor, containerId: NodeId, rect: Rect): SceneNode => {
     const { store } = editor;
     const origin = localOrigin(store, containerId, rect);
+    if (kind === 'frame') {
+      if (containerId === store.root.id) return newArtboard(editor, { ...origin, size: [rect.w, rect.h] });
+      return createNode('frame', {
+        parent: containerId,
+        index: store.indexOnTop(containerId),
+        seq: nextSeq(store, 'frame'),
+        transform: translation(origin.x, origin.y),
+        size: [rect.w, rect.h],
+        fill: solid(rgba(1, 1, 1)),
+        stroke: null,
+        cornerRadius: 0,
+        clip: true,
+      });
+    }
     const common = {
       parent: containerId,
       index: store.indexOnTop(containerId),

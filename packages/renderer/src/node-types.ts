@@ -45,9 +45,16 @@ export interface DrawContext {
  */
 export type ChildrenMode = 'none' | 'draw' | 'clip' | 'consume';
 
+/** 默认绘制画哪几部分：全部、只画填充、只画描边（画框的描边画在子节点上面，分两次画） */
+export type ShapeParts = 'all' | 'fill' | 'stroke';
+
 export interface NodeTypeDef<T extends SceneNode = SceneNode> {
   type: T['type'];
   children: ChildrenMode;
+  /** children 是 clip 时，这个节点要不要裁剪子节点。不提供时总是裁剪（画板）；画框可以关掉 */
+  clips?(node: T): boolean;
+  /** 描边画在子节点上面（画框）：先画填充，再画子节点，最后画描边，描边不会被里面的东西盖住 */
+  strokeOver?: boolean;
   /** 轮廓依赖的其他节点；它们变化时轮廓会重算 */
   outlineDeps?(node: T, ctx: OutlineContext): readonly SceneNode[];
   /** 生成轮廓（本地坐标）。返回的 Path 交给缓存管理 */
@@ -72,6 +79,11 @@ export class NodeTypeRegistry {
   has(type: string): boolean {
     return this.defs.has(type);
   }
+}
+
+/** 这个容器画子节点时要不要按自己的轮廓裁剪 */
+export function clipsChildren(def: NodeTypeDef, node: SceneNode): boolean {
+  return def.children === 'clip' && (def.clips ? def.clips(node) : true);
 }
 
 /** 节点是不是只有轮廓、按填充和描边画的形状（矩形、椭圆、钢笔路径、布尔组）。蒙版按轮廓裁剪只对这种节点有意义 */

@@ -13,7 +13,7 @@ import {
   type Rect,
   type SceneNode,
 } from '@shiba/core';
-import type { NodeTypeRegistry, OutlineContext } from './node-types';
+import { clipsChildren, type NodeTypeRegistry, type OutlineContext } from './node-types';
 import { strokeBounds } from './path-ops';
 
 interface Entry {
@@ -96,9 +96,17 @@ export class GeometryCache {
       return unionRects(rects) ?? EMPTY_RECT;
     }
     const bounds = this.localBounds(node);
-    if (!hasShapeStyle(node) || !node.stroke) return bounds;
+    // 关了裁剪的画框：里面伸出去的东西也画出来
+    const overflow =
+      def?.children === 'clip' && !clipsChildren(def, node)
+        ? this.store
+            .children(node.id)
+            .filter((c) => c.visible)
+            .map((c) => transformRect(c.transform, this.drawnBounds(c)))
+        : [];
+    if (!hasShapeStyle(node) || !node.stroke) return unionRects([bounds, ...overflow])!;
     const stroke = strokeBounds(this.ck, this.outlineOf(node), node.stroke);
-    const rects = stroke ? [bounds, stroke] : [bounds];
+    const rects = stroke ? [bounds, stroke, ...overflow] : [bounds, ...overflow];
     // 箭头伸出线的端点
     const arrows = arrowPaths(this.ck, node);
     if (arrows) {
@@ -199,7 +207,10 @@ export class GeometryCache {
     const [x, y] = applyToPoint(inv, px, py);
 
     if (def.children === 'draw' || def.children === 'clip') {
-      if (def.children === 'clip' && !this.outlineOf(node).contains(x, y)) return null;
+      // 画板、画框：点在自己的轮廓里时，没点中里面的东西就是点中了自己（空白处）；
+      // 裁剪内容的，轮廓外面什么都点不中
+      const inside = def.children === 'clip' && this.outlineOf(node).contains(x, y);
+      if (clipsChildren(def, node) && !inside) return null;
       // 蒙版组：只有蒙版范围里的内容点得中，蒙版本身点不中（在图层列表里选）
       const { mask, contents } = maskParts(this.store, node);
       if (mask?.visible) {
@@ -215,7 +226,7 @@ export class GeometryCache {
         const hit = this.hitNode(kids[i]!, x, y, tolerance);
         if (hit) return hit;
       }
-      return def.children === 'clip' ? node : null;
+      return inside ? node : null;
     }
 
     const outline = this.outlineOf(node);

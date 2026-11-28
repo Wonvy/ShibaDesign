@@ -689,3 +689,43 @@ describe('导出 PDF：箭头和多边形', () => {
     expect(star.subpaths[0]!.anchors).toHaveLength(10);
   });
 });
+
+describe('导出 PDF：画框', () => {
+  it('填充、裁剪过的内容、描边按顺序写出去；读回来里面的东西还是被画框裁着', async () => {
+    const env = setup();
+    const frame = env.add(
+      createNode('frame', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 40, 40],
+        size: [200, 120],
+        fill: solid(rgba(1, 1, 1)),
+        stroke: { color: rgba(0, 0, 0), width: 2 },
+        cornerRadius: 0,
+        clip: true,
+      }),
+    );
+    env.add(
+      createNode('rect', {
+        ...env.on(frame.id),
+        transform: [1, 0, 0, 1, 150, 20],
+        size: [120, 40],
+        cornerRadius: 0,
+        fill: solid(rgba(1, 0, 0)),
+        stroke: null,
+      }),
+    );
+    const { bytes } = await exportAndOpen(env);
+    const back = await reimport(bytes);
+    // 读回来是三个对象：画框的白底、裁到画框右边（x = 240）的红色矩形、画在最上面的描边
+    const [fill, inner, stroke] = back.items;
+    expect(back.items).toHaveLength(3);
+    expect(fill).toMatchObject({
+      type: 'rect',
+      transform: [1, 0, 0, 1, 40, 40],
+      size: [200, 120],
+      fill: solid(rgba(1, 1, 1)),
+    });
+    expect(inner).toMatchObject({ transform: [1, 0, 0, 1, 190, 60], size: [50, 40], fill: solid(rgba(1, 0, 0)) });
+    expect(stroke).toMatchObject({ size: [200, 120], fill: null, stroke: { color: rgba(0, 0, 0), width: 2 } });
+  });
+});

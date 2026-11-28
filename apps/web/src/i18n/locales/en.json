@@ -26,7 +26,8 @@
       "star": "Star",
       "pencil": "Pencil",
       "eyedropper": "Eyedropper (apply the clicked object's look)",
-      "zoom": "Zoom"
+      "zoom": "Zoom",
+      "frame": "Frame (outside artboards: artboard)"
     },
     "action": {
       "undo": "Undo",
@@ -59,7 +60,8 @@
       "component": "Component",
       "properties": "Properties",
       "notes": "Notes",
-      "polygon": "Polygon"
+      "polygon": "Polygon",
+      "frame": "Frame"
     },
     "slide": {
       "add": "New slide",
@@ -160,7 +162,8 @@
       "arrow_bar": "Bar",
       "sides": "Sides",
       "points": "Points",
-      "innerRatio": "Inner"
+      "innerRatio": "Inner",
+      "clipContent": "Clip content"
     },
     "blend": {
       "normal": "Normal",
@@ -194,7 +197,8 @@
       "component": "Component",
       "instance": "Instance",
       "polygon": "Polygon",
-      "star": "Star"
+      "star": "Star",
+      "frame": "Frame"
     },
     "inspector": {
       "empty": "Nothing selected",
@@ -877,6 +881,9 @@
     },
     "toolbar": {
       "lockHint": "Double-click to keep it on"
+    },
+    "frame": {
+      "wrap": "Wrap in frame"
     }
   }
 }

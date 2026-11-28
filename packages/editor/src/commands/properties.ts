@@ -1,4 +1,14 @@
-import type { BlendMode, Fill, NodePatch, RectNode, SceneNode, Stroke, TextAlign, TextStyle } from '@shiba/core';
+import {
+  hasBoxCorners,
+  type BlendMode,
+  type Fill,
+  type NodePatch,
+  type RectNode,
+  type SceneNode,
+  type Stroke,
+  type TextAlign,
+  type TextStyle,
+} from '@shiba/core';
 import type { Editor } from '../editor';
 import type { Command } from './command';
 
@@ -23,7 +33,7 @@ function propertiesOf(node: SceneNode): PropertySet {
   const props: PropertySet = { opacity: node.opacity, blendMode: node.blendMode };
   if ('fill' in node) props.fill = node.fill;
   if ('stroke' in node) props.stroke = node.stroke;
-  if (node.type === 'rect') {
+  if (hasBoxCorners(node)) {
     props.cornerRadius = node.cornerRadius;
     props.corners = {
       cornerRadii: node.cornerRadii,
@@ -53,7 +63,7 @@ function patchFor(node: SceneNode, props: PropertySet): NodePatch | null {
     if (accepts) patch.fill = fill;
   }
   if ('stroke' in node && props.stroke !== undefined) patch.stroke = props.stroke;
-  if (node.type === 'rect' && props.cornerRadius !== undefined) {
+  if (hasBoxCorners(node) && props.cornerRadius !== undefined) {
     patch.cornerRadius = props.cornerRadius;
     Object.assign(patch, props.corners);
   }

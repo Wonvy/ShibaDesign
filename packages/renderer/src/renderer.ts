@@ -24,7 +24,14 @@ import type { GeometryCache } from './geometry';
 import { drawGradient } from './gradient';
 import { makeImageShader, type ImageCache } from './images';
 import { arrowPaths } from './arrows';
-import { isPlainShape, type DrawContext, type NodeTypeDef, type NodeTypeRegistry } from './node-types';
+import {
+  clipsChildren,
+  isPlainShape,
+  type DrawContext,
+  type NodeTypeDef,
+  type NodeTypeRegistry,
+  type ShapeParts,
+} from './node-types';
 import { toSkBlendMode, toSkColor, toSkMatrix } from './skia';
 
 /** 屏幕坐标 = 世界坐标 × zoom + (x, y)，单位是 CSS 像素 */
@@ -324,7 +331,9 @@ export class Renderer {
     const world = multiply(parentWorld, node.transform);
     const isContainer = def.children === 'draw' || def.children === 'clip';
 
-    if (viewport && def.children !== 'draw') {
+    // 不裁剪的容器（编组、关了裁剪的画框）里的东西可以伸出自己的范围，不按自己的范围剔除
+    const culls = def.children === 'none' || def.children === 'consume' || clipsChildren(def, node);
+    if (viewport && culls) {
       const local = this.geometry.localBounds(node);
       const pad = hasShapeStyle(node) && node.stroke ? node.stroke.width : 0;
       const padded = { x: local.x - pad, y: local.y - pad, w: local.w + pad * 2, h: local.h + pad * 2 };
@@ -360,13 +369,19 @@ export class Renderer {
     };
     this.drawn += 1;
     if (def.draw) (def as NodeTypeDef).draw!(node, ctx);
-    else drawShape(node, ctx);
+    else drawShape(node, ctx, def.strokeOver ? 'fill' : 'all');
 
     if (isContainer) {
-      if (def.children === 'clip') canvas.clipPath(outline, ck.ClipOp.Intersect, true);
+      const clip = clipsChildren(def, node);
+      if (clip) {
+        canvas.save();
+        canvas.clipPath(outline, ck.ClipOp.Intersect, true);
+      }
       if (masked) this.drawMasked(canvas, node, masked, contents, world, viewport);
       else for (const child of this.store.children(node.id)) this.drawNode(canvas, child, world, viewport);
+      if (clip) canvas.restore();
     }
+    if (def.strokeOver && !def.draw) drawShape(node, ctx, 'stroke');
 
     if (layered) canvas.restore();
     canvas.restore();
@@ -423,12 +438,14 @@ function drawImageFill(fill: ImageFill, image: Image, ctx: DrawContext): void {
   colorFilter?.delete();
 }
 
-/** 默认绘制：先填充，再描边（描边居中） */
-function drawShape(node: SceneNode, ctx: DrawContext): void {
+/** 默认绘制：先填充，再描边（描边居中）。parts 指定只画其中一部分（画框分两次画） */
+function drawShape(node: SceneNode, ctx: DrawContext, parts: ShapeParts = 'all'): void {
   if (!hasShapeStyle(node)) return;
   const { ck, canvas, outline, paint } = ctx;
   paint.setBlendMode(ctx.blendMode);
-  if (node.fill?.type === 'solid') {
+  if (parts === 'stroke') {
+    // 只画描边：下面的填充分支都跳过
+  } else if (node.fill?.type === 'solid') {
     paint.setStyle(ck.PaintStyle.Fill);
     paint.setColor(toSkColor(ck, node.fill.color, ctx.opacity));
     canvas.drawPath(outline, paint);
@@ -446,7 +463,7 @@ function drawShape(node: SceneNode, ctx: DrawContext): void {
       canvas.drawPath(outline, paint);
     }
   }
-  if (node.stroke && node.stroke.width > 0) {
+  if (parts !== 'fill' && node.stroke && node.stroke.width > 0) {
     // 开放路径两头有箭头：描缩短过的线，再按描边的颜色填箭头
     const arrows = arrowPaths(ck, node);
     paint.setStyle(ck.PaintStyle.Stroke);

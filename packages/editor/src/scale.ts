@@ -1,13 +1,14 @@
-import type {
-  NodeId,
-  NodePatch,
-  ParagraphOverride,
-  Point,
-  Rect,
-  SceneNode,
-  Stroke,
-  Transaction,
-  DocStore,
+import {
+  hasBoxCorners,
+  type NodeId,
+  type NodePatch,
+  type ParagraphOverride,
+  type Point,
+  type Rect,
+  type SceneNode,
+  type Stroke,
+  type Transaction,
+  type DocStore,
 } from '@shiba/core';
 import { resizeInWorld } from './resize';
 
@@ -21,7 +22,7 @@ import { resizeInWorld } from './resize';
 export function scaledParams(current: SceneNode, original: SceneNode, k: number): NodePatch | null {
   const patch: Record<string, unknown> = {};
   if ('stroke' in original && original.stroke) patch.stroke = scaleStroke(original.stroke, k);
-  if (original.type === 'rect') {
+  if (hasBoxCorners(original)) {
     patch.cornerRadius = original.cornerRadius * k;
     if (original.cornerRadii) patch.cornerRadii = original.cornerRadii.map((r) => r * k);
   }

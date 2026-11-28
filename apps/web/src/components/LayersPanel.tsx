@@ -9,6 +9,7 @@ import {
   EyeOff,
   Frame,
   Group,
+  Hash,
   Image,
   Lock,
   LockOpen,
@@ -42,6 +43,7 @@ import { onRenameRequest } from '../ui/rename';
 
 const ICONS: Record<string, LucideIcon> = {
   artboard: Frame,
+  frame: Hash,
   rect: Square,
   ellipse: Circle,
   polygon: Pentagon,
@@ -64,10 +66,10 @@ interface Row {
   hasChildren: boolean;
 }
 
-/** 能"放进去"的容器：画板、编组、布尔组（不含实例） */
+/** 能"放进去"的容器：画板、画框、编组、布尔组（不含实例） */
 function isContainer(node: SceneNode): boolean {
   return (
-    (node.type === 'artboard' || node.type === 'group' || node.type === 'boolean') &&
+    (node.type === 'artboard' || node.type === 'frame' || node.type === 'group' || node.type === 'boolean') &&
     !isInstance(node) &&
     !isInstanceCopy(node)
   );

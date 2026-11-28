@@ -288,6 +288,21 @@ export interface EllipseNode extends BaseNode, ShapeStyle {
   type: 'ellipse';
 }
 
+/**
+ * 画框：做界面用的容器，一屏里面套着卡片、卡片里套着按钮，每层都是一个画框。
+ * 和编组不同，它有自己的大小、填充、描边、圆角，默认裁掉超出范围的内容；和画板不同，它不是幻灯片，
+ * 可以放在画板里，也可以互相嵌套。圆角的几项和矩形一样（见 corners.ts）
+ */
+export interface FrameNode extends BaseNode, ShapeStyle {
+  type: 'frame';
+  cornerRadius: number;
+  cornerRadii?: readonly [number, number, number, number];
+  cornerStyle?: CornerStyle;
+  cornerSmoothing?: number;
+  /** 裁掉超出画框的内容 */
+  clip: boolean;
+}
+
 /** 多边形（sides 条边）或星形（有 innerRatio 时，sides 个角）。画在外框里，见 polygon.ts */
 export interface PolygonNode extends BaseNode, ShapeStyle {
   type: 'polygon';
@@ -474,6 +489,7 @@ export interface NodeTypeMap {
   boolean: BooleanNode;
   text: TextNode;
   group: GroupNode;
+  frame: FrameNode;
 }
 
 export type NodeType = keyof NodeTypeMap;

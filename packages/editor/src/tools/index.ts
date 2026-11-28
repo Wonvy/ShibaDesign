@@ -22,6 +22,7 @@ export function registerBuiltinTools(editor: Editor): void {
     .register(createShapeTool('ellipse'))
     .register(createShapeTool('polygon'))
     .register(createShapeTool('star'))
+    .register(createShapeTool('frame'))
     .register(createLineTool('line'))
     .register(createLineTool('arrow'))
     .register(createPencilTool())

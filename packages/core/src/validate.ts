@@ -202,6 +202,17 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       }
       if (!isCornerLook(node)) fail('cornerStyle');
       break;
+    case 'frame':
+      if (!isFiniteNumber(node.cornerRadius) || node.cornerRadius < 0) fail('cornerRadius');
+      if (
+        node.cornerRadii !== undefined &&
+        !(Array.isArray(node.cornerRadii) && node.cornerRadii.length === 4 && node.cornerRadii.every(isNonNegative))
+      ) {
+        fail('cornerRadii');
+      }
+      if (!isCornerLook(node)) fail('cornerStyle');
+      if (typeof node.clip !== 'boolean') fail('clip');
+      break;
     case 'polygon':
       if (!isFiniteNumber(node.sides) || node.sides < 3 || node.sides > 60) fail('sides');
       if (

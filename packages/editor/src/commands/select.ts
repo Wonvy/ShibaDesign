@@ -1,10 +1,10 @@
-import { descendants, sameValue, topLevelOnly, type NodeId, type SceneNode } from '@shiba/core';
+import { descendants, isEnterable, sameValue, topLevelOnly, type NodeId, type SceneNode } from '@shiba/core';
 import type { Editor } from '../editor';
 import type { Command } from './command';
 
-/** 能"进去"选里面东西的容器：编组和布尔组。画板、页面不算（选画板里的东西直接点就行） */
+/** 能"进去"选里面东西的容器：编组、布尔组、画框。画板、页面不算（选画板里的东西直接点就行） */
 function isContainer(node: SceneNode | undefined): boolean {
-  return node?.type === 'group' || node?.type === 'boolean';
+  return isEnterable(node);
 }
 
 function parentContainer(editor: Editor, node: SceneNode): SceneNode | null {

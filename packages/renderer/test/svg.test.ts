@@ -771,3 +771,48 @@ describe('导出 SVG：箭头和多边形', () => {
     expect(hexagon['d']).toMatch(/Z/);
   });
 });
+
+describe('导出 SVG：画框', () => {
+  it('填充、按画框裁剪的内容、描边依次写出；关了裁剪时不写 clipPath', async () => {
+    const env = setup();
+    const frame = env.add(
+      createNode('frame', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 40, 40],
+        size: [200, 120],
+        fill: solid(rgba(1, 1, 1)),
+        stroke: { color: rgba(0, 0, 0), width: 2 },
+        cornerRadius: 16,
+        clip: true,
+      }),
+    );
+    env.add(
+      createNode('rect', {
+        ...env.on(frame.id),
+        transform: [1, 0, 0, 1, 150, 20],
+        size: [120, 40],
+        cornerRadius: 0,
+        fill: solid(rgba(1, 0, 0)),
+        stroke: null,
+      }),
+    );
+    const svg = await exportBoard(env);
+    // 画框的轮廓当裁剪路径（圆角矩形写成 <rect rx>）
+    const clip = svg.match(/<clipPath id="([^"]+)"[^>]*>\s*<rect ([^>]*)\/>\s*<\/clipPath>/);
+    expect(clip).not.toBeNull();
+    expect(clip![2]).toContain('rx="16"');
+    const rects = elements(svg, 'rect');
+    const fillIndex = rects.findIndex((r) => r['fill'] === '#ffffff' && r['rx'] === '16');
+    const innerIndex = rects.findIndex((r) => r['fill'] === '#ff0000');
+    const strokeIndex = rects.findIndex((r) => r['stroke'] === '#000000');
+    expect(fillIndex).toBeGreaterThanOrEqual(0);
+    expect(innerIndex).toBeGreaterThan(fillIndex);
+    expect(strokeIndex).toBeGreaterThan(innerIndex);
+    expect(rects[strokeIndex]!['fill']).toBe('none');
+    expect(svg).toContain(`clip-path="url(#${clip![1]})"`);
+
+    env.store.transact('clip', (tx) => tx.update(frame.id, { clip: false }));
+    const open = await exportBoard(env);
+    expect(open).not.toContain('<clipPath');
+  });
+});

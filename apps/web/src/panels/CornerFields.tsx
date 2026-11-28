@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next';
 import {
   CORNER_STYLES,
   canRoundAnchor,
+  hasBoxCorners,
   rectCornerRadii,
+  type FrameNode,
   type NodePatch,
   type PathNode,
   type PolygonNode,
@@ -14,13 +16,16 @@ import {
 import type { Editor } from '@shiba/editor';
 import { IconButton, NumberField } from '../ui/controls';
 
-type Rounded = RectNode | PathNode | PolygonNode;
+type Rounded = RectNode | FrameNode | PathNode | PolygonNode;
 
-/** 能改圆角的：矩形，和带尖角锚点的路径 */
+const isRounded = (n: SceneNode): n is Rounded => hasBoxCorners(n) || n.type === 'path' || n.type === 'polygon';
+
+/** 能改圆角的：矩形、画框、多边形，和带尖角锚点的路径 */
 export function roundable(nodes: readonly SceneNode[]): Rounded[] | null {
   const list = nodes.filter(
     (n): n is Rounded =>
-      n.type === 'rect' ||
+      hasBoxCorners(n) ||
+      n.type === 'polygon' ||
       (n.type === 'path' && n.subpaths.some((s) => s.anchors.some((_, i) => canRoundAnchor(s, i)))),
   );
   return list.length === nodes.length && list.length > 0 ? list : null;
@@ -28,7 +33,7 @@ export function roundable(nodes: readonly SceneNode[]): Rounded[] | null {
 
 /** 一个对象现在的圆角半径（路径取第一个能圆的锚点） */
 function radiusOf(node: Rounded): number {
-  if (node.type === 'rect' || node.type === 'polygon') return node.cornerRadius;
+  if (hasBoxCorners(node) || node.type === 'polygon') return node.cornerRadius;
   for (const s of node.subpaths) {
     const i = s.anchors.findIndex((_, k) => canRoundAnchor(s, k));
     if (i >= 0) return s.anchors[i]!.radius ?? 0;
@@ -37,7 +42,7 @@ function radiusOf(node: Rounded): number {
 }
 
 function radiusPatch(node: Rounded, radius: number): NodePatch {
-  if (node.type === 'rect') return { cornerRadius: radius, cornerRadii: undefined };
+  if (hasBoxCorners(node)) return { cornerRadius: radius, cornerRadii: undefined };
   if (node.type === 'polygon') return { cornerRadius: radius };
   return {
     subpaths: node.subpaths.map((s) => ({
@@ -54,13 +59,13 @@ function radiusPatch(node: Rounded, radius: number): NodePatch {
 const CORNER_LABELS = ['prop.cornerTopLeft', 'prop.cornerTopRight', 'prop.cornerBottomRight', 'prop.cornerBottomLeft'];
 
 /**
- * 圆角：一个半径（几个对象不一样时显示空白），"四个角分开"展开成四个框（只对矩形），样式三选一，平滑度。
+ * 圆角：一个半径（几个对象不一样时显示空白），"四个角分开"展开成四个框（只对矩形和画框），样式三选一，平滑度。
  * 画布上的圆角控件见 editor 的 corner-handles.ts
  */
 export function CornerFields({ editor, nodes }: { editor: Editor; nodes: Rounded[] }): ReactNode {
   const { t } = useTranslation();
   const { store } = editor;
-  const rects = nodes.filter((n): n is RectNode => n.type === 'rect');
+  const rects = nodes.filter((n): n is RectNode | FrameNode => hasBoxCorners(n));
   const separate = rects.length > 0 && rects.some((r) => r.cornerRadii);
   const [expanded, setExpanded] = useState(separate);
   const first = nodes[0]!;
@@ -71,9 +76,7 @@ export function CornerFields({ editor, nodes }: { editor: Editor; nodes: Rounded
   const smoothing = Math.round((first.cornerSmoothing ?? 0) * 100);
 
   const update = (label: string, patch: (node: Rounded) => NodePatch | null): void => {
-    editor.updateSelection(label, (node) =>
-      node.type === 'rect' || node.type === 'path' || node.type === 'polygon' ? patch(node) : null,
-    );
+    editor.updateSelection(label, (node) => (isRounded(node) ? patch(node) : null));
     store.sealHistory();
   };
 
@@ -103,7 +106,7 @@ export function CornerFields({ editor, nodes }: { editor: Editor; nodes: Rounded
               min={0}
               onCommit={(v) =>
                 update('radius', (node) => {
-                  if (node.type !== 'rect') return null;
+                  if (!hasBoxCorners(node)) return null;
                   const next = rectCornerRadii(node);
                   next[index] = v;
                   return next.every((r) => r === next[0])

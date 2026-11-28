@@ -1,4 +1,4 @@
-import type { Anchor, RectNode, Subpath } from './model';
+import type { Anchor, FrameNode, RectNode, SceneNode, Subpath } from './model';
 
 /**
  * 顶点圆角：矩形四个角分别设半径、路径的尖角锚点带半径，三种样式（圆角、反向圆角、倒角），以及平滑度。
@@ -26,6 +26,11 @@ interface Corner {
 interface Point {
   x: number;
   y: number;
+}
+
+/** 有四个角、可以分别圆角的盒子：矩形和画框（字段一样） */
+export function hasBoxCorners(node: SceneNode | undefined | null): node is RectNode | FrameNode {
+  return node?.type === 'rect' || node?.type === 'frame';
 }
 
 /** 矩形四个角的半径：左上、右上、右下、左下。没有分别设时四个角都是 cornerRadius */

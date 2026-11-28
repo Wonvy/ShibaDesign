@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   Circle,
   Hand,
+  Hash,
   Minus,
   MousePointer,
   MousePointer2,
@@ -42,6 +43,7 @@ export const toolbarGroups: ToolbarGroup[] = [
       { tool: 'scale', icon: Scaling, labelKey: 'tool.scale' },
     ],
   },
+  { id: 'frame', tools: [{ tool: 'frame', icon: Hash, labelKey: 'tool.frame' }] },
   {
     id: 'shapes',
     tools: [

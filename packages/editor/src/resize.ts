@@ -240,7 +240,8 @@ function scaleContent(
     case 'ellipse':
     case 'polygon':
     case 'artboard':
-      // 画板只改自己的大小，里面的内容不跟着缩放
+    case 'frame':
+      // 画板、画框只改自己的大小，里面的内容不跟着缩放（以后按约束跟着变，见 interaction-plan.md 的 UI-2）
       tx.update(id, { size: [w * sx, h * sy] });
       break;
     case 'path':

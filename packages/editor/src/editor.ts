@@ -7,7 +7,10 @@ import {
   artboardOf,
   artboards,
   descendants,
+  invert,
   isDescendantOf,
+  isEnterable,
+  isInstanceCopy,
   hasShapeStyle,
   rectContainsPoint,
   slides,
@@ -506,7 +509,7 @@ export class Editor {
     const entered = new Set<NodeId>();
     for (const selected of this.selectedNodes()) {
       const parent = selected.parent ? this.store.get(selected.parent) : undefined;
-      if (parent?.type === 'group' || parent?.type === 'boolean') entered.add(parent.id);
+      if (parent && isEnterable(parent)) entered.add(parent.id);
     }
     const chain = [hit, ...ancestors(this.store, hit.id)];
     let node: SceneNode = hit;
@@ -771,15 +774,40 @@ export class Editor {
     this.requestRender();
   }
 
-  /** 新建对象时应该放进哪个容器：所在画板，否则是页面 */
-  containerAt(world: Point): SceneNode {
-    if (this.state.viewMode === 'slides') return this.activeArtboard ?? this.store.root;
-    const boards = artboards(this.store);
-    for (let i = boards.length - 1; i >= 0; i--) {
-      const board = boards[i]!;
-      if (board.visible && rectContainsPoint(this.geometry.worldBounds(board), world.x, world.y)) return board;
+  /**
+   * 新建对象、拖动结束时应该放进哪个容器：这一点下面最里层的画框，否则是所在画板，再否则是页面。
+   * exclude 里的画框不算（拖动的就是这个画框时，它不能放进自己里面）
+   */
+  containerAt(world: Point, exclude?: ReadonlySet<NodeId>): SceneNode {
+    let container: SceneNode = this.store.root;
+    if (this.state.viewMode === 'slides') container = this.activeArtboard ?? this.store.root;
+    else {
+      const boards = artboards(this.store);
+      for (let i = boards.length - 1; i >= 0; i--) {
+        const board = boards[i]!;
+        if (board.visible && rectContainsPoint(this.geometry.worldBounds(board), world.x, world.y)) {
+          container = board;
+          break;
+        }
+      }
     }
-    return this.store.root;
+    return this.frameAt(container.id, world, exclude) ?? container;
+  }
+
+  /** 容器里这一点下面最上层的画框，再往里找它里面的画框。看不见、锁定的、组件实例里的不算 */
+  private frameAt(containerId: NodeId, world: Point, exclude?: ReadonlySet<NodeId>): SceneNode | null {
+    const kids = this.store.children(containerId);
+    for (let i = kids.length - 1; i >= 0; i--) {
+      const child = kids[i]!;
+      if (child.type !== 'frame' || !child.visible || child.locked || isInstanceCopy(child)) continue;
+      if (exclude?.has(child.id)) continue;
+      const inverse = invert(worldTransform(this.store, child.id));
+      if (!inverse) continue;
+      const [x, y] = applyToPoint(inverse, world.x, world.y);
+      if (!this.geometry.outlineOf(child).contains(x, y)) continue;
+      return this.frameAt(child.id, world, exclude) ?? child;
+    }
+    return null;
   }
 
   /** 框选等操作的候选对象：当前视图里所有画板和页面的直接子节点（不含画板本身） */

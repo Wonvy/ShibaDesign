@@ -123,6 +123,14 @@ export function cloneSubtree(store: DocStore, id: NodeId, options: CloneOptions)
   }));
 }
 
+/**
+ * 能"进去"选里面东西的容器：编组、布尔组、画框。点里面的东西先选中整个容器，双击进去选里面的；
+ * 画板、页面不算（画板里的东西直接点就选得中）
+ */
+export function isEnterable(node: SceneNode | undefined | null): boolean {
+  return node?.type === 'group' || node?.type === 'boolean' || node?.type === 'frame';
+}
+
 const NO_NODES: SceneNode[] = [];
 
 /**

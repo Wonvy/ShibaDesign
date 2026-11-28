@@ -42,7 +42,7 @@ import {
 import { bakeImage, bakePlan } from './bake';
 import type { GeometryCache } from './geometry';
 import { placeImage, type ImageCache } from './images';
-import { isPlainShape, type NodeTypeDef, type NodeTypeRegistry } from './node-types';
+import { clipsChildren, isPlainShape, type NodeTypeDef, type NodeTypeRegistry, type ShapeParts } from './node-types';
 import { toPathData } from './path-data';
 import type { TextAppearances } from './text/appearance';
 import type { FontManager, LoadedFace } from './text/fonts';
@@ -281,12 +281,12 @@ class PdfExporter {
         break;
       default:
         if (def.draw) this.drawRaster(content, node);
-        else this.drawShape(content, node, paint);
+        else this.drawShape(content, node, paint, def.strokeOver ? 'fill' : 'all');
     }
 
     if (def.children === 'clip') {
       content.save();
-      this.clipTo(content, this.outline(node));
+      if (clipsChildren(def, node)) this.clipTo(content, this.outline(node));
       for (const child of this.c.store.children(node.id)) this.drawNode(content, child, child.transform, page, toPage);
       content.restore();
     } else if (def.children === 'draw') {
@@ -296,6 +296,8 @@ class PdfExporter {
         for (const child of this.c.store.children(node.id))
           this.drawNode(content, child, child.transform, page, toPage);
     }
+    // 画框的描边画在里面的东西上面
+    if (def.strokeOver && !def.draw) this.drawShape(content, node, paint, 'stroke');
   }
 
   /** 一段内容写成透明组，返回它的资源名 */
@@ -434,12 +436,12 @@ class PdfExporter {
     content.restore();
   }
 
-  private drawShape(content: ContentStream, node: SceneNode, paint: Paint): void {
+  private drawShape(content: ContentStream, node: SceneNode, paint: Paint, parts: ShapeParts = 'all'): void {
     if (!hasShapeStyle(node)) return;
     const outline = this.outline(node);
     if (outline.data.length === 0) return;
-    const { fill } = node;
-    const stroke = node.stroke && node.stroke.width > 0 ? node.stroke : null;
+    const fill = parts === 'stroke' ? null : node.fill;
+    const stroke = parts !== 'fill' && node.stroke && node.stroke.width > 0 ? node.stroke : null;
     const arrows = stroke ? arrowPaths(this.c.ck, node) : null;
 
     // 纯色填充加不透明的描边：用一条"填充并描边"指令，读回来还是一个对象，文件也小。

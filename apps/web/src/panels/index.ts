@@ -4,6 +4,7 @@ import { AnimationPanel } from './AnimationPanel';
 import { AppearancePanel } from './AppearancePanel';
 import { AlignPanel, BooleanPanel, MaskPanel, OrderPanel } from './ArrangePanels';
 import { ComponentPanel, showComponentPanel } from './ComponentPanel';
+import { FramePanel } from './FramePanel';
 import { ImagePanel } from './ImagePanel';
 import { PathPanel } from './PathPanel';
 import { PolygonPanel } from './PolygonPanel';
@@ -52,6 +53,13 @@ export function registerBuiltinPanels(): void {
     component: MaskPanel,
   });
   registerPanel({ id: 'transform', titleKey: 'panel.transform', order: 40, component: TransformPanel });
+  registerPanel({
+    id: 'frame',
+    titleKey: 'panel.frame',
+    order: 41,
+    when: ({ nodes }) => nodes.every((n) => n.type === 'frame'),
+    component: FramePanel,
+  });
   registerPanel({
     id: 'polygon',
     titleKey: 'panel.polygon',

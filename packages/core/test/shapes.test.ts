@@ -4,6 +4,8 @@ import {
   arrowGeometry,
   arrowMetrics,
   createNode,
+  hasBoxCorners,
+  isEnterable,
   polygonOutline,
   polygonPoints,
   validateDocument,
@@ -151,5 +153,38 @@ describe('多边形和星形', () => {
     expect(() => validateDocument(bad(polygon, { cornerRadius: -1 }))).toThrow();
     const stroke = (path as { stroke: object }).stroke;
     expect(() => validateDocument(bad(path, { stroke: { ...stroke, arrowEnd: 'rocket' } }))).toThrow();
+  });
+});
+
+describe('画框', () => {
+  it('和矩形一样有四个角；能进去选里面的东西；文件校验圆角和裁剪开关', () => {
+    const store = DocStore.create();
+    const frame = store.transact('add', (tx) =>
+      tx.create(
+        createNode('frame', {
+          parent: store.root.id,
+          index: 'a0',
+          seq: 1,
+          size: [100, 80],
+          fill: null,
+          stroke: null,
+          cornerRadius: 8,
+          cornerRadii: [8, 8, 0, 0],
+          clip: true,
+        }),
+      ),
+    );
+    expect(hasBoxCorners(frame)).toBe(true);
+    expect(isEnterable(frame)).toBe(true);
+    expect(isEnterable(store.root)).toBe(false);
+    const good = store.toJSON();
+    expect(() => validateDocument(good)).not.toThrow();
+    const bad = (patch: Record<string, unknown>) => ({
+      ...good,
+      nodes: { ...good.nodes, [frame.id]: { ...good.nodes[frame.id]!, ...patch } },
+    });
+    expect(() => validateDocument(bad({ clip: 'yes' }))).toThrow();
+    expect(() => validateDocument(bad({ cornerRadius: -2 }))).toThrow();
+    expect(() => validateDocument(bad({ cornerRadii: [1, 2, 3] }))).toThrow();
   });
 });

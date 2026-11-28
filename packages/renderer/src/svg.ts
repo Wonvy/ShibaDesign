@@ -5,6 +5,7 @@ import {
   dashPattern,
   gradientGeometry,
   hasShapeStyle,
+  hasBoxCorners,
   rectNeedsCorners,
   invert,
   maskParts,
@@ -45,7 +46,7 @@ import {
 } from '@shiba/io';
 import { bakeImage, bakePlan } from './bake';
 import { placeImage } from './images';
-import { isPlainShape, type NodeTypeDef } from './node-types';
+import { clipsChildren, isPlainShape, type NodeTypeDef, type ShapeParts } from './node-types';
 import { toPathData } from './path-data';
 import type { PdfExportContext } from './pdf';
 import type { LoadedFace } from './text/fonts';
@@ -375,8 +376,8 @@ class SvgExporter {
 
     if (def.children === 'clip') {
       const children = this.children(this.context.store.children(node.id));
-      // 画板裁剪子节点。导出的就是这个画板时，画面本身就是它的范围，不用再裁
-      if (options.root) content.push(...children);
+      // 画板、画框裁剪子节点。导出的就是这个画板时，画面本身就是它的范围，不用再裁；关了裁剪的画框不裁
+      if (options.root || !clipsChildren(def, node)) content.push(...children);
       else if (children.length > 0) {
         const clip = this.clipPath(node, null);
         content.push(clip ? svgEl('g', { 'clip-path': `url(#${clip})` }, children) : svgEl('g', {}, children));
@@ -386,6 +387,8 @@ class SvgExporter {
       if (mask?.visible) content.push(...this.masked(node, mask, contents));
       else content.push(...this.children(this.context.store.children(node.id)));
     }
+    // 画框的描边画在里面的东西上面
+    if (def.strokeOver && !def.draw) content.push(...this.shape(node, 'stroke'));
     if (content.length === 0) return [];
 
     const attrs: Attrs = {
@@ -413,7 +416,7 @@ class SvgExporter {
       case 'text':
         return this.text(node);
       default:
-        return def.draw ? this.raster(node) : this.shape(node);
+        return def.draw ? this.raster(node) : this.shape(node, def.strokeOver ? 'fill' : 'all');
     }
   }
 
@@ -475,9 +478,9 @@ class SvgExporter {
   private geometry(node: SceneNode, asPath = false): { tag: string; attrs: Attrs } | null {
     const [w, h] = node.size;
     // 四个角不一样、反向圆角、倒角、有平滑度的矩形写成路径（<rect> 只能表示四个角一样的普通圆角）
-    const plainRect = node.type === 'artboard' || (node.type === 'rect' && !rectNeedsCorners(node));
+    const plainRect = node.type === 'artboard' || (hasBoxCorners(node) && !rectNeedsCorners(node));
     if (plainRect && w > 0 && h > 0 && !asPath) {
-      const r = node.type === 'rect' ? Math.max(0, Math.min(node.cornerRadius, w / 2, h / 2)) : 0;
+      const r = hasBoxCorners(node) ? Math.max(0, Math.min(node.cornerRadius, w / 2, h / 2)) : 0;
       return { tag: 'rect', attrs: { width: w, height: h, rx: r > 0 ? r : null, ry: r > 0 ? r : null } };
     }
     if (node.type === 'ellipse' && w > 0 && h > 0 && !asPath) {
@@ -491,10 +494,10 @@ class SvgExporter {
     return { tag: 'path', attrs: { d: svgPath(data), 'fill-rule': evenOdd ? 'evenodd' : null } };
   }
 
-  private shape(node: SceneNode): SvgElement[] {
+  private shape(node: SceneNode, parts: ShapeParts = 'all'): SvgElement[] {
     if (!hasShapeStyle(node)) return [];
-    const { fill } = node;
-    const stroke = node.stroke && node.stroke.width > 0 ? node.stroke : null;
+    const fill = parts === 'stroke' ? null : node.fill;
+    const stroke = parts !== 'fill' && node.stroke && node.stroke.width > 0 ? node.stroke : null;
     if (!fill && !stroke) return [];
     const dash = stroke ? dashPattern(stroke) : null;
     const geometry = this.geometry(node, dash !== null);

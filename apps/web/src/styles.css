@@ -2918,3 +2918,18 @@ button.template-card:hover,
   flex-direction: column;
   gap: 8px;
 }
+
+/* 勾选框加一行文字（画框的"裁剪内容"） */
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.check-row input {
+  margin: 0;
+  accent-color: var(--accent);
+}

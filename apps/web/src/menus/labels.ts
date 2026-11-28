@@ -7,6 +7,7 @@ export const COMMAND_LABELS: Record<string, string> = {
   'tool.set|"select"': 'tool.select',
   'tool.set|"direct"': 'tool.direct',
   'tool.set|"scale"': 'tool.scale',
+  'tool.set|"frame"': 'tool.frame',
   'tool.set|"line"': 'tool.line',
   'tool.set|"arrow"': 'tool.arrow',
   'tool.set|"polygon"': 'tool.polygon',
@@ -71,6 +72,7 @@ export const COMMAND_LABELS: Record<string, string> = {
 
   'group.create': 'group.create',
   'group.release': 'group.release',
+  'frame.wrap': 'frame.wrap',
   'mask.toggle': 'menu.maskToggle',
   'mask.create': 'mask.create',
   'mask.release': 'mask.release',
