@@ -2,6 +2,7 @@ import {
   hasLiveAppearance,
   applyToPoint,
   isInstanceCopy,
+  rotationOf,
   invert,
   isDescendantOf,
   rectContainsPoint,
@@ -21,6 +22,9 @@ import {
 } from '@shiba/core';
 import { pruneAnimations, setAnimationPath } from '../commands/animation';
 import { cloneNodes } from '../commands/edit';
+import { drawPill, formatNumber } from '../overlay-guides';
+import { snapMove, snapPoint, type SnapTargets } from '../snap';
+import type { PointerInfo } from '../types';
 import type { Editor } from '../editor';
 import { dragGradientPoint, imageRect, panImage, zoomImage, type GradientPoint } from '../fill-handles';
 import { dragMotionPoint, hitMotionHandle, toPathPoint, type MotionPart, type MotionPathView } from '../motion-handles';
@@ -52,6 +56,9 @@ type Drag =
       key: string;
       canCopy: boolean;
       copies: Map<NodeId, NodeId> | null;
+      /** 吸附用：开始时选区的外框和候选 */
+      bounds: Rect | null;
+      targets: SnapTargets | null;
     }
   // base 是框选开始时保留的选区（按着 Shift 时），before 是按下鼠标之前的选区，取消时换回去；
   // deep：按着 ⌘ 框选，选的是编组里面的成员
@@ -73,9 +80,19 @@ type Drag =
       toLocal: Matrix;
       originals: Map<NodeId, SceneNode>;
       key: string;
+      /** 对象没转过角度时才吸附（转过的对象沿自己的方向缩放，边不和画布对齐） */
+      targets: SnapTargets | null;
     }
   // 多选：缩放整体的外接矩形
-  | { kind: 'resize-world'; handle: Handle; from: Rect; ids: NodeId[]; originals: Map<NodeId, SceneNode>; key: string }
+  | {
+      kind: 'resize-world';
+      handle: Handle;
+      from: Rect;
+      ids: NodeId[];
+      originals: Map<NodeId, SceneNode>;
+      key: string;
+      targets: SnapTargets | null;
+    }
   | {
       kind: 'rotate';
       pivot: Point;
@@ -83,6 +100,8 @@ type Drag =
       ids: NodeId[];
       originals: Map<NodeId, SceneNode>;
       key: string;
+      /** 鼠标在屏幕上的位置，旁边显示角度 */
+      at?: Point;
     }
   // 在画布上调整填充：拖渐变的手柄、在形状里拖动或缩放图片。坐标都换算到节点本地
   | {
@@ -238,6 +257,8 @@ export function createSelectTool(): Tool {
 
     const toLocal = frame.single ? invert(frame.single.world) : null;
     if (frame.single && toLocal) {
+      const m = frame.single.world;
+      const axisAligned = Math.abs(m[1]) < 1e-9 && Math.abs(m[2]) < 1e-9;
       drag = {
         kind: 'resize-local',
         handle: hit.handle,
@@ -246,6 +267,7 @@ export function createSelectTool(): Tool {
         toLocal,
         originals,
         key: editor.newMergeKey('resize'),
+        targets: axisAligned ? editor.snapTargets(ids) : null,
       };
     } else {
       drag = {
@@ -255,6 +277,7 @@ export function createSelectTool(): Tool {
         ids,
         originals,
         key: editor.newMergeKey('resize'),
+        targets: editor.snapTargets(ids),
       };
     }
     return true;
@@ -287,6 +310,7 @@ export function createSelectTool(): Tool {
       if (beginTransform(editor, e.world, e.x, e.y)) return;
 
       editor.setHover(null);
+      editor.setMeasuring(false);
       // ⌘ 单击直接选中最里面的对象（深选），不管套了几层编组
       const picked = e.mod ? editor.pickDeep(e.world) : editor.pick(e.world).node;
       const target = editor.overlayLayer?.hitArtboardLabel(e.x, e.y) ?? picked?.id ?? null;
@@ -332,6 +356,8 @@ export function createSelectTool(): Tool {
     onPointerMove(e, editor) {
       const { store } = editor;
       if (!e.down || !drag) {
+        // 按着 Alt：画出选区到鼠标下对象的距离
+        editor.setMeasuring(e.alt && !e.down && editor.selection.length > 0);
         const overlay = editor.overlayLayer;
         if (hitMotionHandle(editor, e.x, e.y)) {
           editor.setCursor('move');
@@ -344,6 +370,7 @@ export function createSelectTool(): Tool {
         else {
           // 悬停高亮：单击会选中的那个对象（按着 ⌘ 时是深选会选中的那个）
           if (!hit) editor.setHover((e.mod ? editor.pickDeep(e.world) : editor.pick(e.world).node)?.id ?? null);
+
           // 调整图片时，形状里面可以直接拖动图片
           const target = fillTarget(editor);
           const local = target ? toLocalPoint(target.toLocal, e.world) : null;
@@ -365,6 +392,8 @@ export function createSelectTool(): Tool {
           // 实例里的东西不能复制（会往实例里加东西），这时 Alt 不起作用
           canCopy: ids.every((id) => !isInstanceCopy(store.get(id))),
           copies: null,
+          bounds: editor.selectionBounds(),
+          targets: editor.snapTargets(ids),
         };
       }
 
@@ -380,6 +409,21 @@ export function createSelectTool(): Tool {
         }
         const move = drag;
         const { originals, key } = move;
+        // 吸附：按着 ⌘ 时不吸；Shift 锁定在斜线方向上时也不吸（吸了就离开那条斜线了）
+        if (move.bounds && move.targets && editor.snapping && !e.mod) {
+          const axes = e.shift ? { x: dy === 0 && dx !== 0, y: dx === 0 && dy !== 0 } : { x: true, y: true };
+          const box = { ...move.bounds, x: move.bounds.x + dx, y: move.bounds.y + dy };
+          const hit = snapMove(move.targets, box, {
+            threshold: editor.snapThreshold,
+            axes,
+            pixels: editor.view.snapPixels,
+          });
+          dx += hit.dx;
+          dy += hit.dy;
+          editor.setSnapFeedback(hit);
+        } else {
+          editor.setSnapFeedback(null);
+        }
         const wantCopy = e.alt && move.canCopy;
         if (wantCopy && !move.copies) {
           // 按下 Alt：原件回到原处，在它上面复制一份，拖动的换成副本
@@ -429,7 +473,8 @@ export function createSelectTool(): Tool {
 
       if (drag.kind === 'resize-local') {
         const { id, box, originals, key } = drag;
-        const [lx, ly] = applyToPoint(drag.toLocal, e.world.x, e.world.y);
+        const pointer = snapResizePointer(editor, drag.targets, drag.handle, e);
+        const [lx, ly] = applyToPoint(drag.toLocal, pointer.x, pointer.y);
         const next = resizeBounds(box, drag.handle, { x: lx, y: ly }, e.shift, e.alt);
         store.transact('resize', (tx) => resizeLocal(tx, store, originals, id, box, next), { mergeKey: key });
         return;
@@ -437,7 +482,8 @@ export function createSelectTool(): Tool {
 
       if (drag.kind === 'resize-world') {
         const { ids, originals, from, key } = drag;
-        const to = resizeBounds(from, drag.handle, e.world, e.shift, e.alt);
+        const pointer = snapResizePointer(editor, drag.targets, drag.handle, e);
+        const to = resizeBounds(from, drag.handle, pointer, e.shift, e.alt);
         store.transact('resize', (tx) => resizeInWorld(tx, store, originals, ids, from, to), { mergeKey: key });
         return;
       }
@@ -477,6 +523,7 @@ export function createSelectTool(): Tool {
         const { ids, originals, pivot, key } = drag;
         let angle = Math.atan2(e.world.y - pivot.y, e.world.x - pivot.x) - drag.startAngle;
         if (e.shift) angle = Math.round(angle / ROTATE_SNAP) * ROTATE_SNAP;
+        drag.at = { x: e.x, y: e.y };
         store.transact('rotate', (tx) => rotateNodes(tx, store, originals, ids, pivot, angle), { mergeKey: key });
       }
     },
@@ -484,6 +531,7 @@ export function createSelectTool(): Tool {
     onCancel(editor) {
       const cancelled = drag;
       drag = null;
+      editor.setSnapFeedback(null);
       if (!cancelled) return;
       if (cancelled.kind === 'marquee') editor.select(cancelled.before);
       else if ('key' in cancelled) editor.store.abandon(cancelled.key);
@@ -494,6 +542,7 @@ export function createSelectTool(): Tool {
     onPointerUp(_e, editor) {
       const finished = drag;
       drag = null;
+      editor.setSnapFeedback(null);
       if (!finished) return;
       if (finished.kind === 'pending' && finished.collapseTo) editor.select([finished.collapseTo]);
       if (finished.kind === 'move') {
@@ -546,6 +595,12 @@ export function createSelectTool(): Tool {
     },
 
     drawOverlay(ctx, editor) {
+      if (drag?.kind === 'rotate' && drag.at && drag.ids[0]) {
+        // 旋转时鼠标旁边显示第一个对象现在转了多少度
+        const degrees = (rotationOf(worldTransform(editor.store, drag.ids[0])) * 180) / Math.PI;
+        drawPill(ctx, `${formatNumber(degrees)}°`, drag.at.x + 24, drag.at.y + 20, editor.theme.accent);
+        return;
+      }
       if (drag?.kind !== 'marquee') return;
       const a = editor.worldToScreen(drag.start.x, drag.start.y);
       const b = editor.worldToScreen(drag.current.x, drag.current.y);
@@ -561,6 +616,18 @@ export function createSelectTool(): Tool {
       ctx.restore();
     },
   };
+}
+
+/** 缩放时吸附拖动的那条边：拖右边的控制柄只吸 x，拖角吸两个方向；按着 ⌘ 时不吸 */
+function snapResizePointer(editor: Editor, targets: SnapTargets | null, handle: Handle, e: PointerInfo): Point {
+  if (!targets || !editor.snapping || e.mod) {
+    editor.setSnapFeedback(null);
+    return e.world;
+  }
+  const axes = { x: handle.includes('e') || handle.includes('w'), y: handle.includes('n') || handle.includes('s') };
+  const hit = snapPoint(targets, e.world, { threshold: editor.snapThreshold, axes, pixels: editor.view.snapPixels });
+  editor.setSnapFeedback({ lines: hit.lines, spacing: [] });
+  return hit.point;
 }
 
 /** 拖动副本用的"原件"：副本刚复制出来时和原件重合，按原件的变换算位移（复制出来的画板放在别处，也拉回来跟着走） */

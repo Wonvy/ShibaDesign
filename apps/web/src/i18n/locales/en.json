@@ -774,7 +774,26 @@
         "view": "View",
         "present": "Present",
         "help": "Help"
-      }
+      },
+      "rulers": "Rulers",
+      "guides": "Guides",
+      "lockGuides": "Lock guides",
+      "pixelGrid": "Pixel grid",
+      "sizeLabel": "Size label",
+      "snap": "Snapping",
+      "snapObjects": "Snap to objects",
+      "snapGuides": "Snap to guides",
+      "snapPixels": "Snap to pixels",
+      "clearGuides": "Clear all guides",
+      "clearBoardGuides": "Clear this artboard's guides",
+      "removeGuide": "Delete guide",
+      "setGuidePosition": "Set position…"
+    },
+    "guide": {
+      "vertical": "Vertical guide",
+      "horizontal": "Horizontal guide",
+      "xPosition": "X (relative to its artboard)",
+      "yPosition": "Y (relative to its artboard)"
     }
   }
 }

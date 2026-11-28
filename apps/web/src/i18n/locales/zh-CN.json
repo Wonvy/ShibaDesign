@@ -774,7 +774,26 @@
         "view": "视图",
         "present": "演示",
         "help": "帮助"
-      }
+      },
+      "rulers": "标尺",
+      "guides": "辅助线",
+      "lockGuides": "锁定辅助线",
+      "pixelGrid": "像素网格",
+      "sizeLabel": "尺寸标签",
+      "snap": "吸附",
+      "snapObjects": "吸附到对象",
+      "snapGuides": "吸附到辅助线",
+      "snapPixels": "吸附到像素",
+      "clearGuides": "清除全部辅助线",
+      "clearBoardGuides": "清除这个画板的辅助线",
+      "removeGuide": "删除辅助线",
+      "setGuidePosition": "设置位置…"
+    },
+    "guide": {
+      "vertical": "竖辅助线",
+      "horizontal": "横辅助线",
+      "xPosition": "X（相对所在的画板）",
+      "yPosition": "Y（相对所在的画板）"
     }
   }
 }

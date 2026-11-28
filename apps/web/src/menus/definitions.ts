@@ -21,6 +21,7 @@ import {
 import { i18n } from '../i18n';
 import { displayName } from '../names';
 import { openFileDialog } from '../components/FileMenu';
+import type { ViewToggle } from '@shiba/editor';
 import { labelKeyFor } from './labels';
 import { registerMenu, type MenuContext, type MenuEntry, type MenuItemDef } from './model';
 import { toast } from '../ui/toast';
@@ -234,6 +235,19 @@ function objectItems(ctx: MenuContext, here: boolean): MenuEntry[] {
   ];
 }
 
+/** 一个打勾的视图选项 */
+function toggle(key: ViewToggle): MenuItemDef {
+  return cmd('view.toggle', key, { checked: (ctx) => ctx.editor.view[key] });
+}
+
+function showItems(): MenuItemDef {
+  return sub('show', 'menu.show', () => [toggle('rulers'), toggle('guides'), toggle('pixelGrid'), toggle('sizeLabel')]);
+}
+
+function snapItems(): MenuItemDef {
+  return sub('snap', 'menu.snap', () => [toggle('snapObjects'), toggle('snapGuides'), toggle('snapPixels')]);
+}
+
 // ───────────── 右键菜单 ─────────────
 
 export function registerBuiltinMenus(): void {
@@ -288,6 +302,7 @@ export function registerBuiltinMenus(): void {
       'separator',
       cmd('artboard.toggleSlide', id, { labelKey: isSlide ? 'menu.unmakeSlide' : 'menu.makeSlide' }),
       cmd('artboard.fitContent', id, { labelKey: 'menu.fitContent' }),
+      cmd('guides.clear', id),
       'separator',
       cmd('edit.selectAll'),
       cmd('node.showAll'),
@@ -317,10 +332,28 @@ export function registerBuiltinMenus(): void {
       cmd('view.zoomToFit'),
       cmd('view.zoom100'),
     ]),
+    showItems(),
+    snapItems(),
+    cmd('guides.clearAll'),
     'separator',
     cmd('node.showAll'),
     cmd('node.unlockAll'),
   ]);
+
+  registerMenu('canvas.guide', (ctx) => {
+    const target = ctx.info.target;
+    if (target.kind !== 'guide') return [];
+    const guide = { container: target.container, id: target.id };
+    return [
+      { id: 'guide.position', labelKey: 'menu.setGuidePosition', run: () => ctx.editor.guideEditHandler?.(guide) },
+      cmd('guides.remove', guide),
+      'separator',
+      toggle('guidesLocked'),
+      cmd('guides.clearAll'),
+    ];
+  });
+
+  registerMenu('canvas.ruler', () => [toggle('rulers'), toggle('guidesLocked'), cmd('guides.clearAll')]);
 
   registerMenu('slide.thumb', (ctx) => {
     const id = ctx.subject ?? '';
@@ -567,6 +600,14 @@ export function registerBuiltinMenus(): void {
     cmd('view.zoom100'),
     cmd('view.zoomToSelection'),
     'separator',
+    toggle('rulers'),
+    toggle('guides'),
+    toggle('guidesLocked'),
+    toggle('pixelGrid'),
+    toggle('sizeLabel'),
+    snapItems(),
+    cmd('guides.clearAll'),
+    'separator',
     cmd('present.play'),
     cmd('present.playFromStart'),
   ]);
@@ -588,8 +629,15 @@ export const MENU_BAR: readonly { id: string; labelKey: string }[] = [
 ];
 
 /** 右键点到的东西对应哪个菜单 */
-export function contextMenuId(kind: 'text' | 'object' | 'artboard' | 'canvas'): string {
-  return { text: 'canvas.text', object: 'canvas.object', artboard: 'canvas.artboard', canvas: 'canvas.empty' }[kind];
+export function contextMenuId(kind: 'text' | 'object' | 'artboard' | 'canvas' | 'guide' | 'ruler'): string {
+  return {
+    text: 'canvas.text',
+    object: 'canvas.object',
+    artboard: 'canvas.artboard',
+    canvas: 'canvas.empty',
+    guide: 'canvas.guide',
+    ruler: 'canvas.ruler',
+  }[kind];
 }
 
 function currentTransition(ctx: MenuContext, id: NodeId) {

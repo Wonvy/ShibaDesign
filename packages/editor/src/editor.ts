@@ -14,6 +14,7 @@ import {
   unionRects,
   worldTransform,
   type ArtboardNode,
+  type PageNode,
   type AssetMeta,
   type ImageFill,
   type Matrix,
@@ -51,7 +52,10 @@ import { DEFAULT_BINDINGS, Keymap } from './keymap';
 import { Overlay } from './overlay';
 import { Registry } from './registry';
 import type { Tool } from './tools/tool';
-import type { CanvasTheme, ContextInfo, EditorState, TextEditing, ViewMode } from './types';
+import { GuideController } from './guides';
+import { buildTargets, type GuideLine, type SnapTargets, type SpacingMark } from './snap';
+import { DEFAULT_VIEW_OPTIONS } from './types';
+import type { CanvasTheme, ContextInfo, EditorState, TextEditing, ViewMode, ViewOptions } from './types';
 import type { FillEditing } from './fill-handles';
 
 const MIN_ZOOM = 0.02;
@@ -110,6 +114,12 @@ export class Editor {
    */
   keyboardTarget: HTMLElement | null = null;
   private hoverId: NodeId | null = null;
+  /** 标尺和辅助线的操作，见 guides.ts */
+  readonly guides: GuideController = new GuideController(this);
+  /** 界面层设置：双击辅助线时调用（弹出输入位置的对话框） */
+  guideEditHandler: ((guide: { container: NodeId; id: string }) => void) | null = null;
+  private snapFeedbackValue: { lines: readonly GuideLine[]; spacing: readonly SpacingMark[] } | null = null;
+  private measuringValue = false;
 
   private state: EditorState;
   private listeners = new Set<() => void>();
@@ -159,6 +169,7 @@ export class Editor {
       resourceEpoch: 0,
       textEditing: null,
       fillEditing: null,
+      view: DEFAULT_VIEW_OPTIONS,
     };
     this.store.subscribe(() => this.onDocumentChange());
   }
@@ -509,6 +520,11 @@ export class Editor {
     const stack = this.nodesAt(world).map((n) => n.id);
     const editing = this.state.textEditing;
     if (editing) return { target: { kind: 'text', id: editing.nodeId }, world, stack };
+    const guide = this.guides.hit(x, y);
+    if (guide?.kind === 'ruler') return { target: { kind: 'ruler' }, world, stack };
+    if (guide?.kind === 'guide') {
+      return { target: { kind: 'guide', container: guide.container, id: guide.id }, world, stack };
+    }
     const label = this.overlay?.hitArtboardLabel(x, y);
     if (label) {
       this.select([label]);
@@ -569,6 +585,113 @@ export class Editor {
 
   /** 界面层设置：右键（或者键盘打开菜单）时调用，带着点到了什么和屏幕位置 */
   contextMenuHandler: ((info: ContextInfo & { clientX: number; clientY: number }) => void) | null = null;
+
+  // ───────────── 视图选项和吸附 ─────────────
+
+  get view(): ViewOptions {
+    return this.state.view;
+  }
+
+  setView(patch: Partial<ViewOptions>): void {
+    this.setState({ view: { ...this.state.view, ...patch } });
+    this.requestRender();
+  }
+
+  /** 吸附距离：屏幕上 5 像素换算成世界单位 */
+  get snapThreshold(): number {
+    return 5 / this.camera.zoom;
+  }
+
+  /** 现在要不要吸附（三个开关都关了就不吸） */
+  get snapping(): boolean {
+    const { snapObjects, snapGuides, snapPixels } = this.state.view;
+    return snapObjects || snapGuides || snapPixels;
+  }
+
+  /**
+   * 收集吸附的候选（拖动开始时调一次）：当前视图里的对象（不含 exclude 里的和它们的子孙）、
+   * 正在动的对象所在编组里的其他成员、画板，以及辅助线
+   */
+  snapTargets(exclude: Iterable<NodeId>): SnapTargets {
+    const { store } = this;
+    const view = this.state.view;
+    const skip = new Set(exclude);
+    const excluded = (node: SceneNode): boolean =>
+      skip.has(node.id) || [...skip].some((id) => isDescendantOf(store, node.id, id));
+    const rects: Rect[] = [];
+    const boards: Rect[] = [];
+    if (view.snapObjects) {
+      const seen = new Set<NodeId>();
+      const consider = (node: SceneNode): void => {
+        if (seen.has(node.id) || !node.visible || excluded(node)) return;
+        seen.add(node.id);
+        rects.push(this.geometry.worldBounds(node));
+      };
+      this.selectableNodes().forEach(consider);
+      // 在编组里挪成员时，同一个组里的其他成员也是候选
+      for (const id of skip) {
+        const parent = store.get(store.get(id)?.parent ?? '');
+        if (parent && parent.type !== 'page' && parent.type !== 'artboard') store.children(parent.id).forEach(consider);
+      }
+      const visibleBoards =
+        this.state.viewMode === 'slides' ? (this.activeArtboard ? [this.activeArtboard] : []) : artboards(store);
+      for (const board of visibleBoards) {
+        if (board.visible && !skip.has(board.id)) boards.push(this.geometry.worldBounds(board));
+      }
+    }
+    const guides = view.snapGuides && view.guides ? this.worldGuides() : [];
+    return buildTargets({
+      rects,
+      boards,
+      guides: guides.map((g) => ({ axis: g.axis, value: g.value, range: g.range })),
+    });
+  }
+
+  /** 当前视图里的辅助线，换算到世界坐标：页面的辅助线画满画布，画板的辅助线只画在画板里 */
+  worldGuides(): { id: string; container: NodeId; axis: 'x' | 'y'; value: number; range: Rect | null }[] {
+    const out: { id: string; container: NodeId; axis: 'x' | 'y'; value: number; range: Rect | null }[] = [];
+    const { store } = this;
+    if (this.state.viewMode === 'canvas') {
+      for (const guide of (store.root as PageNode).guides ?? []) {
+        out.push({ id: guide.id, container: store.root.id, axis: guide.axis, value: guide.offset, range: null });
+      }
+    }
+    const boards =
+      this.state.viewMode === 'slides' ? (this.activeArtboard ? [this.activeArtboard] : []) : artboards(store);
+    for (const board of boards) {
+      if (!board.visible || !board.guides) continue;
+      const rect = this.geometry.worldBounds(board);
+      for (const guide of board.guides) {
+        const value = guide.axis === 'x' ? rect.x + guide.offset : rect.y + guide.offset;
+        out.push({ id: guide.id, container: board.id, axis: guide.axis, value, range: rect });
+      }
+    }
+    return out;
+  }
+
+  /** 拖动时要画的智能参考线和等间距标记；拖完设回 null */
+  get snapFeedback(): { lines: readonly GuideLine[]; spacing: readonly SpacingMark[] } | null {
+    return this.snapFeedbackValue;
+  }
+
+  setSnapFeedback(feedback: { lines: readonly GuideLine[]; spacing: readonly SpacingMark[] } | null): void {
+    const empty = !feedback || (feedback.lines.length === 0 && feedback.spacing.length === 0);
+    const next = empty ? null : feedback;
+    if (next === this.snapFeedbackValue) return;
+    this.snapFeedbackValue = next;
+    this.requestRender();
+  }
+
+  /** 按着 Alt、没在拖动：覆盖层画出选区到鼠标下对象的距离 */
+  get measuring(): boolean {
+    return this.measuringValue;
+  }
+
+  setMeasuring(on: boolean): void {
+    if (on === this.measuringValue) return;
+    this.measuringValue = on;
+    this.requestRender();
+  }
 
   /** 鼠标停在哪个对象上（画布上用细线描出来）。只影响覆盖层，不进状态 */
   get hover(): NodeId | null {

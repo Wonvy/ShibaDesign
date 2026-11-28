@@ -21,7 +21,40 @@ export interface EditorState {
   textEditing: TextEditing | null;
   /** 正在画布上调整填充（渐变的起点终点、图片在形状里的位置）的节点；没有时为 null。见 fill-handles.ts */
   fillEditing: FillEditing | null;
+  /** 视图选项：标尺、辅助线、吸附等。界面层记在浏览器里 */
+  view: ViewOptions;
 }
+
+/** 视图选项。都是只和这台电脑、这个人有关的偏好，不进文档 */
+export interface ViewOptions {
+  /** 画布上边和左边的标尺 */
+  rulers: boolean;
+  /** 显示辅助线 */
+  guides: boolean;
+  /** 锁定辅助线：点不中、拖不动，不会碰歪 */
+  guidesLocked: boolean;
+  /** 放大到 800% 以上时画出像素格 */
+  pixelGrid: boolean;
+  /** 选区框下面的"宽 × 高"标签 */
+  sizeLabel: boolean;
+  /** 吸附到对象和画板 */
+  snapObjects: boolean;
+  /** 吸附到辅助线 */
+  snapGuides: boolean;
+  /** 位置和大小取整到像素 */
+  snapPixels: boolean;
+}
+
+export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
+  rulers: false,
+  guides: true,
+  guidesLocked: false,
+  pixelGrid: true,
+  sizeLabel: true,
+  snapObjects: true,
+  snapGuides: true,
+  snapPixels: false,
+};
 
 /** 正在编辑的文字。属性面板按它显示和修改选中那几个字的样式 */
 export interface TextEditing {
@@ -43,6 +76,13 @@ export interface CanvasTheme {
   label: string;
   /** 控制柄的填充色 */
   handleFill: string;
+  /** 智能参考线、测距的颜色。省略时用洋红色 */
+  snap?: string;
+  /** 辅助线的颜色。省略时用青色 */
+  guide?: string;
+  /** 标尺的底色、刻度线的颜色。省略时用画布的底色和画板名的颜色 */
+  rulerFill?: string;
+  rulerLine?: string;
 }
 
 export interface PointerInfo {
@@ -70,7 +110,11 @@ export type ContextTarget =
   /** 画板的空白处或画板名 */
   | { kind: 'artboard'; id: NodeId }
   /** 画板外的空白处 */
-  | { kind: 'canvas' };
+  | { kind: 'canvas' }
+  /** 辅助线 */
+  | { kind: 'guide'; container: NodeId; id: string }
+  /** 标尺 */
+  | { kind: 'ruler' };
 
 export interface ContextInfo {
   target: ContextTarget;

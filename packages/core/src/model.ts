@@ -225,8 +225,20 @@ export interface ShapeStyle {
 /**
  * 页面。文档的根节点是一个页面，文档级的数据也记在它上面：颜色样式和文字样式（见 styles.ts）。
  */
+/**
+ * 辅助线：竖线（axis 'x'，在 x = offset 处）或横线（axis 'y'）。画板上的辅助线坐标相对画板、只画在画板里、
+ * 跟着画板移动，复制这一页时一起复制；页面上的辅助线画满整个画布。导出时不画
+ */
+export interface Guide {
+  id: string;
+  axis: 'x' | 'y';
+  offset: number;
+}
+
 export interface PageNode extends BaseNode {
   type: 'page';
+  /** 页面上的辅助线（不在任何画板里的）。省略表示没有 */
+  guides?: readonly Guide[];
   /** 颜色样式，按显示顺序。省略表示没有 */
   colorStyles?: readonly ColorStyleDef[];
   /** 文字样式，按显示顺序。省略表示没有 */
@@ -250,6 +262,8 @@ export interface ArtboardNode extends BaseNode {
   fill: SolidFill | GradientFill | null;
   /** 有这个字段就是一页幻灯片；order 是幻灯片顺序的分数索引 */
   deck: SlideDeck | null;
+  /** 画板上的辅助线，坐标相对画板。省略表示没有 */
+  guides?: readonly Guide[];
 }
 
 export interface RectNode extends BaseNode, ShapeStyle {

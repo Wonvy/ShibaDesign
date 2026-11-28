@@ -22,3 +22,6 @@ export * from './ops';
 export * from './fill-handles';
 export * from './motion-handles';
 export * from './clipboard';
+export * from './snap';
+export { RULER_SIZE, rulerStep } from './guides';
+export type { GuideHit } from './guides';

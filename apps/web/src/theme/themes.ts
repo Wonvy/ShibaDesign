@@ -55,6 +55,10 @@ export const THEMES: ThemeDef[] = [
       accent: '#2563eb',
       label: '#6a717d',
       handleFill: '#ffffff',
+      snap: '#e8338a',
+      guide: '#0ea5e9',
+      rulerFill: '#ffffff',
+      rulerLine: '#dfe2e7',
     },
   },
   {
@@ -81,6 +85,10 @@ export const THEMES: ThemeDef[] = [
       accent: '#5b93ff',
       label: '#969da8',
       handleFill: '#ffffff',
+      snap: '#ff5ca8',
+      guide: '#38bdf8',
+      rulerFill: '#1e2024',
+      rulerLine: '#30343b',
     },
   },
 ];

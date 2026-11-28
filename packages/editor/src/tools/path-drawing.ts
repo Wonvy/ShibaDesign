@@ -1,6 +1,7 @@
 import type { Anchor, Point } from '@shiba/core';
 import type { Editor } from '../editor';
 import type { PointerInfo } from '../types';
+import { snapPoint } from '../snap';
 import type { Tool } from './tool';
 
 const CLOSE_RADIUS = 8;
@@ -91,7 +92,15 @@ export function createPathDrawingTool(options: PathDrawingOptions): Tool {
         end(editor, false);
         return;
       }
-      anchors.push(corner(e.world));
+      // 新放的锚点吸附到附近的边和中线（按着 ⌘ 时不吸）
+      let at = e.world;
+      if (editor.snapping && !e.mod) {
+        at = snapPoint(editor.snapTargets([]), e.world, {
+          threshold: editor.snapThreshold,
+          pixels: editor.view.snapPixels,
+        }).point;
+      }
+      anchors.push(corner(at));
       dragging = true;
     },
 

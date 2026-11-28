@@ -29,6 +29,24 @@ const MAX_TEXT_LENGTH = 1_000_000;
 /** 一条动作路径最多几个锚点 */
 const MAX_MOTION_ANCHORS = 1000;
 
+/** 一个画板（或页面）上最多几条辅助线 */
+const MAX_GUIDES = 1000;
+
+function isGuideList(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length <= MAX_GUIDES &&
+    value.every(
+      (g) =>
+        isObject(g) &&
+        typeof g.id === 'string' &&
+        (g.axis === 'x' || g.axis === 'y') &&
+        typeof g.offset === 'number' &&
+        Number.isFinite(g.offset),
+    )
+  );
+}
+
 export function validateDocument(data: unknown): DocumentData {
   if (!isObject(data) || !isObject(data.nodes)) throw new DocumentError('notObject');
   if (typeof data.version !== 'number' || !Number.isFinite(data.version)) throw new DocumentError('notObject');
@@ -182,6 +200,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       break;
     case 'artboard':
       if (node.deck !== null && !isDeck(node.deck)) fail('deck');
+      if (node.guides !== undefined && !isGuideList(node.guides)) fail('guides');
       break;
     case 'group':
       if (node.mask !== undefined && typeof node.mask !== 'string') fail('mask');
@@ -199,6 +218,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       ) {
         fail('textStyles');
       }
+      if (node.guides !== undefined && !isGuideList(node.guides)) fail('guides');
       break;
     case 'text': {
       if (typeof node.text !== 'string' || node.text.length > MAX_TEXT_LENGTH) fail('text');

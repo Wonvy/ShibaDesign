@@ -16,6 +16,15 @@ import {
 import type { Editor } from './editor';
 import { gradientHandlePoints, imageRect, type GradientPoint } from './fill-handles';
 import { drawMotionPaths } from './motion-handles';
+import {
+  drawGuides,
+  drawMeasure,
+  drawPill,
+  drawPixelGrid,
+  drawRulers,
+  drawSnapFeedback,
+  formatNumber,
+} from './overlay-guides';
 import { HANDLES, handleAnchor, type Handle } from './resize';
 
 const HANDLE_SIZE = 8;
@@ -94,12 +103,17 @@ export class Overlay {
     const { ctx, editor } = this;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    drawPixelGrid(ctx, editor);
+    drawGuides(ctx, editor);
     this.drawArtboardLabels();
     this.drawHover();
     this.drawSelection();
     // 选中对象的动作路径画在选区框上面，见 motion-handles.ts
     drawMotionPaths(ctx, editor);
+    drawSnapFeedback(ctx, editor);
+    drawMeasure(ctx, editor);
     editor.tool.drawOverlay?.(ctx, editor);
+    drawRulers(ctx, editor);
   }
 
   /** 屏幕上的某个点是否落在画板名上 */
@@ -418,8 +432,33 @@ export class Overlay {
         ctx.strokeRect(-HANDLE_SIZE / 2 + 0.5, -HANDLE_SIZE / 2 + 0.5, HANDLE_SIZE - 1, HANDLE_SIZE - 1);
         ctx.restore();
       }
+      // 按住 Alt 测距时不画尺寸标签，免得和距离的数字叠在一起
+      if (editor.view.sizeLabel && !editor.measuring) this.drawSizeLabel(frame);
     }
     ctx.restore();
+  }
+
+  /** 选区框下面的"宽 × 高"：一个对象时是它自己的大小（转过角度也是），几个对象时是整体的外框 */
+  private drawSizeLabel(frame: ScreenFrame): void {
+    const { editor } = this;
+    const world = editor.selectionFrame();
+    if (!world) return;
+    let w: number;
+    let h: number;
+    if (world.single) {
+      const m = world.single.world;
+      w = world.single.box.w * Math.hypot(m[0], m[1]);
+      h = world.single.box.h * Math.hypot(m[2], m[3]);
+    } else {
+      const bounds = editor.selectionBounds();
+      if (!bounds) return;
+      w = bounds.w;
+      h = bounds.h;
+    }
+    const bottom = frame.corners.reduce((best, p) => (p.y > best.y ? p : best), frame.corners[0]);
+    const center = frame.corners.reduce((sum, p) => sum + p.x, 0) / 4;
+    const x = Math.abs(frame.angle) < 1e-3 ? center : bottom.x;
+    drawPill(this.ctx, `${formatNumber(w)} × ${formatNumber(h)}`, x, bottom.y + 14, editor.theme.accent);
   }
 }
 

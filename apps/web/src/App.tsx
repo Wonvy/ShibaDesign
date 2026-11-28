@@ -8,6 +8,8 @@ import { Sidebar } from './components/Sidebar';
 import { SlideStrip } from './components/SlideStrip';
 import { TopBar } from './components/TopBar';
 import { installClipboard } from './clipboard';
+import { GuideDialog } from './components/GuideDialog';
+import { persistViewOptions } from './storage/view';
 import { CommandPalette } from './menus/CommandPalette';
 import { ContextMenuHost } from './menus/ContextMenuHost';
 import { installMenus } from './menus/install';
@@ -34,6 +36,7 @@ function Workspace(): ReactNode {
 
   useEffect(() => installClipboard(editor), [editor]);
   useEffect(() => installMenus(editor), [editor]);
+  useEffect(() => persistViewOptions(editor), [editor]);
   const overlay = useOverlay();
 
   // 演示的两个命令在界面层注册（要打开演示界面），快捷键 ⌘↵、⇧⌘↵ 在快捷键表里
@@ -61,6 +64,7 @@ function Workspace(): ReactNode {
       </div>
       <Toasts />
       <ContextMenuHost />
+      <GuideDialog />
       {overlay === 'palette' && <CommandPalette />}
       {overlay === 'shortcuts' && <ShortcutSheet />}
       {presenting !== null && <Presenter startSlide={presenting} onClose={stop} />}

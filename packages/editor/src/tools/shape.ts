@@ -11,6 +11,8 @@ import {
 } from '@shiba/core';
 import type { Editor } from '../editor';
 import { DEFAULT_FILL, localOrigin } from '../ops';
+import { snapPoint, type SnapTargets } from '../snap';
+import type { PointerInfo } from '../types';
 import type { Tool } from './tool';
 
 const DRAG_THRESHOLD = 3;
@@ -25,6 +27,19 @@ interface Drag {
   key: string;
   /** 上一次的鼠标位置，按住空格挪动形状时用 */
   last: Point;
+  /** 吸附的候选，按下时收集 */
+  targets: SnapTargets;
+}
+
+/** 鼠标位置吸附到附近的边和中线（按着 ⌘ 时不吸），顺便设好要画的参考线 */
+function snapped(editor: Editor, targets: SnapTargets, e: PointerInfo): Point {
+  if (!editor.snapping || e.mod) {
+    editor.setSnapFeedback(null);
+    return e.world;
+  }
+  const hit = snapPoint(targets, e.world, { threshold: editor.snapThreshold, pixels: editor.view.snapPixels });
+  editor.setSnapFeedback({ lines: hit.lines, spacing: [] });
+  return hit.point;
 }
 
 /**
@@ -76,17 +91,22 @@ export function createShapeTool(kind: 'rect' | 'ellipse'): Tool {
       // 已经画出来的形状撤掉，像没画过一样
       if (drag?.nodeId) editor.store.abandon(drag.key);
       drag = null;
+      editor.setSnapFeedback(null);
     },
 
     onPointerDown(e, editor) {
+      const targets = editor.snapTargets([]);
+      const start = snapped(editor, targets, e);
+      editor.setSnapFeedback(null);
       drag = {
-        start: e.world,
+        start,
         x: e.x,
         y: e.y,
         containerId: editor.containerAt(e.world).id,
         nodeId: null,
         key: editor.newMergeKey('create'),
         last: e.world,
+        targets,
       };
     },
 
@@ -102,7 +122,7 @@ export function createShapeTool(kind: 'rect' | 'ellipse'): Tool {
         };
       }
       current.last = e.world;
-      const rect = dragRect(current.start, e.world, e.shift, e.alt);
+      const rect = dragRect(current.start, snapped(editor, current.targets, e), e.shift, e.alt);
 
       editor.store.transact(
         'create',
@@ -121,6 +141,7 @@ export function createShapeTool(kind: 'rect' | 'ellipse'): Tool {
     onPointerUp(_e, editor) {
       const finished = drag;
       drag = null;
+      editor.setSnapFeedback(null);
       if (!finished) return;
       let id = finished.nodeId;
       if (!id) {

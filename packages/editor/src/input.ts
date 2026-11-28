@@ -14,6 +14,8 @@ export class InputController {
   /** 最后一次指针事件的位置，按下或松开修饰键时用它把新的修饰键状态告诉工具 */
   private lastPointer: { clientX: number; clientY: number; button: number } | null = null;
   private pointerId: number | null = null;
+  /** 这次按下是在标尺或辅助线上：拖动交给 editor.guides，不交给工具 */
+  private guideDrag = false;
 
   constructor(
     private readonly element: HTMLCanvasElement,
@@ -88,8 +90,10 @@ export class InputController {
    */
   private refreshModifiers(event: KeyboardEvent): void {
     const last = this.lastPointer;
-    if (!this.pointerDown || !last) return;
-    this.editor.tool.onPointerMove?.(this.infoAt(last.clientX, last.clientY, event, last.button), this.editor);
+    if (!last) return;
+    const info = this.infoAt(last.clientX, last.clientY, event, last.button);
+    if (this.guideDrag) this.editor.guides.move(info);
+    else this.editor.tool.onPointerMove?.(info, this.editor);
     this.editor.requestRender();
   }
 
@@ -105,6 +109,11 @@ export class InputController {
       this.element.releasePointerCapture(this.pointerId);
     }
     this.pointerId = null;
+    if (this.guideDrag) {
+      this.guideDrag = false;
+      this.editor.guides.cancel();
+      return true;
+    }
     this.editor.tool.onCancel?.(this.editor);
     this.editor.requestRender();
     return true;
@@ -129,6 +138,13 @@ export class InputController {
 
   private onDoubleClick = (event: MouseEvent): void => {
     if (event.button !== 0) return;
+    const rect = this.element.getBoundingClientRect();
+    const guide = this.editor.guides.hit(event.clientX - rect.left, event.clientY - rect.top);
+    if (guide?.kind === 'guide') {
+      // 双击辅助线：输入精确的位置
+      this.editor.guideEditHandler?.({ container: guide.container, id: guide.id });
+      return;
+    }
     this.editor.tool.onDoubleClick?.(this.info(event), this.editor);
     this.editor.requestRender();
   };
@@ -147,7 +163,21 @@ export class InputController {
     if (event.ctrlKey && !event.metaKey && IS_MAC) return;
     this.pointerDown = true;
     this.pointerId = event.pointerId;
-    this.editor.tool.onPointerDown?.(this.info(event), this.editor);
+    const info = this.info(event);
+    // 标尺上随时能拖出辅助线；已有的辅助线用选择工具拖（选区的控制柄优先）
+    const guide = this.editor.guides.hit(info.x, info.y);
+    const usable =
+      guide?.kind === 'ruler' ||
+      (guide?.kind === 'guide' &&
+        this.editor.tool.id === 'select' &&
+        !this.editor.overlayLayer?.hitHandle(info.x, info.y));
+    if (guide && usable) {
+      this.guideDrag = true;
+      this.editor.guides.begin(guide, info);
+      return;
+    }
+    this.editor.guides.clearSelection();
+    this.editor.tool.onPointerDown?.(info, this.editor);
     this.editor.requestRender();
   };
 
@@ -157,7 +187,22 @@ export class InputController {
       this.panning = { x: event.clientX, y: event.clientY };
       return;
     }
-    this.editor.tool.onPointerMove?.(this.info(event), this.editor);
+    const info = this.info(event);
+    if (this.guideDrag) {
+      this.editor.guides.move(info);
+      return;
+    }
+    if (!this.pointerDown) {
+      // 停在标尺或辅助线上：指针变成双箭头，不再交给工具（也就不画悬停高亮）
+      const cursor = this.editor.guides.cursorAt(info.x, info.y);
+      if (cursor && (this.editor.tool.id === 'select' || this.editor.guides.hit(info.x, info.y)?.kind === 'ruler')) {
+        this.element.style.cursor = cursor;
+        this.editor.setHover(null);
+        return;
+      }
+      this.applyCursor();
+    }
+    this.editor.tool.onPointerMove?.(info, this.editor);
     if (this.pointerDown) this.editor.requestRender();
   };
 
@@ -171,6 +216,11 @@ export class InputController {
     if (!this.pointerDown) return;
     this.pointerDown = false;
     this.pointerId = null;
+    if (this.guideDrag) {
+      this.guideDrag = false;
+      this.editor.guides.end(this.info(event));
+      return;
+    }
     this.editor.tool.onPointerUp?.(this.info(event), this.editor);
     this.editor.requestRender();
   };
@@ -208,6 +258,13 @@ export class InputController {
         this.refreshModifiers(event);
         return;
       }
+    } else if (isModifier(event.key)) {
+      // 没在拖动时按下 Alt：悬停的工具要知道（按住 Alt 测距）
+      this.refreshModifiers(event);
+    }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && this.editor.guides.removeSelected()) {
+      event.preventDefault();
+      return;
     }
     if (event.key === ' ') {
       if (!this.spaceHeld) {

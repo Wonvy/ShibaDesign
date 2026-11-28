@@ -127,6 +127,10 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: 'shift+1', command: 'view.zoomToFit' },
   { key: 'shift+0', command: 'view.zoom100' },
   { key: 'shift+2', command: 'view.zoomToSelection' },
+  { key: 'shift+r', command: 'view.toggle', args: 'rulers' },
+  { key: 'mod+;', command: 'view.toggle', args: 'guides' },
+  { key: 'mod+alt+;', command: 'view.toggle', args: 'guidesLocked' },
+  { key: "mod+'", command: 'view.toggle', args: 'pixelGrid' },
 
   // 选择
   { key: 'enter', command: 'select.children' },

@@ -56,7 +56,19 @@ import {
   toggleVisible,
   unlockAll,
 } from './select';
-import { setViewMode, zoom100, zoomIn, zoomOut, zoomToFit, zoomToSelection } from './view';
+import {
+  clearAllGuides,
+  clearGuides,
+  removeGuide,
+  setGuide,
+  setViewMode,
+  toggleView,
+  zoom100,
+  zoomIn,
+  zoomOut,
+  zoomToFit,
+  zoomToSelection,
+} from './view';
 
 /** 注册所有内置命令 */
 export function registerBuiltinCommands(editor: Editor): void {
@@ -141,7 +153,12 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(fitArtboard)
     .register(soloNode)
     .register(selectByStyle)
-    .register(resetImageRatio);
+    .register(resetImageRatio)
+    .register(toggleView)
+    .register(clearGuides)
+    .register(clearAllGuides)
+    .register(setGuide)
+    .register(removeGuide);
 }
 
 export type { Command } from './command';
@@ -149,6 +166,7 @@ export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
 export type { SameKind } from './select';
 export type { SlideMove } from './organize';
+export type { ViewToggle } from './view';
 export { cloneNodes } from './edit';
 export type { OffsetPathArgs } from './path';
 export type { AddArtboardArgs } from './artboard';
