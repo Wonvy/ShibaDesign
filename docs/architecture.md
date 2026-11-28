@@ -1,6 +1,6 @@
 # ShibaDesign 方案与架构
 
-定稿日期：2026-11-27。本文是产品范围和技术架构的依据；代码结构与扩展方式见根目录的 `README.md`。
+定稿日期：2026-11-27。本文是产品范围和技术架构的依据；代码结构与扩展方式见根目录的 `README.md`，还没做的功能汇总在 [backlog.md](backlog.md)。
 
 ## 1. 定位
 
@@ -55,8 +55,8 @@ UI 层        React + 多语言 + 主题：顶栏 / 图层 / 幻灯片条 / 属�
    │
    ├─ 渲染引擎   CanvasKit · 节点类型注册表 · 几何缓存 · 布尔运算   packages/renderer
    ├─ 文本引擎   SkParagraph 排版 · 字体按需加载 · 输入法桥接              packages/renderer/src/text，packages/editor/src/tools/text.ts
-   ├─ 动画引擎   效果库 · HTML5 播放器 · 平滑切换                  待做
-   ├─ 图像引擎   SkSL 调整着色器 · Worker 滤镜 · 本地抠图          待做
+   ├─ 动画引擎   效果库 · HTML5 播放器 · 平滑切换 · 逐帧录制（已有）   core/src/animation.ts，packages/player
+   ├─ 图像引擎   调色与模糊（已有）· 曲线锐化 · Worker 滤镜 · 本地抠图（待做）   renderer/src/adjust.ts、bake.ts
    └─ 导入导出   .shiba 文件 · PDF 导入导出 · PNG / SVG / HTML / MP4 / GIF 导出（已有）· PPTX / PSD（待做）   packages/io，PDF、SVG 后端在 renderer/src/pdf.ts、svg.ts
    │
 存储         本地草稿存 IndexedDB，文件存 .shiba  ⇄  云端同步(后期)
