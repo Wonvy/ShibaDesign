@@ -158,6 +158,9 @@
       "fontCjk": "中文字体",
       "size": "字号",
       "bold": "加粗",
+      "italic": "斜体",
+      "underline": "下划线",
+      "strikethrough": "删除线",
       "lineHeight": "行高",
       "letterSpacing": "字距",
       "align": "对齐",
@@ -168,7 +171,13 @@
       "sizing": "文本框",
       "autoWidth": "自动宽度",
       "fixedWidth": "固定宽度",
-      "frozenHint": "这段文字来自 PDF，现在按原文件的字形显示。修改文字或下面的格式后，会换成所选字体重新排版。"
+      "frozenHint": "这段文字来自 PDF，现在按原文件的字形显示。修改文字或下面的格式后，会换成所选字体重新排版。",
+      "decoration": "样式",
+      "color": "颜色",
+      "mixed": "多种",
+      "scopeSelection": "正在修改选中的文字",
+      "scopeCaret": "正在设置接下来输入的文字",
+      "scopeAll": "正在修改整段文字"
     },
     "file": {
       "menu": "文件",

@@ -1,7 +1,48 @@
 import type { CanvasKit, FontWeight, LineMetrics, Paragraph } from 'canvaskit-wasm';
-import type { DocStore, NodeId, Rect, SolidFill, TextAlign, TextNode, TextStyle } from '@shiba/core';
+import {
+  baseCharacterStyle,
+  styleRuns,
+  type CharacterStyle,
+  type DocStore,
+  type NodeId,
+  type Rect,
+  type SolidFill,
+  type TextAlign,
+  type TextNode,
+  type TextSpan,
+  type TextStyle,
+} from '@shiba/core';
 import { toSkColor } from '../skia';
 import type { FontManager } from './fonts';
+
+/** 排版一个文本节点要用到的字体：每种样式的字体家族、字重、正斜体，以及用这种样式的那些字 */
+export interface TextFontRequest {
+  families: string[];
+  text: string;
+  weight: number;
+  italic: boolean;
+}
+
+/** 一个文本节点要用到哪些字体。排版和"等字体加载完"都按它来，两边才对得上 */
+export function textFontRequests(node: TextNode): TextFontRequest[] {
+  const request = (style: CharacterStyle, text: string): TextFontRequest => ({
+    families: [style.fontFamily.latin, style.fontFamily.cjk],
+    text,
+    weight: style.fontWeight,
+    italic: style.italic,
+  });
+  // 第一项是整段的默认样式，用全部文字：行高的"支柱"和空文本都靠它
+  const requests = [request(baseCharacterStyle(node), node.text)];
+  if (node.spans) {
+    for (const run of styleRuns(node)) requests.push(request(run.style, node.text.slice(run.start, run.end)));
+  }
+  return requests;
+}
+
+/** 等一个文本节点用到的字体全部加载完 */
+export async function ensureTextFonts(fonts: FontManager, node: TextNode): Promise<void> {
+  await Promise.all(textFontRequests(node).map((r) => fonts.ensure(r.families, r.text, r.weight, r.italic)));
+}
 
 export interface TextLayout {
   paragraph: Paragraph;
@@ -9,6 +50,9 @@ export interface TextLayout {
   width: number;
   height: number;
   lines: LineMetrics[];
+  /** 每一行的上沿和高度（本地坐标）。光标、上下移动都按它算 */
+  lineTops: number[];
+  lineHeights: number[];
   /** 还有字体没加载完，当前结果可能缺字；加载完会自动重排 */
   pending: boolean;
 }
@@ -22,6 +66,7 @@ interface Entry {
   sizing: TextNode['sizing'];
   width: number;
   fill: SolidFill | null;
+  spans: readonly TextSpan[] | undefined;
   epoch: number;
 }
 
@@ -59,7 +104,8 @@ export class TextLayouts {
       cached.align === node.align &&
       cached.sizing === node.sizing &&
       cached.width === width &&
-      cached.fill === node.fill
+      cached.fill === node.fill &&
+      cached.spans === node.spans
     ) {
       return cached.layout;
     }
@@ -73,6 +119,7 @@ export class TextLayouts {
       sizing: node.sizing,
       width,
       fill: node.fill,
+      spans: node.spans,
       epoch: this.fonts.epoch,
     });
     return layout;
@@ -97,10 +144,8 @@ export class TextLayouts {
     const { paragraph, lines } = layout;
     const line = lineAt(lines, offset);
     if (!line) return { x: alignedStart(node.align, layout.width), y: 0, w: 0, h: layout.height };
-
-    // 每行高度被支柱强制成一样，所以行的位置直接按行号算，比用字体的上下沿更准
-    const height = layout.height / lines.length;
-    const top = line.lineNumber * height;
+    const top = layout.lineTops[line.lineNumber] ?? 0;
+    const height = layout.lineHeights[line.lineNumber] ?? layout.height;
     const { ck } = this;
     const edge = (from: number, to: number, side: 'left' | 'right'): number | null => {
       const rects = paragraph.getRectsForRange(from, to, ck.RectHeightStyle.Max, ck.RectWidthStyle.Tight);
@@ -138,12 +183,12 @@ export class TextLayouts {
 
   /** 光标上移或下移一行后的字符位置。x 是希望保持的横坐标 */
   verticalMove(node: TextNode, offset: number, direction: -1 | 1, x: number): number {
-    const { lines, paragraph, height } = this.get(node);
+    const { lines, paragraph, lineTops, lineHeights } = this.get(node);
     const current = lineAt(lines, offset);
     if (!current) return offset;
     const target = lines[current.lineNumber + direction];
     if (!target) return direction < 0 ? 0 : node.text.length;
-    const middle = (target.lineNumber + 0.5) * (height / lines.length);
+    const middle = lineTops[target.lineNumber]! + lineHeights[target.lineNumber]! / 2;
     return Math.min(paragraph.getGlyphPositionAtCoordinate(x, middle).pos, node.text.length);
   }
 
@@ -163,33 +208,43 @@ export class TextLayouts {
   private build(node: TextNode): TextLayout {
     const { ck, fonts } = this;
     const { style } = node;
-    const families = [style.fontFamily.latin, style.fontFamily.cjk];
-    const resolved = fonts.resolve(families, node.text, style.fontWeight);
+    let pending = false;
+    const resolve = (s: CharacterStyle, text: string): string[] => {
+      const resolved = fonts.resolve([s.fontFamily.latin, s.fontFamily.cjk], text, s.fontWeight, s.italic);
+      if (resolved.pending) pending = true;
+      return resolved.names;
+    };
+    const base = baseCharacterStyle(node);
+    const baseNames = resolve(base, node.text);
+    const runs = styleRuns(node);
 
+    // 不同字体的上下沿比例不一样，中英文混排的行会比纯中文的行高出几个像素。
+    // 用"支柱"把每一行的高度强制成 字号 × 行高，行距才均匀。
+    // 但有字比默认字号大时不能强制，否则大字的行会和上下行叠在一起：这时支柱只是最小行高，行跟着大字长高
+    const forced = runs.every((run) => run.style.fontSize <= style.fontSize + 1e-6);
     const paragraphStyle = new ck.ParagraphStyle({
       textAlign: toSkAlign(ck, node.align),
-      // 不同字体的上下沿比例不一样，中英文混排的行会比纯中文的行高出几个像素。
-      // 用"支柱"把每一行的高度强制成 字号 × 行高，行距才均匀。
       strutStyle: {
         strutEnabled: true,
-        fontFamilies: resolved.names,
+        fontFamilies: baseNames,
         fontSize: style.fontSize,
         heightMultiplier: style.lineHeight,
         halfLeading: true,
-        forceStrutHeight: true,
+        forceStrutHeight: forced,
       },
-      textStyle: {
-        color: node.fill ? toSkColor(ck, node.fill.color) : ck.TRANSPARENT,
-        fontFamilies: resolved.names,
-        fontSize: style.fontSize,
-        fontStyle: { weight: toSkWeight(ck, style.fontWeight) },
-        heightMultiplier: style.lineHeight,
-        halfLeading: true,
-        letterSpacing: style.letterSpacing,
-      },
+      textStyle: this.skTextStyle(base, baseNames, style.lineHeight),
     });
     const builder = ck.ParagraphBuilder.MakeFromFontProvider(paragraphStyle, fonts.provider);
-    builder.addText(node.text);
+    if (node.spans) {
+      for (const run of runs) {
+        const text = node.text.slice(run.start, run.end);
+        builder.pushStyle(new ck.TextStyle(this.skTextStyle(run.style, resolve(run.style, text), style.lineHeight)));
+        builder.addText(text);
+        builder.pop();
+      }
+    } else {
+      builder.addText(node.text);
+    }
     const paragraph = builder.build();
     builder.delete();
 
@@ -203,12 +258,40 @@ export class TextLayouts {
       width = Math.ceil(paragraph.getLongestLine()) + 1;
       paragraph.layout(width);
     }
+    const height = paragraph.getHeight();
+    const lines = paragraph.getLineMetrics();
+    // 行高被强制成一样时每行等分总高度；否则按各行自己的高度（排版引擎给的是取整过的，按总高度缩放回去）
+    const raw = lines.map((line) => (forced ? 1 : Math.max(1, line.height)));
+    const total = raw.reduce((sum, h) => sum + h, 0) || 1;
+    const lineHeights = raw.map((h) => (h / total) * height);
+    const lineTops: number[] = [];
+    let top = 0;
+    for (const h of lineHeights) {
+      lineTops.push(top);
+      top += h;
+    }
+    return { paragraph, width, height, lines, lineTops, lineHeights, pending };
+  }
+
+  private skTextStyle(style: CharacterStyle, families: string[], lineHeight: number) {
+    const { ck } = this;
+    const decoration =
+      (style.underline ? ck.UnderlineDecoration : 0) | (style.strikethrough ? ck.LineThroughDecoration : 0);
+    const color = style.color ? toSkColor(ck, style.color) : ck.TRANSPARENT;
     return {
-      paragraph,
-      width,
-      height: paragraph.getHeight(),
-      lines: paragraph.getLineMetrics(),
-      pending: resolved.pending,
+      color,
+      fontFamilies: families,
+      fontSize: style.fontSize,
+      fontStyle: {
+        weight: toSkWeight(ck, style.fontWeight),
+        slant: style.italic ? ck.FontSlant.Italic : ck.FontSlant.Upright,
+      },
+      heightMultiplier: lineHeight,
+      halfLeading: true,
+      letterSpacing: style.letterSpacing,
+      decoration,
+      decorationColor: color,
+      decorationThickness: 1,
     };
   }
 }

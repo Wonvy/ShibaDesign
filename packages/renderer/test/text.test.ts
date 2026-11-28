@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -8,6 +8,7 @@ import {
   createNode,
   encodeGlyphLibrary,
   rgba,
+  setCharacterStyle,
   solid,
   textAppearanceBasis,
   type TextNode,
@@ -19,6 +20,7 @@ import {
   TextLayouts,
   createTextNodeType,
   TextAppearances,
+  ensureTextFonts,
   loadCanvasKit,
   parseUnicodeRange,
   registerBuiltinNodeTypes,
@@ -45,16 +47,20 @@ function fontsourceFaces(pkg: string, prefix: string, loaded: string[]): FontFac
   for (const [key, range] of Object.entries(unicode)) {
     const chunk = key.replace(/[[\]]/g, '');
     for (const weight of [400, 700]) {
-      const name = `${prefix}-${chunk}-${weight}-normal.woff2`;
-      faces.push({
-        chunk,
-        weight,
-        ranges: parseUnicodeRange(range),
-        load: async () => {
-          loaded.push(name);
-          return file(`${pkg}/files/${name}`);
-        },
-      });
+      for (const italic of [false, true]) {
+        const name = `${prefix}-${chunk}-${weight}-${italic ? 'italic' : 'normal'}.woff2`;
+        if (!existsSync(require.resolve(`${pkg}/package.json`).replace('package.json', `files/${name}`))) continue;
+        faces.push({
+          chunk,
+          weight,
+          italic,
+          ranges: parseUnicodeRange(range),
+          load: async () => {
+            loaded.push(name);
+            return file(`${pkg}/files/${name}`);
+          },
+        });
+      }
     }
   }
   return faces;
@@ -290,6 +296,61 @@ describe('TextLayouts', () => {
   });
 });
 
+describe('字符级样式', () => {
+  it('字号都一样时每行一样高；有更大的字时那一行跟着长高，光标的高度按各自的行算', async () => {
+    const { store, fonts, layouts } = setup();
+    const node = addText(store, '中文 English\nbig line\nlast', {
+      style: { ...addText(store, '').style, fontSize: 20 },
+    });
+    await fonts.ensure(FAMILIES, node.text, 400);
+    await Promise.resolve();
+    const even = layouts.get(store.require(node.id) as TextNode);
+    expect(even.lineHeights.map((h) => Math.round(h))).toEqual([28, 28, 28]);
+
+    store.transact('big', (tx) => tx.update(node.id, setCharacterStyle(node, 11, 14, { fontSize: 40 })));
+    const grown = store.require(node.id) as TextNode;
+    await ensureTextFonts(fonts, grown);
+    await Promise.resolve();
+    const layout = layouts.get(grown);
+    expect(layout.lineHeights[1]!).toBeCloseTo(56, 0);
+    expect(layout.lineTops[2]!).toBeCloseTo(layout.lineTops[1]! + layout.lineHeights[1]!, 5);
+    expect(layout.height).toBeCloseTo(
+      layout.lineHeights.reduce((a, b) => a + b, 0),
+      5,
+    );
+    const caret = layouts.caretRect(grown, 20);
+    expect(caret.y).toBeCloseTo(layout.lineTops[2]!, 5);
+    expect(caret.h).toBeCloseTo(layout.lineHeights[2]!, 5);
+  });
+
+  it('斜体加载斜体文件；中文字体没有斜体就用正体', async () => {
+    const { store, fonts, loaded } = setup();
+    const node = addText(store, 'Hi 你');
+    const italic = { ...node, ...setCharacterStyle(node, 0, 4, { italic: true }) } as TextNode;
+    await ensureTextFonts(fonts, italic);
+    expect(loaded.some((name) => name.startsWith('inter-latin-400-italic'))).toBe(true);
+    expect(loaded.some((name) => name.includes('italic') && name.startsWith('noto'))).toBe(false);
+    expect(fonts.hasItalic('Inter')).toBe(true);
+    expect(fonts.hasItalic('Noto Sans SC')).toBe(false);
+  });
+
+  it('粗细、颜色、下划线不同的字排在同一段里，宽度跟着变', async () => {
+    const { store, fonts, layouts } = setup();
+    const node = addText(store, 'Hello world');
+    await fonts.ensure(FAMILIES, node.text, 400);
+    await Promise.resolve();
+    const plain = layouts.get(store.require(node.id) as TextNode).width;
+    store.transact('bold', (tx) =>
+      tx.update(node.id, setCharacterStyle(node, 6, 11, { fontWeight: 700, underline: true, color: rgba(1, 0, 0) })),
+    );
+    const styled = store.require(node.id) as TextNode;
+    await ensureTextFonts(fonts, styled);
+    await Promise.resolve();
+    expect(layouts.get(styled).width).toBeGreaterThan(plain);
+    expect(layouts.get(styled).pending).toBe(false);
+  });
+});
+
 describe('文本节点的几何', () => {
   it('轮廓是整个文本框，点在字间空白处也能命中', async () => {
     const { store, fonts, geometry } = setup();
@@ -323,10 +384,27 @@ describe('保真外观', () => {
   it('按字形库里的轮廓和记录的位置拼出路径', async () => {
     const env = setup();
     const node = await frozen(env);
-    const path = env.appearances.path(node)!;
-    expect(Array.from(path.computeTightBounds())).toEqual([5, 20, 30, 30]);
+    const [only, ...rest] = env.appearances.paths(node)!;
+    expect(rest).toHaveLength(0);
+    expect(only!.color).toBeNull();
+    expect(Array.from(only!.path.computeTightBounds())).toEqual([5, 20, 30, 30]);
     // 文本框就是原文件里的范围，和我们的排版结果无关
     expect(env.geometry.localBounds(node)).toEqual({ x: 0, y: 0, w: 100, h: 50 });
+  });
+
+  it('一行字中间换了颜色：按颜色分成几条路径', async () => {
+    const env = setup();
+    const node = await frozen(env);
+    const [run] = node.appearance!.runs;
+    const red = rgba(1, 0, 0);
+    const runs = [
+      { ...run!, glyphs: run!.glyphs.slice(0, 3) },
+      { ...run!, glyphs: run!.glyphs.slice(3), color: red },
+    ];
+    env.store.transact('color', (tx) => tx.update(node.id, { appearance: { ...node.appearance!, runs } }));
+    const paths = env.appearances.paths(env.store.require(node.id) as TextNode)!;
+    expect(paths.map((p) => p.color)).toEqual([null, red]);
+    expect(Array.from(paths[1]!.path.computeTightBounds())).toEqual([20, 20, 30, 30]);
   });
 
   it('文字改过之后改用正常排版', async () => {
@@ -342,6 +420,6 @@ describe('保真外观', () => {
     const env = setup();
     const node = await frozen(env);
     env.assets.replaceAll([]);
-    expect(env.appearances.path(node)).toBeNull();
+    expect(env.appearances.paths(node)).toBeNull();
   });
 });

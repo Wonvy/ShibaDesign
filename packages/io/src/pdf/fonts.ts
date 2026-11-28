@@ -59,3 +59,15 @@ export function fontWeight(font: PdfTextFont): number {
   if (/medium/.test(name)) return 500;
   return font.bold ? 700 : 400;
 }
+
+/**
+ * 是不是斜体：先看字体名（Times-Italic、Helvetica-Oblique、Arial-ItalicMT、MinionPro-It、
+ * TeX 的 cmti 斜体和 cmsl 倾斜体），再看解析库读到的标志。解析库常常不给这个标志，所以名字更可靠
+ */
+export function fontItalic(font: PdfTextFont): boolean {
+  const raw = font.name.replace(/^[A-Z]{6}\+/, '');
+  if (/italic|oblique|斜/i.test(raw)) return true;
+  if (/[-_ ,](?:bold|semibold|light|medium|black)?it$/i.test(raw)) return true;
+  if (/^(?:cmti|cmsl|cmbxti|cmbxsl|sfti|sfsl|lmroman\d*-italic)/i.test(raw)) return true;
+  return font.italic;
+}

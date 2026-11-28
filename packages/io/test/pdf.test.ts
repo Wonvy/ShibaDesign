@@ -14,6 +14,7 @@ import {
   PdfImportError,
   encodePng,
   fontCategory,
+  fontItalic,
   fontWeight,
   importPdf,
   type PdfImportOptions,
@@ -501,6 +502,27 @@ describe('PDF 导入：文字', () => {
     const result = await convert('BT /F1 10 Tf 20 80 Td (E = mc) Tj /F1 6 Tf 4 Ts (2) Tj ET');
     expect(result.on().map((n) => asText(n).text)).toEqual(['E = mc2']);
     expect(asText(result.on()[0]).style.fontSize).toBe(10);
+    // 上标的字号记成字符级样式
+    expect(asText(result.on()[0]).spans).toEqual([{ start: 6, end: 7, style: { fontSize: 6 } }]);
+  });
+
+  it('一行里加粗、换色的词变成字符级样式；原样显示时换色的字单独成组，带着自己的颜色', async () => {
+    const result = await convert(
+      'BT /F1 10 Tf 20 80 Td (Make it ) Tj /HB 10 Tf (bold) Tj /F1 10 Tf ( and ) Tj 1 0 0 rg (red) Tj 0 g ( text) Tj ET',
+      {},
+      { fonts: FONTS },
+    );
+    expect(result.on()).toHaveLength(1);
+    const text = asText(result.on()[0]);
+    expect(text.text).toBe('Make it bold and red text');
+    expect(text.style.fontWeight).toBe(400);
+    expect(text.fill).toEqual({ type: 'solid', color: { r: 0, g: 0, b: 0, a: 1 } });
+    expect(text.spans).toEqual([
+      { start: 8, end: 12, style: { fontWeight: 700 } },
+      { start: 17, end: 20, style: { color: { r: 1, g: 0, b: 0, a: 1 } } },
+    ]);
+    const colored = text.appearance!.runs.filter((run) => run.color);
+    expect(colored.map((run) => [run.color, run.glyphs.length / 3])).toEqual([[{ r: 1, g: 0, b: 0, a: 1 }, 3]]);
   });
 
   it('按字体名匹配字体类别和粗细', async () => {
@@ -565,6 +587,22 @@ describe('字体匹配', () => {
     italic: false,
     serif: flags.serif ?? false,
     monospace: flags.monospace ?? false,
+  });
+
+  it('按名字认出斜体', () => {
+    const italic = [
+      'Times-Italic',
+      'Helvetica-Oblique',
+      'ABCDEF+Arial-ItalicMT',
+      'MinionPro-It',
+      'MinionPro-BoldIt',
+      'CMTI10',
+      'CMSL12',
+    ];
+    const upright = ['Times-Roman', 'Helvetica-Bold', 'ABCDEF+Inter-Regular', 'CMR10', 'Courier', 'Digit'];
+    expect(italic.filter((name) => !fontItalic(font(name)))).toEqual([]);
+    expect(upright.filter((name) => fontItalic(font(name)))).toEqual([]);
+    expect(fontItalic({ ...font('Unknown'), italic: true })).toBe(true);
   });
 
   it('按名字认出类别', () => {

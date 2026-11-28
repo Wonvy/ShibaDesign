@@ -5,12 +5,17 @@ import {
   invert,
   multiply,
   nextSeq,
+  rangeStyle,
+  setCharacterStyle,
+  spansAfterEdit,
+  styleAtCaret,
   textAppearanceBasis,
   rectFromPoints,
   rgba,
   solid,
   translation,
   worldTransform,
+  type CharacterStyle,
   type Color,
   type NodeId,
   type Point,
@@ -19,6 +24,7 @@ import {
   type TextAppearance,
   type TextNode,
 } from '@shiba/core';
+import { ensureTextFonts } from '@shiba/renderer';
 import type { Command } from '../commands/command';
 import type { Editor } from '../editor';
 import { localOrigin } from '../ops';
@@ -39,6 +45,9 @@ import type { Tool } from './tool';
  * 从 PDF 导入的文字平时按原文件的字形显示（保真外观）。开始编辑时先换成正常排版（"解冻"），
  * 并把文本框挪一下，让新排版的第一行基线正好落在原来的位置上；
  * 如果什么都没改就退出编辑，再换回原样，撤销历史里也不留痕迹。
+ *
+ * 字符级样式：新打的字接着前一个字的样式；选中一段字再改样式只改这一段；
+ * 没选中时在光标处换样式，记下来给接下来打的字用（和常见的文字处理软件一样）。
  */
 
 const DEFAULT_TEXT_COLOR: Color = rgba(0.1, 0.1, 0.1);
@@ -73,6 +82,8 @@ interface Session {
   changed: boolean;
   /** 这段文字是开始编辑时从保真外观解冻的 */
   thawed: Thawed | null;
+  /** 光标处刚换了样式还没打字：接下来在 at 处打的字用这个样式。光标一挪就作废 */
+  typing: { style: CharacterStyle; at: number } | null;
   idleTimer: number;
   blinkTimer: number;
   blinkOn: boolean;
@@ -145,18 +156,39 @@ export function registerTextTool(editor: Editor): void {
     session.mergeKey = editor.newMergeKey('type');
   };
 
+  /** 告诉编辑器现在选中了哪几个字，属性面板据此显示样式 */
+  const publish = (): void => {
+    if (!session) {
+      editor.setTextEditing(null);
+      return;
+    }
+    const { anchor, focus } = readSelection(session.textarea);
+    // 光标挪走了，之前在光标处换的样式就不算数了
+    if (session.typing && (anchor !== focus || focus !== session.typing.at)) session.typing = null;
+    editor.setTextEditing({
+      nodeId: session.nodeId,
+      start: Math.min(anchor, focus),
+      end: Math.max(anchor, focus),
+      typing: session.typing?.style ?? null,
+    });
+  };
+
   const refresh = (): void => {
+    publish();
     resetBlink();
     editor.requestRender();
   };
 
-  /** 把输入框里的内容同步到文档 */
+  /** 把输入框里的内容同步到文档。字符样式的区间跟着文字的改动挪动 */
   const syncText = (): void => {
     const node = nodeOf();
     if (!session || !node) return;
     const text = session.textarea.value.replace(/\r\n?/g, '\n');
     if (text !== node.text) {
-      editor.store.transact('type', (tx) => tx.update(node.id, { text }), { mergeKey: session.mergeKey });
+      const typing = session.typing;
+      session.typing = null;
+      const spans = spansAfterEdit(node, text, typing?.style);
+      editor.store.transact('type', (tx) => tx.update(node.id, { text, spans }), { mergeKey: session.mergeKey });
       session.typed = true;
       session.changed = true;
     }
@@ -180,7 +212,70 @@ export function registerTextTool(editor: Editor): void {
     session.textarea.value = node.text;
     writeSelection(session.textarea, caret, caret);
     session.mergeKey = editor.newMergeKey('type');
+    session.typing = null;
     refresh();
+  };
+
+  /**
+   * 现在要改样式的对象的样式：编辑中就是选中的那几个字（没选中时是光标处），否则是选中的第一个文本节点的全部文字。
+   * mixed 里是范围内不一致的样式项
+   */
+  const currentStyle = (): ReturnType<typeof rangeStyle> | null => {
+    const node = nodeOf();
+    if (session && node) {
+      const { anchor, focus } = readSelection(session.textarea);
+      if (anchor === focus && session.typing?.at === focus) return { style: session.typing.style, mixed: new Set() };
+      return rangeStyle(node, anchor, focus);
+    }
+    const first = editor.selectedNodes().find((n): n is TextNode => n.type === 'text');
+    return first ? rangeStyle(first, 0, first.text.length) : null;
+  };
+
+  /**
+   * 改样式。编辑中：选中了字就改这几个字；没选中就记下来给接下来打的字用（空文本直接改整段）。
+   * 没在编辑：改选中的所有文本节点的全部文字。
+   * @param mergeKey 连续的修改（拖动取色器）合成一步撤销，由调用方在结束时封存
+   * @param refocus 改完把键盘焦点还给文字，可以接着打字。点按钮时需要，在输入框里改数字时不要
+   */
+  const applyStyle = (patch: Partial<CharacterStyle>, mergeKey?: string, refocus = false): void => {
+    const node = nodeOf();
+    if (session && node) {
+      const { anchor, focus } = readSelection(session.textarea);
+      const start = Math.min(anchor, focus);
+      const end = Math.max(anchor, focus);
+      if (start === end && node.text.length > 0) {
+        const base = session.typing?.at === start ? session.typing.style : styleAtCaret(node, start);
+        session.typing = { style: { ...base, ...patch }, at: start };
+      } else {
+        sealTyping();
+        editor.store.transact('text style', (tx) => tx.update(node.id, setCharacterStyle(node, start, end, patch)), {
+          mergeKey,
+        });
+        if (!mergeKey) editor.store.sealHistory();
+        session.changed = true;
+      }
+      if (refocus) session.textarea.focus({ preventScroll: true });
+      refresh();
+      return;
+    }
+    editor.updateSelection(
+      'text style',
+      (n) => (n.type === 'text' ? setCharacterStyle(n, 0, n.text.length, patch) : null),
+      mergeKey,
+    );
+    if (!mergeKey) editor.store.sealHistory();
+  };
+
+  /** 切换粗体、斜体、下划线、删除线。范围里有的有有的没有时，统一加上 */
+  const toggleStyle = (key: TextToggle): void => {
+    const current = currentStyle();
+    if (!current) return;
+    const { style, mixed } = current;
+    if (key === 'bold') {
+      applyStyle({ fontWeight: style.fontWeight >= 600 && !mixed.has('fontWeight') ? 400 : 700 }, undefined, true);
+    } else {
+      applyStyle({ [key]: !(style[key] && !mixed.has(key)) }, undefined, true);
+    }
   };
 
   const moveVertically = (direction: -1 | 1, extend: boolean): void => {
@@ -221,6 +316,12 @@ export function registerTextTool(editor: Editor): void {
       moveVertically(event.key === 'ArrowUp' ? -1 : 1, event.shiftKey);
       return;
     }
+    const toggle = mod && !event.altKey ? TOGGLE_KEYS[`${event.shiftKey ? 'shift+' : ''}${key}`] : undefined;
+    if (toggle) {
+      event.preventDefault();
+      toggleStyle(toggle);
+      return;
+    }
     if (event.key === 'Tab') event.preventDefault();
   };
 
@@ -259,6 +360,7 @@ export function registerTextTool(editor: Editor): void {
       typed: false,
       changed: false,
       thawed,
+      typing: null,
       idleTimer: 0,
       blinkTimer: 0,
       blinkOn: true,
@@ -300,8 +402,7 @@ export function registerTextTool(editor: Editor): void {
     textarea.focus({ preventScroll: true });
     const position = Math.min(caret ?? node.text.length, node.text.length);
     writeSelection(textarea, position, position);
-    resetBlink();
-    editor.requestRender();
+    refresh();
   };
 
   function end(): void {
@@ -313,6 +414,7 @@ export function registerTextTool(editor: Editor): void {
     clearInterval(finished.blinkTimer);
     finished.textarea.remove();
     if (editor.keyboardTarget === finished.textarea) editor.keyboardTarget = null;
+    editor.setTextEditing(null);
 
     // 什么都没写的文本框不留在文档里。用同一个合并键，
     // 这样"新建后直接离开"会和创建那一步互相抵消，不在撤销历史里留下痕迹
@@ -344,10 +446,9 @@ export function registerTextTool(editor: Editor): void {
   const thaw = async (id: NodeId, mergeKey: string): Promise<Thawed | null> => {
     const before = editor.store.get(id);
     if (before?.type !== 'text' || !hasLiveAppearance(before)) return null;
-    const { style } = before;
     let timer = 0;
     await Promise.race([
-      editor.fonts.ensure([style.fontFamily.latin, style.fontFamily.cjk], before.text, style.fontWeight),
+      ensureTextFonts(editor.fonts, before),
       new Promise((resolve) => (timer = window.setTimeout(resolve, FONT_WAIT))),
     ]).catch(() => {});
     clearTimeout(timer);
@@ -427,15 +528,16 @@ export function registerTextTool(editor: Editor): void {
   };
 
   /** 把输入框挪到光标所在的屏幕位置，输入法的候选窗才会出现在正确的地方 */
-  const placeTextarea = (node: TextNode, caret: Rect): void => {
+  const placeTextarea = (node: TextNode, caret: Rect, offset: number): void => {
     if (!session) return;
+    const fontSize = (session.typing?.style ?? styleAtCaret(node, offset)).fontSize;
     const [wx, wy] = applyToPoint(worldTransform(editor.store, node.id), caret.x, caret.y);
     const screen = editor.worldToScreen(wx, wy);
     const zoom = editor.camera.zoom;
     const { style } = session.textarea;
     style.transform = `translate(${Math.round(screen.x)}px, ${Math.round(screen.y)}px)`;
     style.height = `${Math.max(1, caret.h * zoom)}px`;
-    style.fontSize = `${Math.max(1, node.style.fontSize * zoom)}px`;
+    style.fontSize = `${Math.max(1, fontSize * zoom)}px`;
     style.lineHeight = `${Math.max(1, caret.h * zoom)}px`;
   };
 
@@ -572,7 +674,7 @@ export function registerTextTool(editor: Editor): void {
         ctx.stroke();
       }
       ctx.restore();
-      placeTextarea(node, caret);
+      placeTextarea(node, caret, focus);
     },
   };
 
@@ -587,6 +689,35 @@ export function registerTextTool(editor: Editor): void {
     },
   };
 
+  const styleText: Command<{ patch: Partial<CharacterStyle>; mergeKey?: string; refocus?: boolean }> = {
+    id: 'text.style',
+    enabled: () => session !== null || editor.selectedNodes().some((n) => n.type === 'text'),
+    run(_editor, args) {
+      applyStyle(args.patch, args.mergeKey, args.refocus);
+    },
+  };
+
+  const toggleText: Command<TextToggle> = {
+    id: 'text.toggle',
+    enabled: () => session !== null || editor.selectedNodes().some((n) => n.type === 'text'),
+    run(_editor, key) {
+      toggleStyle(key);
+    },
+  };
+
   editor.tools.register(tool);
   editor.commands.register(editText);
+  editor.commands.register(styleText);
+  editor.commands.register(toggleText);
 }
+
+/** 可以一键开关的字符样式 */
+export type TextToggle = 'bold' | 'italic' | 'underline' | 'strikethrough';
+
+/** 编辑文字时开关样式的快捷键。没在编辑时由快捷键表里同样的绑定处理 */
+const TOGGLE_KEYS: Record<string, TextToggle> = {
+  b: 'bold',
+  i: 'italic',
+  u: 'underline',
+  'shift+x': 'strikethrough',
+};

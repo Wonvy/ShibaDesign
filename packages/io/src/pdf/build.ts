@@ -8,6 +8,7 @@ import {
   invert,
   isGlyphPath,
   multiply,
+  spansFromStyles,
   textAppearanceBasis,
   keyBetween,
   keysBetween,
@@ -15,6 +16,7 @@ import {
   solid,
   type Asset,
   type BlendMode,
+  type CharacterStyle,
   type Color,
   type DocumentData,
   type Fill,
@@ -25,8 +27,9 @@ import {
   type SceneNode,
   type Stroke,
   type TextNode,
+  type TextSpan,
 } from '@shiba/core';
-import { fontCategory, fontWeight, type FontChoices } from './fonts';
+import { fontCategory, fontItalic, fontWeight, type FontChoices } from './fonts';
 import { appendTransformed } from './geometry';
 import {
   asAxisRect,
@@ -58,6 +61,7 @@ import {
   type PdfPage,
   type PdfPathItem,
   type PdfTextItem,
+  type PdfTextStyleRun,
 } from './ir';
 import { cleanText, groupLines, plainHanzi, type TextBlock } from './paragraphs';
 import { encodePng } from './png';
@@ -106,6 +110,11 @@ interface Library {
   outlines: ArrayLike<number>[];
   text: string[];
   advances: number[];
+}
+
+function sameColor(a: Color, b: Color): boolean {
+  const close = (x: number, y: number): boolean => Math.abs(x - y) < 1e-3;
+  return close(a.r, b.r) && close(a.g, b.g) && close(a.b, b.b) && close(a.a, b.a);
 }
 
 function isFiniteData(data: ArrayLike<number>): boolean {
@@ -564,7 +573,8 @@ export class PdfDocumentBuilder {
     if (verdict === 'cut') this.issues.clips++;
 
     const font = first.font;
-    const node: TextNode = createNode('text', {
+    const fill = first.fill ?? rgba(0, 0, 0);
+    const plain: TextNode = createNode('text', {
       parent,
       index: '',
       seq: this.nextSeq('text'),
@@ -578,13 +588,16 @@ export class PdfDocumentBuilder {
         fontWeight: fontWeight(font),
         lineHeight,
         letterSpacing: 0,
+        ...(fontItalic(font) ? { italic: true } : {}),
       },
       align: block.align,
       sizing: count > 1 ? 'fixed' : 'auto',
-      fill: solid(first.fill ?? rgba(0, 0, 0)),
+      fill: solid(fill),
     });
+    // 和这一段主要样式不同的字（加粗或换色的词、换了字体的字、上标）变成字符级样式
+    const node: TextNode = { ...plain, spans: this.characterSpans(plain, block) };
 
-    const runs = this.glyphRuns(block, transform);
+    const runs = this.glyphRuns(block, transform, fill);
     if (!runs) {
       // PDF 没有内嵌字体，拿不到字形：只能用我们的字体重排，样子会有出入
       this.issues.fallbackText++;
@@ -594,14 +607,56 @@ export class PdfDocumentBuilder {
   }
 
   /**
+   * 每个字的字体、字号、颜色 → 字符级样式。同一段样式只换算一次。
+   * 空格的样式不可靠（PDF 里常常根本没画空格，是导入时按间距补出来的），所以：
+   * 前后的字样式相同时跟着它们（加粗的一句话中间的空格也加粗），不同时用整段的默认样式
+   */
+  private characterSpans(node: TextNode, block: TextBlock): TextSpan[] | undefined {
+    const size = node.style.fontSize;
+    const memo = new Map<PdfTextStyleRun, Partial<CharacterStyle>>();
+    const per = block.styles.map((run) => {
+      let style = memo.get(run);
+      if (!style) {
+        // 字号只差一点点的是同一个字号，免得浮点误差造出一堆区间
+        const runSize = Math.abs(run.size - size) <= size * 0.02 ? size : round(run.size);
+        style = {
+          fontFamily: this.fonts[fontCategory(run.font)],
+          fontWeight: fontWeight(run.font),
+          italic: fontItalic(run.font),
+          fontSize: runSize,
+          color: run.fill ?? node.fill?.color ?? null,
+        };
+        memo.set(run, style);
+      }
+      return style;
+    });
+    const text = node.text;
+    const styles = per.map((style, i) => {
+      if (!/\s/.test(text[i] ?? '')) return style;
+      let before: Partial<CharacterStyle> | null = null;
+      for (let k = i - 1; k >= 0 && !before; k--) if (!/\s/.test(text[k]!)) before = per[k] ?? null;
+      let after: Partial<CharacterStyle> | null = null;
+      for (let k = i + 1; k < text.length && !after; k++) if (!/\s/.test(text[k]!)) after = per[k] ?? null;
+      return before && before === after ? before : null;
+    });
+    return spansFromStyles(node, styles);
+  }
+
+  /**
    * 把一段文字里每个字形的位置换算到文本框的本地坐标，按字形库和大小方向分组。
    * 只把前后紧挨着的字形分进同一组，组的先后就是原文件里画字的顺序：
    * 导出 PDF 时按这个顺序写，复制出来的文字才不会乱（中英文混排的一行字就是好几组交替出现）。
    */
-  private glyphRuns(block: TextBlock, transform: Matrix): GlyphRun[] | null {
+  private glyphRuns(block: TextBlock, transform: Matrix, fill: Color): GlyphRun[] | null {
     const inverse = invert(transform);
     if (!inverse) return null;
-    const runs: { key: string; library: string; matrix: [number, number, number, number]; glyphs: number[] }[] = [];
+    const runs: {
+      key: string;
+      library: string;
+      matrix: [number, number, number, number];
+      glyphs: number[];
+      color?: Color;
+    }[] = [];
     for (const line of block.lines) {
       for (const glyph of line.glyphs) {
         const library = this.library(glyph.font);
@@ -623,15 +678,21 @@ export class PdfDocumentBuilder {
           fine(local[2]),
           fine(local[3]),
         ];
-        const key = `${library.key}|${matrix.join(',')}`;
+        // 和节点填充色不同的字（一行里换了颜色的词）单独成组，记下自己的颜色
+        const color = glyph.fill && !sameColor(glyph.fill, fill) ? glyph.fill : undefined;
+        const key = `${library.key}|${matrix.join(',')}|${color ? `${color.r},${color.g},${color.b},${color.a}` : ''}`;
         let run = runs[runs.length - 1];
-        if (run?.key !== key) runs.push((run = { key, library: library.key, matrix, glyphs: [] }));
+        if (run?.key !== key) runs.push((run = { key, library: library.key, matrix, glyphs: [], color }));
         run.glyphs.push(index, round(local[4]), round(local[5]));
         // 画的时候每个字形的每个点都要算一遍，按点数记进总量
         this.anchors += pointCount(glyph.outline);
       }
     }
-    return runs.length > 0 ? runs.map(({ library, matrix, glyphs }) => ({ library, matrix, glyphs })) : null;
+    return runs.length > 0
+      ? runs.map(({ library, matrix, glyphs, color }) =>
+          color ? { library, matrix, glyphs, color } : { library, matrix, glyphs },
+        )
+      : null;
   }
 
   private async imageNode(item: PdfImageItem, parent: NodeId): Promise<Draft | null> {

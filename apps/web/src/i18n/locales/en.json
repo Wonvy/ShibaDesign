@@ -158,6 +158,9 @@
       "fontCjk": "Chinese font",
       "size": "Size",
       "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline",
+      "strikethrough": "Strikethrough",
       "lineHeight": "Line height",
       "letterSpacing": "Letter spacing",
       "align": "Alignment",
@@ -168,7 +171,13 @@
       "sizing": "Text box",
       "autoWidth": "Auto width",
       "fixedWidth": "Fixed width",
-      "frozenHint": "This text comes from a PDF and is shown with its original glyphs. Once you edit the text or change the formatting below, it is re-laid out in the selected fonts."
+      "frozenHint": "This text comes from a PDF and is shown with its original glyphs. Once you edit the text or change the formatting below, it is re-laid out in the selected fonts.",
+      "decoration": "Style",
+      "color": "Color",
+      "mixed": "Mixed",
+      "scopeSelection": "Changes apply to the selected text",
+      "scopeCaret": "Changes apply to the text you type next",
+      "scopeAll": "Changes apply to the whole text"
     },
     "file": {
       "menu": "File",

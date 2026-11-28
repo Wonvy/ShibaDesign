@@ -16,6 +16,7 @@ import {
   type PdfStroke,
   type PdfTextFont,
   type PdfTextItem,
+  type PdfTextStyleRun,
 } from './ir';
 
 /**
@@ -204,6 +205,31 @@ function sameColor(a: Color | null, b: Color | null): boolean {
   return close(a.r, b.r) && close(a.g, b.g) && close(a.b, b.b) && close(a.a, b.a);
 }
 
+/** 一行字里字数最多的字体和颜色（不算空白） */
+function dominantStyle(text: string, styles: readonly PdfTextStyleRun[]): { font: PdfTextFont; fill: Color | null } {
+  const fonts = new Map<string, { font: PdfTextFont; count: number }>();
+  const fills = new Map<string, { fill: Color | null; count: number }>();
+  let at = 0;
+  for (const run of styles) {
+    const count = text.slice(at, at + run.length).replace(/\s/g, '').length;
+    at += run.length;
+    const fontEntry = fonts.get(run.font.name) ?? { font: run.font, count: 0 };
+    fontEntry.count += count;
+    fonts.set(run.font.name, fontEntry);
+    const key = run.fill ? `${run.fill.r},${run.fill.g},${run.fill.b},${run.fill.a}` : '';
+    const fillEntry = fills.get(key) ?? { fill: run.fill, count: 0 };
+    fillEntry.count += count;
+    fills.set(key, fillEntry);
+  }
+  // 字数一样多时取先出现的
+  const pick = <T extends { count: number }>(entries: Iterable<T>): T => {
+    let best: T | null = null;
+    for (const entry of entries) if (!best || entry.count > best.count) best = entry;
+    return best!;
+  };
+  return { font: pick(fonts.values()).font, fill: pick(fills.values()).fill };
+}
+
 function sameStroke(a: PdfStroke | null, b: PdfStroke | null): boolean {
   if (!a || !b) return a === b;
   return sameColor(a.color, b.color) && Math.abs(a.width - b.width) < 1e-4;
@@ -246,8 +272,6 @@ class Interpreter {
   private readonly crops = new WeakMap<PdfImageSource, Map<string, PdfImageSource | null>>();
   /** Type3 字形的轮廓，按字体和字形缓存；null 表示这个字形不能当普通字形处理 */
   private readonly type3Outlines = new Map<string, PathData | null>();
-  /** 合并出来的一行文字里，主要字体有多少个字 */
-  private readonly dominance = new WeakMap<PdfTextItem, number>();
 
   constructor(
     private readonly resources: PdfResources,
@@ -742,6 +766,8 @@ class Interpreter {
         stroke: mode === 1 || mode === 2 ? this.strokeStyle() : null,
       };
       if (!style.fill && !style.stroke) return;
+      for (const glyph of placed) glyph.fill = style.fill;
+      const textFont = this.textFont(font);
       const at = (t: number): [number, number] =>
         font.vertical ? [base[2] * t + base[4], base[3] * t + base[5]] : [base[0] * t + base[4], base[1] * t + base[5]];
       const [startX, startY] = at(start);
@@ -754,7 +780,8 @@ class Interpreter {
         glyphs: placed,
         fill: style.fill,
         stroke: style.stroke,
-        font: this.textFont(font),
+        font: textFont,
+        styles: [{ length: text.length, font: textFont, size: size * Math.hypot(base[2], base[3]), fill: style.fill }],
         size: size * Math.hypot(base[2], base[3]),
         x: startX,
         y: startY,
@@ -835,11 +862,11 @@ class Interpreter {
 
   /**
    * 输出一段文字。PDF 经常把一行字拆成很多小段（换一次字体就是一段，有的甚至一个字一段），
-   * 这里把紧挨着、字号和颜色相同、在同一条基线上的小段接成一个对象，不然图层列表里全是碎片。
-   * 字体不同也照样接：中英文混排的一行字本来就是好几种字体。
+   * 这里把紧挨着、在同一条基线上的小段接成一个对象，不然图层列表里全是碎片。
+   * 字体、颜色、字号不同也照样接：中英文混排、加粗或换色的词、上标本来就夹在一行里；
+   * 各段的样式记在 styles 里，变成文本之后成为字符级样式。
    */
   private emitText(item: PdfTextItem): void {
-    const visibleLength = (text: string): number => text.replace(/\s/g, '').length;
     const previous = this.current[this.current.length - 1];
     if (previous?.kind === 'text' && !previous.vertical && !item.vertical) {
       const dx = item.x - previous.x;
@@ -860,18 +887,13 @@ class Interpreter {
         (previous.glyphs.length === 0) === (item.glyphs.length === 0) &&
         previous.glyphs.length + item.glyphs.length <= MAX_RUN_GLYPHS &&
         previous.blendMode === item.blendMode &&
-        sameColor(previous.fill, item.fill) &&
+        (previous.fill === null) === (item.fill === null) &&
         sameStroke(previous.stroke, item.stroke) &&
         sameClip(previous.clip, item.clip);
       if (joinable) {
         const spaced = gap > size * SPACE_GAP && !previous.text.endsWith(' ') && !item.text.startsWith(' ');
-        // 这一行主要用哪种字体：看哪种字体的字多
-        const dominant = this.dominance.get(previous) ?? visibleLength(previous.text);
-        const added = visibleLength(item.text);
-        if (added > dominant) {
-          previous.font = item.font;
-          this.dominance.set(previous, added);
-        }
+        if (spaced) previous.styles[previous.styles.length - 1]!.length += 1;
+        previous.styles.push(...item.styles);
         if (item.size > previous.size * 1.02) {
           // 后面接上来的字更大：这一行的字号和基线以大字为准（前面那段可能是上标或小字）
           previous.size = item.size;
@@ -881,6 +903,10 @@ class Interpreter {
         previous.text += (spaced ? ' ' : '') + item.text;
         for (const glyph of item.glyphs) previous.glyphs.push(glyph);
         previous.length = along + item.length;
+        // 这一行主要用哪种字体、哪种颜色：看哪种的字多
+        const main = dominantStyle(previous.text, previous.styles);
+        previous.font = main.font;
+        previous.fill = main.fill;
         return;
       }
     }
@@ -991,8 +1017,10 @@ class Interpreter {
         const outline = outlines[i]!;
         if (outline.length === 0) return;
         const matrix = multiply(p.at, [size, 0, 0, size, 0, 0]);
-        placed.push({ outline, font: font.id, matrix, text: p.text, advance: p.advance });
+        placed.push({ outline, font: font.id, matrix, text: p.text, advance: p.advance, fill });
       });
+      const textFont = this.textFont(font);
+      const textSize = size * Math.hypot(start[2], start[3]);
       if (placed.length === 0) return;
       const length = Math.hypot(at[4] - start[4], at[5] - start[5]);
       const axis = Math.hypot(start[0], start[1]) || 1;
@@ -1002,8 +1030,9 @@ class Interpreter {
         glyphs: placed,
         fill,
         stroke: null,
-        font: this.textFont(font),
-        size: size * Math.hypot(start[2], start[3]),
+        font: textFont,
+        styles: [{ length: text.length, font: textFont, size: textSize, fill }],
+        size: textSize,
         x: start[4],
         y: start[5],
         dirX: length > 1e-9 ? (at[4] - start[4]) / length : start[0] / axis,

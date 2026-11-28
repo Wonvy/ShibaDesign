@@ -14,6 +14,8 @@ export interface FontFaceSource {
   chunk: string;
   /** 字重，400 是常规，700 是粗体 */
   weight: number;
+  /** 斜体。省略表示正体 */
+  italic?: boolean;
   /** 这个文件覆盖的码点区间（闭区间）。省略表示不清楚覆盖范围，任何文字都会加载它 */
   ranges?: readonly (readonly [number, number])[];
   load(): Promise<ArrayBuffer>;
@@ -26,10 +28,11 @@ export interface FontFaceSource {
 
 /** 一个已经加载的字体文件。导出 PDF 时用它找到排版实际用了哪个文件 */
 export interface LoadedFace {
-  /** 在所有字体文件里唯一，比如 "Inter#latin@400" */
+  /** 在所有字体文件里唯一，比如 "Inter#latin@400" 或 "Inter#latin@700i" */
   key: string;
   family: string;
   weight: number;
+  italic: boolean;
   /** 加载时拿到的字节，交给排版引擎的就是它 */
   bytes: ArrayBuffer;
   /** 可以嵌进 PDF 的字节，见 FontFaceSource.loadEmbeddable */
@@ -51,10 +54,15 @@ interface Face {
 }
 
 interface Chunk {
-  /** 注册到 Skia 时用的内部家族名：同一分片的不同字重共用一个名字，Skia 按字重挑选 */
+  /** 注册到 Skia 时用的内部家族名：同一分片的不同字重、正斜体共用一个名字，Skia 按样式挑选 */
   skFamily: string;
   ranges: readonly (readonly [number, number])[] | null;
-  faces: Map<number, Face>;
+  /** 键见 faceKey */
+  faces: Map<string, Face>;
+}
+
+function faceKey(weight: number, italic: boolean): string {
+  return `${weight}${italic ? 'i' : ''}`;
 }
 
 interface Family {
@@ -69,6 +77,8 @@ interface Family {
   /** 没有声明区间的分片，任何文字都会用到 */
   catchAll: Chunk[];
   weights: number[];
+  /** 有斜体文件 */
+  italic: boolean;
 }
 
 export interface FontResolution {
@@ -104,7 +114,13 @@ export class FontManager {
         chunk = { skFamily: `${source.name}#${face.chunk}`, ranges: face.ranges ?? null, faces: new Map() };
         chunks.set(face.chunk, chunk);
       }
-      chunk.faces.set(face.weight, { source: face, status: 'idle', promise: null, bytes: null, embeddable: null });
+      chunk.faces.set(faceKey(face.weight, !!face.italic), {
+        source: face,
+        status: 'idle',
+        promise: null,
+        bytes: null,
+        embeddable: null,
+      });
     }
 
     const spans: { start: number; end: number; owner: Chunk }[] = [];
@@ -125,7 +141,8 @@ export class FontManager {
       ends: spans.map((s) => s.end),
       owners: spans.map((s) => s.owner),
       catchAll,
-      weights: [...new Set(source.faces.map((f) => f.weight))].sort((a, b) => a - b),
+      weights: [...new Set(source.faces.filter((f) => !f.italic).map((f) => f.weight))].sort((a, b) => a - b),
+      italic: source.faces.some((f) => f.italic),
     });
   }
 
@@ -138,15 +155,20 @@ export class FontManager {
     return this.families.get(family)?.weights ?? [];
   }
 
+  /** 某个家族有没有斜体。没有时设成斜体也按正体显示（中文字体通常都没有斜体） */
+  hasItalic(family: string): boolean {
+    return this.families.get(family)?.italic ?? false;
+  }
+
   /**
    * 算出排版一段文字需要哪些字体文件，并开始加载还没加载的。
    * 每个字符由 families 里第一个包含它的家族负责，所以排在前面的家族优先。
    */
-  resolve(families: readonly string[], text: string, weight: number): FontResolution {
+  resolve(families: readonly string[], text: string, weight: number, italic = false): FontResolution {
     const { chunks } = this.plan(families, text);
     let pending = false;
     for (const chunk of chunks) {
-      const face = pickWeight(chunk, weight);
+      const face = pickFace(chunk, weight, italic);
       if (!face) continue;
       if (face.status === 'idle') this.load(chunk, face);
       if (face.status === 'loading') pending = true;
@@ -155,11 +177,11 @@ export class FontManager {
   }
 
   /** 等一段文字需要的字体全部加载完。导出和测试用 */
-  async ensure(families: readonly string[], text: string, weight: number): Promise<void> {
+  async ensure(families: readonly string[], text: string, weight: number, italic = false): Promise<void> {
     const { chunks } = this.plan(families, text);
     const waits: Promise<void>[] = [];
     for (const chunk of chunks) {
-      const face = pickWeight(chunk, weight);
+      const face = pickFace(chunk, weight, italic);
       if (!face) continue;
       if (face.status === 'idle') this.load(chunk, face);
       if (face.promise) waits.push(face.promise);
@@ -171,18 +193,19 @@ export class FontManager {
    * 排版时某个内部家族名（resolve 返回的 names 之一）在这个字重下实际用的是哪个文件。
    * 排版引擎在同一个家族的几个字重里挑最接近的，这里用同样的规则。还没加载时返回 null。
    */
-  loadedFace(skFamily: string, weight: number): LoadedFace | null {
+  loadedFace(skFamily: string, weight: number, italic = false): LoadedFace | null {
     const familyName = this.chunkFamilies.get(skFamily);
     const chunk = familyName ? this.families.get(familyName)?.bySkFamily.get(skFamily) : undefined;
     if (!chunk || !familyName) return null;
     const loaded = new Map([...chunk.faces].filter(([, face]) => face.status === 'loaded'));
-    const face = pickWeight({ ...chunk, faces: loaded }, weight);
+    const face = pickFace({ ...chunk, faces: loaded }, weight, italic);
     if (!face?.bytes) return null;
     const bytes = face.bytes;
     return {
-      key: `${skFamily}@${face.source.weight}`,
+      key: `${skFamily}@${faceKey(face.source.weight, !!face.source.italic)}`,
       family: familyName,
       weight: face.source.weight,
+      italic: !!face.source.italic,
       bytes,
       embeddable: () => {
         face.embeddable ??= face.source.loadEmbeddable?.() ?? Promise.resolve(bytes);
@@ -245,7 +268,10 @@ export class FontManager {
       })
       .catch((error: unknown) => {
         face.status = 'failed';
-        console.warn(`[shiba] 字体加载失败：${chunk.skFamily} ${face.source.weight}`, error);
+        console.warn(
+          `[shiba] 字体加载失败：${chunk.skFamily} ${faceKey(face.source.weight, !!face.source.italic)}`,
+          error,
+        );
       });
   }
 
@@ -259,14 +285,17 @@ export class FontManager {
   }
 }
 
-/** 取请求的字重；没有就取最接近的 */
-function pickWeight(chunk: Chunk, weight: number): Face | undefined {
-  const exact = chunk.faces.get(weight);
+/**
+ * 取请求的字重和正斜体；没有就取最接近的：先保证正斜体一致（没有斜体文件时只好用正体），再挑字重最近的。
+ * 排版引擎在同一个家族的几个文件里也是这样挑的。
+ */
+function pickFace(chunk: Chunk, weight: number, italic: boolean): Face | undefined {
+  const exact = chunk.faces.get(faceKey(weight, italic));
   if (exact) return exact;
   let best: Face | undefined;
   let bestDistance = Infinity;
-  for (const [w, face] of chunk.faces) {
-    const distance = Math.abs(w - weight);
+  for (const face of chunk.faces.values()) {
+    const distance = Math.abs(face.source.weight - weight) + (!!face.source.italic === italic ? 0 : 10_000);
     if (distance < bestDistance) {
       best = face;
       bestDistance = distance;

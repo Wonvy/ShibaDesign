@@ -2,6 +2,8 @@ import type { CanvasKit, GlyphRun as SkGlyphRun, Image, Path, Typeface } from 'c
 import {
   hasLiveAppearance,
   hasShapeStyle,
+  styleOfChar,
+  type CharacterStyle,
   invert,
   multiply,
   type ArtboardNode,
@@ -106,7 +108,15 @@ interface Paint {
   blend: BlendMode;
 }
 
-/** 排好版的一段字：同一个字体文件、同一个字号 */
+/** 下划线或删除线：一条横线，y 是线的中心，坐标同字的位置 */
+interface DecorationLine {
+  x0: number;
+  x1: number;
+  y: number;
+  thickness: number;
+}
+
+/** 排好版的一段字：同一个字体文件、同一个字号、同一种样式 */
 interface ShapedRun {
   face: string;
   size: number;
@@ -115,6 +125,23 @@ interface ShapedRun {
   positions: Float32Array;
   /** 每个字代表的文字；一个字代表多个字符（连字）或者几个字合起来代表一个字符时，只有第一个有 */
   text: string[];
+  /** 文字颜色；null 表示不画 */
+  color: Color | null;
+  /** 下划线、删除线。排版引擎给的结果里没有它们，按字体里记的位置和粗细自己画 */
+  lines: DecorationLine[];
+  /** 字体没有斜体文件时排版引擎把字形斜切成斜体（中文字体常见），这里是斜切量，0 表示没有 */
+  skew: number;
+  /** 字体没有粗体文件时排版引擎把字形描粗，这里是描边的宽度，0 表示没有 */
+  embolden: number;
+}
+
+/** 排版引擎模拟斜体时的斜切量，和 Skia 的一致 */
+const FAKE_ITALIC_SKEW = 0.25;
+
+/** 排版引擎模拟粗体时描边的宽度：9 号字是字号的 1/24，36 号字是 1/32，中间按字号插值（和 Skia 一致） */
+function fakeBoldWidth(size: number): number {
+  const t = Math.max(0, Math.min(1, (size - 9) / (36 - 9)));
+  return size * (1 / 24 + (1 / 32 - 1 / 24) * t);
 }
 
 /** 文字怎么写：按排版结果写字，或者因为拿不到字体文件只能画成图片 */
@@ -323,12 +350,16 @@ class PdfExporter {
     return name;
   }
 
-  /** 一组透明度和混合模式的资源名；都是默认值时返回 null */
-  private state(fillAlpha: number, strokeAlpha: number, blend: BlendMode): string | null {
+  /**
+   * 一组透明度和混合模式的资源名；都是默认值时返回 null。
+   * @param always 默认值也要一个名字：同一段文字里前面设过半透明，后面要换回不透明时用
+   */
+  private state(fillAlpha: number, strokeAlpha: number, blend: BlendMode, always = false): string | null {
     const ca = Math.round(Math.max(0, Math.min(1, fillAlpha)) * 1000) / 1000;
     const CA = Math.round(Math.max(0, Math.min(1, strokeAlpha)) * 1000) / 1000;
-    if (ca === 1 && CA === 1 && blend === 'normal') return null;
-    this.transparent = true;
+    const plain = ca === 1 && CA === 1 && blend === 'normal';
+    if (plain && !always) return null;
+    if (!plain) this.transparent = true;
     const key = `${ca}|${CA}|${blend}`;
     let name = this.stateNames.get(key);
     if (!name) {
@@ -579,17 +610,13 @@ class PdfExporter {
 
   /** 排版一个文本节点，记下每段字的字体文件。按保真外观显示的文字不需要 */
   private shape(node: TextNode, needed: Map<string, LoadedFace>): ShapedText | null {
-    if (!node.fill || (hasLiveAppearance(node) && this.frozenReady(node))) return null;
-    const { style } = node;
-    const names = this.c.fonts.resolve(
-      [style.fontFamily.latin, style.fontFamily.cjk],
-      node.text,
-      style.fontWeight,
-    ).names;
+    if (hasLiveAppearance(node) && this.frozenReady(node)) return null;
+    const { ck, fonts } = this.c;
     const toUtf16 = utf8Offsets(node.text);
     const runs: ShapedRun[] = [];
     for (const line of this.c.layouts.get(node).paragraph.getShapedLines()) {
       for (const run of line.runs) {
+        const typeface = run.typeface as Typeface | null;
         const count = run.glyphs.length;
         const text: string[] = [];
         for (let i = 0; i < count; i++) {
@@ -597,8 +624,13 @@ class PdfExporter {
           const to = toUtf16.get(run.offsets[i + 1]!);
           text.push(from !== undefined && to !== undefined && to > from ? node.text.slice(from, to) : '');
         }
-        const face = this.identify(run, text.join(''), names, style.fontWeight);
-        (run.typeface as Typeface | null)?.delete();
+        // 这段字的样式（同一段字的样式一定相同，排版引擎在样式变化处会断开）
+        const style = styleOfChar(node, toUtf16.get(run.offsets[0]!) ?? 0);
+        const families = [style.fontFamily.latin, style.fontFamily.cjk];
+        const names = fonts.resolve(families, text.join(''), style.fontWeight, style.italic).names;
+        const face = this.identify(run, text.join(''), names, style.fontWeight, style.italic);
+        const lines = style.underline || style.strikethrough ? decorationLines(ck, run, style) : [];
+        typeface?.delete();
         if (!face) return 'raster';
         needed.set(face.key, face);
         runs.push({
@@ -607,6 +639,11 @@ class PdfExporter {
           glyphs: Uint16Array.from(run.glyphs.subarray(0, count)),
           positions: Float32Array.from(run.positions.subarray(0, count * 2)),
           text,
+          color: style.color,
+          lines,
+          // 排版结果里的 fakeItalic 在 0.42 版里没有填，按"要斜体但字体文件不是斜体"推断
+          skew: run.fakeItalic || (style.italic && !face.italic) ? FAKE_ITALIC_SKEW : 0,
+          embolden: run.fakeBold ? fakeBoldWidth(run.size) : 0,
         });
       }
     }
@@ -618,11 +655,17 @@ class PdfExporter {
    * 所以拿这段字在这个字体里的字形编号，和每个候选文件比，编号完全一样的就是它。
    * 同一个家族的不同分片覆盖不同的字，所以几乎不会认错；真有几个都一样，取排在前面的，排版引擎也是这么选的。
    */
-  private identify(run: SkGlyphRun, text: string, names: readonly string[], weight: number): LoadedFace | null {
+  private identify(
+    run: SkGlyphRun,
+    text: string,
+    names: readonly string[],
+    weight: number,
+    italic: boolean,
+  ): LoadedFace | null {
     const actual = (run.typeface as Typeface | null)?.getGlyphIDs(text) ?? null;
     let fallback: LoadedFace | null = null;
     for (const name of names) {
-      const face = this.c.fonts.loadedFace(name, weight);
+      const face = this.c.fonts.loadedFace(name, weight, italic);
       if (!face) continue;
       fallback ??= face;
       if (!actual) return face;
@@ -640,10 +683,8 @@ class PdfExporter {
   }
 
   private drawText(content: ContentStream, node: TextNode, paint: Paint): void {
-    if (!node.fill) return;
-    const color = node.fill.color;
     if (hasLiveAppearance(node) && this.frozenReady(node)) {
-      this.drawFrozenText(content, node, color, paint);
+      if (node.fill) this.drawFrozenText(content, node, node.fill.color, paint);
       return;
     }
     const shaped = this.shaped.get(node.id);
@@ -653,28 +694,58 @@ class PdfExporter {
       return;
     }
     content.save();
-    const state = this.state(color.a * paint.opacity, 1, paint.blend);
-    if (state) content.graphicsState(state);
-    content.fillColor(color).beginText();
-    // 字距等文字状态在 q / Q 之间有效，restore 之后自动回到默认值
+    content.beginText();
+    // 字距、颜色等状态在 q / Q 之间有效，restore 之后自动回到默认值
     const textState: TextState = { spacing: 0 };
+    const setColor = this.colorSetter(content, paint);
     for (const run of shaped.runs) {
       const embedded = this.embedded.get(run.face);
-      if (!embedded) continue;
+      if (!embedded || !run.color) continue;
+      setColor(run.color);
       const { font } = embedded;
-      const { size, glyphs, positions } = run;
+      const { size, glyphs, positions, skew } = run;
       content.font(embedded.name, size);
-      const writer = new GlyphWriter(content, size, textState);
+      // 模拟的粗体：填充之后再用同样的颜色描一圈边
+      if (run.embolden > 0) content.raw('2 Tr').strokeColor(run.color).lineWidth(run.embolden);
+      const writer = new GlyphWriter(content, size, textState, [1, 0, skew, -1]);
       for (let i = 0; i < glyphs.length; i++) {
         const glyph = glyphs[i]!;
         const x = positions[i * 2]!;
         const y = positions[i * 2 + 1]!;
-        // 字号写在 Tf 里，文字矩阵只负责位置和把 y 轴翻回来
-        writer.glyph(font.use(glyph, run.text[i]!), x, y, font.width(glyph) / 1000, () => [1, 0, 0, -1, x, y]);
+        // 字号写在 Tf 里，文字矩阵只负责位置、把 y 轴翻回来，以及模拟斜体的斜切
+        writer.glyph(font.use(glyph, run.text[i]!), x, y, font.width(glyph) / 1000, () => [1, 0, skew, -1, x, y]);
       }
       writer.flush();
+      if (run.embolden > 0) content.raw('0 Tr');
     }
-    content.endText().restore();
+    content.endText();
+    // 下划线和删除线画在字的上面，和排版引擎一样
+    for (const run of shaped.runs) {
+      if (!run.color || run.lines.length === 0) continue;
+      setColor(run.color);
+      for (const line of run.lines) {
+        content.rect(line.x0, line.y - line.thickness / 2, line.x1 - line.x0, line.thickness).fill();
+      }
+    }
+    content.restore();
+  }
+
+  /** 设置填充色和它的透明度；和上一次一样时不重复写 */
+  private colorSetter(content: ContentStream, paint: Paint): (color: Color) => void {
+    let current: Color | null = null;
+    /** 前面设过不是默认值的透明度：换回不透明时要明确写一次 */
+    let changed = false;
+    return (color) => {
+      if (current && current.r === color.r && current.g === color.g && current.b === color.b && current.a === color.a) {
+        return;
+      }
+      current = color;
+      let state = this.state(color.a * paint.opacity, 1, paint.blend);
+      if (state) changed = true;
+      else if (changed) state = this.state(1, 1, 'normal', true);
+      if (state) content.graphicsState(state);
+      content.fillColor(color);
+    };
   }
 
   /** 保真外观用到的字形库都在 */
@@ -685,11 +756,11 @@ class PdfExporter {
   /** 按原文件的字形写字：字形做成 Type3 字体，每个字放在原来的位置 */
   private drawFrozenText(content: ContentStream, node: TextNode, color: Color, paint: Paint): void {
     content.save();
-    const state = this.state(color.a * paint.opacity, 1, paint.blend);
-    if (state) content.graphicsState(state);
-    content.fillColor(color).beginText();
+    content.beginText();
     const textState: TextState = { spacing: 0 };
+    const setColor = this.colorSetter(content, paint);
     for (const run of node.appearance!.runs) {
+      setColor(run.color ?? color);
       const library = this.c.appearances.library(run.library)!;
       const [a, b, c, d] = run.matrix;
       let current: { name: string; font: OutlineFont } | null = null;
@@ -843,6 +914,33 @@ function commonGap(gaps: readonly number[]): number {
   }
   if (bestCount * 2 < gaps.length || Math.abs(best) > 500 || Math.abs(best) < 0.05) return 0;
   return best;
+}
+
+/**
+ * 一段字的下划线和删除线。位置和粗细取字体里记的值，没有时按字号估计，和排版引擎的做法一致：
+ * 下划线在基线下方，删除线大约在小写字母的中间。线从第一个字的起点画到最后一个字的终点
+ */
+function decorationLines(ck: CanvasKit, run: SkGlyphRun, style: CharacterStyle): DecorationLine[] {
+  const count = run.glyphs.length;
+  if (count === 0) return [];
+  const font = new ck.Font(run.typeface as Typeface | null, run.size);
+  const metrics = font.getMetrics();
+  font.delete();
+  const x0 = run.positions[0]!;
+  const x1 = run.positions[count * 2]!;
+  const baseline = run.positions[1]!;
+  const lines: DecorationLine[] = [];
+  if (style.underline) {
+    const thickness = metrics.underlineThickness || run.size / 14;
+    const position = metrics.underlinePosition && metrics.underlinePosition > 0 ? metrics.underlinePosition : thickness;
+    lines.push({ x0, x1, y: baseline + position + thickness / 2, thickness });
+  }
+  if (style.strikethrough) {
+    const thickness = metrics.strikeoutThickness || run.size / 14;
+    const position = metrics.strikeoutPosition ?? -run.size * 0.3;
+    lines.push({ x0, x1, y: baseline + position + thickness / 2, thickness });
+  }
+  return lines;
 }
 
 function sameIds(a: ArrayLike<number>, b: ArrayLike<number>): boolean {

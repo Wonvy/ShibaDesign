@@ -3,6 +3,7 @@ import {
   GLYPH_PATH_ARITY,
   decodeGlyphLibrary,
   type AssetStore,
+  type Color,
   type GlyphLibrary,
   type DocStore,
   type NodeId,
@@ -20,9 +21,15 @@ const SK_VERB = [0, 1, 4, 2, 5];
 /** 每条命令带几个点 */
 const POINTS = GLYPH_PATH_ARITY.map((n) => n / 2);
 
+/** 同一种颜色的字形拼成的路径。color 为 null 的用节点的填充色 */
+export interface AppearancePath {
+  color: Color | null;
+  path: Path;
+}
+
 interface Entry {
   appearance: TextAppearance;
-  path: Path | null;
+  paths: AppearancePath[] | null;
 }
 
 export class TextAppearances {
@@ -44,20 +51,23 @@ export class TextAppearances {
     ];
   }
 
-  /** 节点保真外观的路径（本地坐标）。字形库缺失或损坏时返回 null，调用方改用正常排版 */
-  path(node: TextNode): Path | null {
+  /**
+   * 节点保真外观的路径（本地坐标），按颜色分组：一行字中间换了颜色时有好几组。
+   * 字形库缺失或损坏时返回 null，调用方改用正常排版
+   */
+  paths(node: TextNode): AppearancePath[] | null {
     const appearance = node.appearance;
     if (!appearance) return null;
     const cached = this.entries.get(node.id);
-    if (cached?.appearance === appearance) return cached.path;
-    cached?.path?.delete();
-    const path = this.build(appearance);
-    this.entries.set(node.id, { appearance, path });
-    return path;
+    if (cached?.appearance === appearance) return cached.paths;
+    free(cached?.paths);
+    const paths = this.build(appearance);
+    this.entries.set(node.id, { appearance, paths });
+    return paths;
   }
 
   clear(): void {
-    for (const entry of this.entries.values()) entry.path?.delete();
+    for (const entry of this.entries.values()) free(entry.paths);
     this.entries.clear();
     this.libraries.clear();
   }
@@ -68,7 +78,7 @@ export class TextAppearances {
   }
 
   private drop(id: NodeId): void {
-    this.entries.get(id)?.path?.delete();
+    free(this.entries.get(id)?.paths);
     this.entries.delete(id);
   }
 
@@ -81,14 +91,35 @@ export class TextAppearances {
     return this.libraries.get(id) ?? null;
   }
 
-  private build(appearance: TextAppearance): Path | null {
+  private build(appearance: TextAppearance): AppearancePath[] | null {
+    const groups = new Map<string, { color: Color | null; runs: TextAppearance['runs'][number][] }>();
+    for (const run of appearance.runs) {
+      if (!this.library(run.library)) return null;
+      const color = run.color ?? null;
+      const key = color ? `${color.r},${color.g},${color.b},${color.a}` : '';
+      let group = groups.get(key);
+      if (!group) groups.set(key, (group = { color, runs: [] }));
+      group.runs.push(run);
+    }
+    const out: AppearancePath[] = [];
+    for (const group of groups.values()) {
+      const path = this.buildPath(group.runs);
+      if (!path) {
+        free(out);
+        return null;
+      }
+      out.push({ color: group.color, path });
+    }
+    return out;
+  }
+
+  private buildPath(runs: readonly TextAppearance['runs'][number][]): Path | null {
     // 先数一遍需要多少空间，再一次性把所有字形写进两个数组，最后整体交给 Skia：
     // 一页文字有几千个字，逐条命令调用 Skia 会慢很多
     let verbCount = 0;
     let pointCount = 0;
-    for (const run of appearance.runs) {
-      const library = this.library(run.library)?.glyphs;
-      if (!library) return null;
+    for (const run of runs) {
+      const library = this.library(run.library)!.glyphs;
       for (let i = 0; i < run.glyphs.length; i += 3) {
         const outline = library[run.glyphs[i]!];
         if (!outline) return null;
@@ -103,7 +134,7 @@ export class TextAppearances {
     const points = new Float32Array(pointCount * 2);
     let v = 0;
     let p = 0;
-    for (const run of appearance.runs) {
+    for (const run of runs) {
       const library = this.library(run.library)!.glyphs;
       const [a, b, c, d] = run.matrix;
       for (let i = 0; i < run.glyphs.length; i += 3) {
@@ -129,4 +160,8 @@ export class TextAppearances {
     builder.delete();
     return path;
   }
+}
+
+function free(paths: readonly AppearancePath[] | null | undefined): void {
+  for (const { path } of paths ?? []) path.delete();
 }

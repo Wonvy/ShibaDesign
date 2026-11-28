@@ -212,11 +212,40 @@ export interface TextStyle {
   lineHeight: number;
   /** 字距，单位与字号相同 */
   letterSpacing: number;
+  /** 斜体。省略表示正体 */
+  italic?: boolean;
+  /** 下划线。省略表示没有 */
+  underline?: boolean;
+  /** 删除线。省略表示没有 */
+  strikethrough?: boolean;
+}
+
+/** 可以按字符单独设置的样式项。整段的默认值来自文本节点的 style 和 fill */
+export interface CharacterStyle {
+  fontFamily: { latin: string; cjk: string };
+  fontSize: number;
+  fontWeight: number;
+  italic: boolean;
+  underline: boolean;
+  strikethrough: boolean;
+  letterSpacing: number;
+  /** 文字颜色；null 表示不画 */
+  color: Color | null;
 }
 
 /**
- * 文本。目前整段文字共用一个样式；以后加字符级样式时会新增一个按区间记录的字段，
- * 现有字段作为默认样式保留。
+ * 一段文字自己的样式。start、end 是字符串下标（UTF-16），左闭右开；
+ * style 只记和整段默认样式不同的那几项。见 text-spans.ts
+ */
+export interface TextSpan {
+  start: number;
+  end: number;
+  style: Partial<CharacterStyle>;
+}
+
+/**
+ * 文本。style 和 fill 是整段的默认样式；其中一部分字可以有自己的样式，按区间记在 spans 里。
+ * 行高、对齐和宽度模式是整段共用的。
  */
 export interface TextNode extends BaseNode {
   type: 'text';
@@ -231,6 +260,8 @@ export interface TextNode extends BaseNode {
    */
   sizing: 'auto' | 'fixed';
   fill: SolidFill | null;
+  /** 和默认样式不同的那些字，按位置排好、互不重叠。省略表示整段都是默认样式 */
+  spans?: readonly TextSpan[];
   /**
    * 保真外观：从别的文件（比如 PDF）导入的文字，在被改动之前按原文件的字形显示，看起来和原来一模一样。
    * 文字或排版参数一旦改动就不再使用它，改按上面的样式正常排版。见 text-appearance.ts。
@@ -250,6 +281,8 @@ export interface GlyphRun {
   matrix: readonly [number, number, number, number];
   /** 每 3 个数一组：字形在字形库里的序号、字形原点在节点本地坐标里的 x、y */
   glyphs: readonly number[];
+  /** 这组字自己的颜色（原文件里一行字中间换了颜色）。省略表示用节点的填充色 */
+  color?: Color;
 }
 
 export interface TextAppearance {

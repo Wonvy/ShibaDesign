@@ -31,6 +31,7 @@ import {
   TextLayouts,
   createTextNodeType,
   TextAppearances,
+  ensureTextFonts,
   registerBuiltinNodeTypes,
   type Bitmap,
   type Camera,
@@ -43,7 +44,7 @@ import { DEFAULT_BINDINGS, Keymap } from './keymap';
 import { Overlay } from './overlay';
 import { Registry } from './registry';
 import type { Tool } from './tools/tool';
-import type { CanvasTheme, EditorState, ViewMode } from './types';
+import type { CanvasTheme, EditorState, TextEditing, ViewMode } from './types';
 
 const MIN_ZOOM = 0.02;
 const MAX_ZOOM = 64;
@@ -145,6 +146,7 @@ export class Editor {
       canRedo: this.store.canRedo,
       docVersion: this.store.version,
       resourceEpoch: 0,
+      textEditing: null,
     };
     this.store.subscribe(() => this.onDocumentChange());
   }
@@ -194,6 +196,23 @@ export class Editor {
       canRedo: this.store.canRedo,
       docVersion: this.store.version,
     });
+  }
+
+  /** 文本工具在编辑文字、选中范围变化时调用。范围没变时不通知，免得界面跟着光标闪烁时也重画 */
+  setTextEditing(next: TextEditing | null): void {
+    const current = this.state.textEditing;
+    if (
+      current === next ||
+      (current &&
+        next &&
+        current.nodeId === next.nodeId &&
+        current.start === next.start &&
+        current.end === next.end &&
+        current.typing === next.typing)
+    ) {
+      return;
+    }
+    this.setState({ textEditing: next });
   }
 
   // ───────────── 选区 ─────────────
@@ -575,9 +594,7 @@ export class Editor {
     if (!root) return;
     const waits: Promise<void>[] = [];
     for (const node of [root, ...descendants(this.store, id)]) {
-      if (node.type !== 'text') continue;
-      const { fontFamily, fontWeight } = node.style;
-      waits.push(this.fonts.ensure([fontFamily.latin, fontFamily.cjk], node.text, fontWeight));
+      if (node.type === 'text') waits.push(ensureTextFonts(this.fonts, node));
     }
     await Promise.all(waits);
     // 字体的"加载完成"通知排在微任务里，等它把排版缓存清掉再继续

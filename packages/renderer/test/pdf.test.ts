@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -10,6 +10,7 @@ import {
   createNode,
   encodeGlyphLibrary,
   rgba,
+  setCharacterStyle,
   solid,
   textAppearanceBasis,
   type ArtboardNode,
@@ -27,6 +28,7 @@ import {
   TextAppearances,
   TextLayouts,
   createTextNodeType,
+  ensureTextFonts,
   loadCanvasKit,
   parseUnicodeRange,
   registerBuiltinNodeTypes,
@@ -63,14 +65,23 @@ function fontsourceFaces(pkg: string, prefix: string): FontFaceSource[] {
   for (const [key, range] of Object.entries(unicode)) {
     const chunk = key.replace(/[[\]]/g, '');
     for (const weight of [400, 700]) {
-      const name = `${pkg}/files/${prefix}-${chunk}-${weight}-normal`;
-      faces.push({
-        chunk,
-        weight,
-        ranges: parseUnicodeRange(range),
-        load: async () => file(`${name}.woff2`),
-        loadEmbeddable: async () => file(`${name}.woff`),
-      });
+      for (const italic of [false, true]) {
+        const name = `${pkg}/files/${prefix}-${chunk}-${weight}-${italic ? 'italic' : 'normal'}`;
+        if (
+          !existsSync(
+            path.join(path.dirname(require.resolve(`${pkg}/package.json`)), name.slice(pkg.length + 1) + '.woff2'),
+          )
+        )
+          continue;
+        faces.push({
+          chunk,
+          weight,
+          italic,
+          ranges: parseUnicodeRange(range),
+          load: async () => file(`${name}.woff2`),
+          loadEmbeddable: async () => file(`${name}.woff`),
+        });
+      }
     }
   }
   return faces;
@@ -136,7 +147,7 @@ function text(env: Env, value: string, patch: Partial<TextNode> = {}): TextNode 
 
 async function exportAndOpen(env: Env) {
   for (const node of env.store.children(env.board.id)) {
-    if (node.type === 'text') await env.fonts.ensure(FAMILIES, node.text, node.style.fontWeight);
+    if (node.type === 'text') await ensureTextFonts(env.fonts, node);
   }
   await Promise.resolve();
   const bytes = await exportPdf(env.context, [env.board.id], { title: '导出测试' });
@@ -292,6 +303,38 @@ describe('导出 PDF', () => {
     const back = await reimport(bytes);
     const [restored] = back.items;
     expect(restored).toMatchObject({ type: 'text', text: 'Hello 你好 world' });
+  });
+
+  it('字符级样式：粗体、斜体用各自的字体文件，颜色按段写，下划线画成横线；读回来还是同样的样式', async () => {
+    const env = setup();
+    const node = text(env, 'Plain bold italic red');
+    let styled = { ...node, ...setCharacterStyle(node, 6, 10, { fontWeight: 700 }) } as TextNode;
+    styled = { ...styled, ...setCharacterStyle(styled, 11, 17, { italic: true }) } as TextNode;
+    styled = { ...styled, ...setCharacterStyle(styled, 18, 21, { color: rgba(1, 0, 0), underline: true }) } as TextNode;
+    env.store.transact('style', (tx) => tx.update(node.id, { spans: styled.spans }));
+
+    const { textContent, bytes, ops } = await exportAndOpen(env);
+    expect(textContent).toBe('Plain bold italic red');
+    const fonts = new Set(new TextDecoder('latin1').decode(bytes).match(/\/BaseFont \/[A-Z]{6}\+[\w-]+/g));
+    expect([...fonts].map((f) => f.replace(/.*\+/, '')).sort()).toEqual([
+      'Inter-Bold',
+      'Inter-Italic',
+      'Inter-Regular',
+    ]);
+    // 红色写了一次，下划线是一个填充的矩形
+    const colors = ops.fnArray.flatMap((fn, i) => (fn === pdfjs.OPS.setFillRGBColor ? [ops.argsArray[i]] : []));
+    expect(colors.length).toBeGreaterThanOrEqual(2);
+
+    const back = await reimport(bytes);
+    const restored = back.items.find((n): n is TextNode => n.type === 'text')!;
+    expect(restored.text).toBe('Plain bold italic red');
+    expect(restored.spans).toEqual([
+      { start: 6, end: 10, style: { fontWeight: 700 } },
+      { start: 11, end: 17, style: { italic: true } },
+      { start: 18, end: 21, style: { color: rgba(1, 0, 0) } },
+    ]);
+    // 下划线读回来是文字下面的一条细长矩形
+    expect(back.items.some((n) => n.type === 'rect' && n.size[1] < 3 && n.size[0] > 10)).toBe(true);
   });
 
   it('每个字的位置和排版结果一致：字距、两端对齐拉开的空格都写进去了', async () => {

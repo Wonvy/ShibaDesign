@@ -80,6 +80,8 @@ export interface PdfGlyph {
   text: string;
   /** 步进宽度，单位和轮廓相同 */
   advance: number;
+  /** 这个字的填充色。一行字中间可能换颜色，所以每个字各记一份；还没确定时省略 */
+  fill?: Color | null;
 }
 
 /** 一段文字主要用的字体：混排时取字数最多的那种 */
@@ -92,6 +94,15 @@ export interface PdfTextFont {
   monospace: boolean;
 }
 
+/** 一行字里用同一种字体、字号、颜色的一段 */
+export interface PdfTextStyleRun {
+  /** 这一段占 text 里多少个字符（UTF-16） */
+  length: number;
+  font: PdfTextFont;
+  size: number;
+  fill: Color | null;
+}
+
 /**
  * 一行文字（同一条基线上紧挨着的几段会合成一个）。
  * 既记下每个字的字形和位置，用来原样显示；也记下文字内容、字号、基线，用来还原成可以编辑的文本。
@@ -101,9 +112,13 @@ export interface PdfTextItem extends PdfItemBase {
   text: string;
   /** 每个字的字形。PDF 没有内嵌字体时拿不到字形，这里为空，只能用我们自己的字体重排 */
   glyphs: PdfGlyph[];
+  /** 主要的填充色：一行字换了颜色时，取字数最多的那种 */
   fill: Color | null;
   stroke: PdfStroke | null;
+  /** 主要的字体：混排时取字数最多的那种 */
   font: PdfTextFont;
+  /** 按字体、字号、颜色分的几段，长度加起来等于 text 的长度。合并出来的一行里各段的样式可能不同 */
+  styles: PdfTextStyleRun[];
   /** 字号，页面单位 */
   size: number;
   /** 基线起点 */

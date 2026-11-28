@@ -918,10 +918,18 @@ button {
   margin: 8px 0 0;
 }
 
-.frozen-hint {
+.frozen-hint,
+.text-scope {
   grid-column: 1 / -1;
   margin: 0 0 4px;
   line-height: 1.5;
+}
+
+/* 颜色这类没法显示"空白"的控件旁边，提示选中的字里有好几种值 */
+.field-note {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 /* ───────── 演示模式 ───────── */

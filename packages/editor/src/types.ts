@@ -1,4 +1,4 @@
-import type { Color, NodeId, Point } from '@shiba/core';
+import type { CharacterStyle, Color, NodeId, Point } from '@shiba/core';
 
 /** canvas：自由画布，所有画板可见；slides：一次只看一个画板 */
 export type ViewMode = 'canvas' | 'slides';
@@ -16,6 +16,18 @@ export interface EditorState {
   docVersion: number;
   /** 字体或图片每到位一批加一。画面会随之变化，缩略图等需要跟着重画 */
   resourceEpoch: number;
+  /** 正在编辑的文字和其中选中的范围；不在编辑文字时为 null */
+  textEditing: TextEditing | null;
+}
+
+/** 正在编辑的文字。属性面板按它显示和修改选中那几个字的样式 */
+export interface TextEditing {
+  nodeId: NodeId;
+  /** 选中的范围；没选中时两者相等，就是光标位置 */
+  start: number;
+  end: number;
+  /** 光标处刚换了样式、还没打字时，接下来打的字用的样式 */
+  typing: CharacterStyle | null;
 }
 
 /** 画布区域用到的颜色，由界面主题提供 */

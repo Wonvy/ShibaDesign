@@ -17,7 +17,9 @@ import { pickImageFill } from '../files';
 import { ColorField, IconButton, NumberField } from '../ui/controls';
 import type { PanelProps } from './registry';
 
-const hasFill = (node: SceneNode): node is Extract<SceneNode, { fill: unknown }> => 'fill' in node;
+/** 有填充的节点。文本的颜色可以按字设置，放在文本面板里改，这里不管 */
+const hasFill = (node: SceneNode): node is Extract<SceneNode, { fill: unknown }> =>
+  'fill' in node && node.type !== 'text';
 
 /** 能用图片作填充的节点：形状类。画板和文本目前只支持纯色 */
 const canHoldImage = (node: SceneNode): boolean => hasShapeStyle(node);

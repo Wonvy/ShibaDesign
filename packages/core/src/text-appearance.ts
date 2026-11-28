@@ -40,20 +40,29 @@ function fnv(text: string, seed: number): string {
 }
 
 /** 文字和排版参数的指纹。只包含会影响排版结果的字段 */
-export function textAppearanceBasis(node: Pick<TextNode, 'text' | 'style' | 'align' | 'sizing' | 'size'>): string {
+export function textAppearanceBasis(
+  node: Pick<TextNode, 'text' | 'style' | 'align' | 'sizing' | 'size' | 'spans'>,
+): string {
   const { style } = node;
-  const key = JSON.stringify([
-    node.text,
-    style.fontFamily.latin,
-    style.fontFamily.cjk,
-    style.fontSize,
-    style.fontWeight,
-    style.lineHeight,
-    style.letterSpacing,
-    node.align,
-    node.sizing,
-    node.sizing === 'fixed' ? node.size[0] : 0,
-  ]);
+  // 斜体、下划线、删除线和字符级样式是后来加的：没有用到时不进指纹，这样之前存下的指纹仍然对得上
+  const extra =
+    style.italic || style.underline || style.strikethrough || node.spans?.length
+      ? JSON.stringify([!!style.italic, !!style.underline, !!style.strikethrough, node.spans ?? []])
+      : '';
+  const key =
+    extra +
+    JSON.stringify([
+      node.text,
+      style.fontFamily.latin,
+      style.fontFamily.cjk,
+      style.fontSize,
+      style.fontWeight,
+      style.lineHeight,
+      style.letterSpacing,
+      node.align,
+      node.sizing,
+      node.sizing === 'fixed' ? node.size[0] : 0,
+    ]);
   return fnv(key, 0x811c9dc5) + fnv(key, 0x9747b28c);
 }
 

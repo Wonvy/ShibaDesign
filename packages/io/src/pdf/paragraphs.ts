@@ -1,5 +1,5 @@
 import type { TextAlign } from '@shiba/core';
-import type { PdfTextItem } from './ir';
+import type { PdfTextItem, PdfTextStyleRun } from './ir';
 
 /**
  * 段落重建：把一行一行的文字拼回段落。
@@ -25,6 +25,8 @@ export interface TextBlock {
   align: TextAlign;
   /** 拼好的文字，段落之间用 \n 分隔 */
   text: string;
+  /** text 里每个字（UTF-16 单元）的字体、字号、颜色 */
+  styles: PdfTextStyleRun[];
 }
 
 interface Placed {
@@ -69,6 +71,38 @@ export function cleanText(text: string): string {
 /** 把部首码位换回外形相同的普通汉字（见上面 SIMPLIFIED_RADICALS） */
 export function plainHanzi(text: string): string {
   return text.replace(/[\u2e80-\u2fdf]/g, (char) => SIMPLIFIED_RADICALS.get(char) ?? char.normalize('NFKC'));
+}
+
+/** 一行字的整体样式，给没有自己样式的字（补出来的空格、换行）用 */
+function lineStyle(item: PdfTextItem): PdfTextStyleRun {
+  return item.styles[item.styles.length - 1] ?? { length: 0, font: item.font, size: item.size, fill: item.fill };
+}
+
+/** cleanText 的带样式版本：整理一行字，每个留下来的字带着它原来的样式 */
+function cleanLine(item: PdfTextItem): { text: string; styles: PdfTextStyleRun[] } {
+  const raw = plainHanzi(item.text);
+  const per: PdfTextStyleRun[] = [];
+  for (const run of item.styles) for (let i = 0; i < run.length; i++) per.push(run);
+  let text = '';
+  const styles: PdfTextStyleRun[] = [];
+  let space: PdfTextStyleRun | null = null;
+  for (let i = 0; i < raw.length; i++) {
+    const char = raw[i]!;
+    const style = per[i] ?? lineStyle(item);
+    // 连续的空白合成一个空格，开头结尾的去掉
+    if (/\s/.test(char)) {
+      if (text.length > 0) space ??= style;
+      continue;
+    }
+    if (space) {
+      text += ' ';
+      styles.push(space);
+      space = null;
+    }
+    text += char;
+    styles.push(style);
+  }
+  return { text, styles };
 }
 
 function sameColor(a: PdfTextItem['fill'], b: PdfTextItem['fill']): boolean {
@@ -173,25 +207,37 @@ function finish(draft: Draft): TextBlock {
     });
   }
 
+  // 文字和每个字的样式一起拼：补出来的缩进、换行、空格跟着旁边的字
   let text = '';
+  const styles: PdfTextStyleRun[] = [];
   lines.forEach((line, i) => {
-    let content = cleanText(line.item.text);
+    const cleaned = cleanLine(line.item);
+    let content = cleaned.text;
+    const contentStyles = cleaned.styles;
+    const own = contentStyles[0] ?? lineStyle(line.item);
     // 中文段落开头习惯空两格：缩进按全角空格保留下来，换成我们的字体之后段首照样空出来
     const indent = Math.round((line.start - left) / size);
     if ((align === 'left' || align === 'justify') && indent >= 1 && CJK.test(content[0] ?? '')) {
-      content = '\u3000'.repeat(Math.min(indent, 4)) + content;
+      const count = Math.min(indent, 4);
+      content = '\u3000'.repeat(count) + content;
+      contentStyles.unshift(...new Array<PdfTextStyleRun>(count).fill(own));
     }
+    const previousStyle = styles[styles.length - 1] ?? own;
     if (i === 0) {
       text = content;
-      return;
-    }
-    if (breaks[i]) {
+    } else if (breaks[i]) {
       text += '\n' + content;
-      return;
+      styles.push(previousStyle);
+    } else {
+      const previous = text[text.length - 1] ?? '';
+      const glued = CJK.test(previous) || CJK.test(content[0] ?? '') || (previous === '-' && text.length > 1);
+      if (!glued) {
+        text += ' ';
+        styles.push(previousStyle);
+      }
+      text += content;
     }
-    const previous = text[text.length - 1] ?? '';
-    const glued = CJK.test(previous) || CJK.test(content[0] ?? '') || (previous === '-' && text.length > 1);
-    text += (glued ? '' : ' ') + content;
+    styles.push(...contentStyles);
   });
 
   return {
@@ -205,6 +251,7 @@ function finish(draft: Draft): TextBlock {
     spacing: lines.length > 1 ? (lines[lines.length - 1]!.across - lines[0]!.across) / (lines.length - 1) : 0,
     align: lines.length > 1 ? align : 'left',
     text,
+    styles,
   };
 }
 

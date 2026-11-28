@@ -49,9 +49,11 @@ export function NumberField(props: {
   max?: number;
   suffix?: string;
   disabled?: boolean;
+  /** 选中的几个对象（或几段字）这一项不一样：显示为空白，输入后统一改成新值 */
+  mixed?: boolean;
 }): ReactNode {
   const [draft, setDraft] = useState<string | null>(null);
-  const shown = draft ?? format(props.value);
+  const shown = draft ?? (props.mixed ? '' : format(props.value));
 
   const clamp = (n: number): number => Math.min(props.max ?? Infinity, Math.max(props.min ?? -Infinity, n));
   const commit = (text: string): void => {
@@ -59,7 +61,7 @@ export function NumberField(props: {
     const parsed = Number(text);
     if (text.trim() === '' || !Number.isFinite(parsed)) return;
     const next = clamp(parsed);
-    if (next !== props.value) props.onCommit(next);
+    if (next !== props.value || props.mixed) props.onCommit(next);
   };
 
   return (
@@ -69,6 +71,7 @@ export function NumberField(props: {
         className="field-input"
         inputMode="decimal"
         value={shown}
+        placeholder={props.mixed ? '—' : undefined}
         disabled={props.disabled}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={(e) => commit(e.target.value)}

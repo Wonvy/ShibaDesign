@@ -104,11 +104,13 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
         !isFiniteNumber(style.fontSize) ||
         !isFiniteNumber(style.fontWeight) ||
         !isFiniteNumber(style.lineHeight) ||
-        !isFiniteNumber(style.letterSpacing)
+        !isFiniteNumber(style.letterSpacing) ||
+        !['italic', 'underline', 'strikethrough'].every((k) => style[k] === undefined || typeof style[k] === 'boolean')
       ) {
         fail('style');
       }
       if (typeof node.align !== 'string' || typeof node.sizing !== 'string') fail('align/sizing');
+      if (node.spans !== undefined && !isSpans(node.spans, (node.text as string).length)) fail('spans');
       if (node.appearance !== undefined && !isAppearance(node.appearance)) fail('appearance');
       break;
     }
@@ -170,6 +172,35 @@ function isDeck(value: unknown): boolean {
   );
 }
 
+/** 字符级样式的区间：按位置排好、互不重叠、在文字范围内，样式项的类型正确 */
+function isSpans(value: unknown, length: number): boolean {
+  if (!Array.isArray(value) || value.length > length) return false;
+  let at = 0;
+  for (const span of value) {
+    if (!isObject(span) || !Number.isInteger(span.start) || !Number.isInteger(span.end)) return false;
+    const start = span.start as number;
+    const end = span.end as number;
+    if (start < at || end <= start || end > length || !isObject(span.style)) return false;
+    at = end;
+    const style = span.style;
+    const family = style.fontFamily;
+    if (
+      family !== undefined &&
+      !(isObject(family) && typeof family.latin === 'string' && typeof family.cjk === 'string')
+    ) {
+      return false;
+    }
+    for (const key of ['fontSize', 'fontWeight', 'letterSpacing']) {
+      if (style[key] !== undefined && !isFiniteNumber(style[key])) return false;
+    }
+    for (const key of ['italic', 'underline', 'strikethrough']) {
+      if (style[key] !== undefined && typeof style[key] !== 'boolean') return false;
+    }
+    if (style.color !== undefined && style.color !== null && !isColor(style.color)) return false;
+  }
+  return true;
+}
+
 /** 一段文字的字形个数上限，远超一页能放下的字 */
 const MAX_APPEARANCE_GLYPHS = 200_000;
 
@@ -179,6 +210,7 @@ function isAppearance(value: unknown): boolean {
   let count = 0;
   for (const run of value.runs) {
     if (!isObject(run) || typeof run.library !== 'string' || !isNumberArray(run.matrix, 4)) return false;
+    if (run.color !== undefined && !isColor(run.color)) return false;
     const glyphs = run.glyphs;
     if (!Array.isArray(glyphs) || glyphs.length % 3 !== 0) return false;
     count += glyphs.length / 3;

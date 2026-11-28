@@ -12,6 +12,6 @@ export type { PdfFont, PdfOperatorList, PdfResources, PdfViewport } from './inte
 export { PdfDocumentBuilder } from './build';
 export type { PdfBuildOptions } from './build';
 export { encodePng } from './png';
-export { fontCategory, fontWeight } from './fonts';
+export { fontCategory, fontItalic, fontWeight } from './fonts';
 export type { FontCategory, FontChoices, FontPair } from './fonts';
 export type * from './ir';

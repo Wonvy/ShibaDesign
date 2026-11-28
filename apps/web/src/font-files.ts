@@ -9,7 +9,7 @@
 // 选项必须直接写成对象字面量：Vite 在构建时静态分析这些调用，不认变量
 const files = import.meta.glob<string>(
   [
-    '../../../node_modules/@fontsource/{inter,arimo,tinos,cousine}/files/*-{400,700}-normal.woff',
+    '../../../node_modules/@fontsource/{inter,arimo,tinos,cousine}/files/*-{400,700}-{normal,italic}.woff',
     '../../../node_modules/@fontsource/{noto-sans-sc,noto-serif-sc}/files/*-{400,700}-normal.woff',
     '!**/*-chinese-simplified-*',
   ],

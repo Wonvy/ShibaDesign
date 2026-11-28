@@ -19,7 +19,7 @@ const WEIGHTS = [400, 700];
 // 这里只是拿到每个字体文件的地址，文件本身在用到时才下载。
 // 选项必须直接写成对象字面量：Vite 在构建时静态分析这些调用，不认变量
 const interFiles = import.meta.glob<string>(
-  '../../../node_modules/@fontsource/inter/files/inter-*-{400,700}-normal.woff2',
+  '../../../node_modules/@fontsource/inter/files/inter-*-{400,700}-{normal,italic}.woff2',
   { query: '?url', import: 'default', eager: true },
 );
 const notoFiles = import.meta.glob<string>(
@@ -38,15 +38,15 @@ const notoSerifFiles = import.meta.glob<string>(
   { query: '?url', import: 'default', eager: true },
 );
 const arimoFiles = import.meta.glob<string>(
-  '../../../node_modules/@fontsource/arimo/files/arimo-*-{400,700}-normal.woff2',
+  '../../../node_modules/@fontsource/arimo/files/arimo-*-{400,700}-{normal,italic}.woff2',
   { query: '?url', import: 'default', eager: true },
 );
 const tinosFiles = import.meta.glob<string>(
-  '../../../node_modules/@fontsource/tinos/files/tinos-*-{400,700}-normal.woff2',
+  '../../../node_modules/@fontsource/tinos/files/tinos-*-{400,700}-{normal,italic}.woff2',
   { query: '?url', import: 'default', eager: true },
 );
 const cousineFiles = import.meta.glob<string>(
-  '../../../node_modules/@fontsource/cousine/files/cousine-*-{400,700}-normal.woff2',
+  '../../../node_modules/@fontsource/cousine/files/cousine-*-{400,700}-{normal,italic}.woff2',
   { query: '?url', import: 'default', eager: true },
 );
 
@@ -63,22 +63,26 @@ function buildFaces(prefix: string, ranges: Record<string, string>, files: Recor
     // fontsource 用 "[119]" 这样的键表示编号分片，文件名里是不带括号的 119
     const chunk = key.replace(/[[\]]/g, '');
     for (const weight of WEIGHTS) {
-      const file = `${prefix}-${chunk}-${weight}-normal`;
-      const url = urls.get(`${file}.woff2`);
-      if (!url) continue;
-      faces.push({
-        chunk,
-        weight,
-        ranges: parseUnicodeRange(range),
-        load: () => fetchBytes(url),
-        // 导出 PDF 时嵌入字体要用同一个文件的 WOFF 版本，见 font-files.ts
-        loadEmbeddable: async () => {
-          const { embeddableUrl } = await import('./font-files');
-          const embeddable = embeddableUrl(`${file}.woff`);
-          if (!embeddable) throw new Error(`no embeddable font for ${file}`);
-          return fetchBytes(embeddable);
-        },
-      });
+      for (const italic of [false, true]) {
+        const file = `${prefix}-${chunk}-${weight}-${italic ? 'italic' : 'normal'}`;
+        const url = urls.get(`${file}.woff2`);
+        // 中文字体没有斜体文件，设成斜体时按正体显示
+        if (!url) continue;
+        faces.push({
+          chunk,
+          weight,
+          italic,
+          ranges: parseUnicodeRange(range),
+          load: () => fetchBytes(url),
+          // 导出 PDF 时嵌入字体要用同一个文件的 WOFF 版本，见 font-files.ts
+          loadEmbeddable: async () => {
+            const { embeddableUrl } = await import('./font-files');
+            const embeddable = embeddableUrl(`${file}.woff`);
+            if (!embeddable) throw new Error(`no embeddable font for ${file}`);
+            return fetchBytes(embeddable);
+          },
+        });
+      }
     }
   }
   return faces;

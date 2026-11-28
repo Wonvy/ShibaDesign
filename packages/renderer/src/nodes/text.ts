@@ -11,8 +11,8 @@ import type { TextLayouts } from '../text/layout';
  * 有保真外观（从 PDF 导入、还没改过的文字）时按原文件的字形画，见 core 的 text-appearance.ts。
  */
 export function createTextNodeType(layouts: TextLayouts, appearances: TextAppearances): NodeTypeDef<TextNode> {
-  /** 按保真外观显示时的字形路径；该正常排版时返回 null */
-  const frozen = (node: TextNode) => (hasLiveAppearance(node) ? appearances.path(node) : null);
+  /** 按保真外观显示时的字形路径（按颜色分组）；该正常排版时返回 null */
+  const frozen = (node: TextNode) => (hasLiveAppearance(node) ? appearances.paths(node) : null);
 
   return {
     type: 'text',
@@ -31,9 +31,11 @@ export function createTextNodeType(layouts: TextLayouts, appearances: TextAppear
       const glyphs = frozen(node);
       if (glyphs) {
         paint.setStyle(ck.PaintStyle.Fill);
-        paint.setColor(toSkColor(ck, node.fill.color, opacity));
         paint.setBlendMode(blendMode);
-        canvas.drawPath(glyphs, paint);
+        for (const { color, path } of glyphs) {
+          paint.setColor(toSkColor(ck, color ?? node.fill.color, opacity));
+          canvas.drawPath(path, paint);
+        }
         return;
       }
       canvas.drawParagraph(layouts.get(node).paragraph, 0, 0);
