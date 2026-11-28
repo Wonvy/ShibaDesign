@@ -1,7 +1,14 @@
 import {
+  breaksComponentRules,
+  cloneSubtree,
   descendants,
   invert,
+  isDescendantOf,
+  isInstance,
   isInstanceCopy,
+  keysBetween,
+  nextSeq,
+  sortByZOrder,
   keyBetween,
   multiply,
   slides,
@@ -12,10 +19,12 @@ import {
   worldTransform,
   type ArtboardNode,
   type NodeId,
+  type NodeType,
   type SceneNode,
 } from '@shiba/core';
 import type { Editor } from '../editor';
 import { pruneAnimations } from './animation';
+import { duplicateArtboard } from './artboard';
 import type { Command } from './command';
 
 /**
@@ -189,5 +198,135 @@ export const resetImageRatio: Command = {
       return { size: [node.size[0], (node.size[0] * meta.height) / meta.width] as const };
     });
     editor.store.sealHistory();
+  },
+};
+
+export interface MoveNodesArgs {
+  ids: readonly NodeId[];
+  /** 放进哪个父节点 */
+  parent: NodeId;
+  /** 放在这个同级节点的上面（层序）；null 放在最下面 */
+  above: NodeId | null;
+  /** 复制过去（Alt 拖动），原来的不动 */
+  copy?: boolean;
+}
+
+/** 这几个节点能不能放进 parent：画板只能在页面上，别的不能进实例、不能放进自己的子孙，组件的规则不能破 */
+function canMoveInto(editor: Editor, ids: readonly NodeId[], parentId: NodeId): boolean {
+  const { store } = editor;
+  const parent = store.get(parentId);
+  if (!parent || isInstance(parent) || isInstanceCopy(parent)) return false;
+  if (!['page', 'artboard', 'group', 'boolean'].includes(parent.type)) return false;
+  for (const id of ids) {
+    const node = store.get(id);
+    if (!node || isInstanceCopy(node)) return false;
+    if (node.type === 'artboard' && parent.type !== 'page') return false;
+    if (id === parentId || isDescendantOf(store, parentId, id)) return false;
+  }
+  return !breaksComponentRules(store, ids, parentId);
+}
+
+/**
+ * 图层面板里拖动：把节点挪到（或复制到）别的父节点、别的层序位置，在画布上的位置不变。
+ * 几个节点一起挪时保持它们原来的先后
+ */
+export const moveNodes: Command<MoveNodesArgs> = {
+  id: 'node.moveTo',
+  enabled: (editor, args) => !!args && args.ids.length > 0 && canMoveInto(editor, args.ids, args.parent),
+  run(editor, { ids, parent, above, copy }) {
+    const { store } = editor;
+    const nodes = sortByZOrder(store, topLevelOnly(store, ids));
+    if (
+      nodes.length === 0 ||
+      !canMoveInto(
+        editor,
+        nodes.map((n) => n.id),
+        parent,
+      )
+    )
+      return;
+    const toParent = invert(worldTransform(store, parent));
+    if (!toParent) return;
+    const moving = new Set(nodes.map((n) => n.id));
+    const siblings = store.children(parent).filter((n) => copy || !moving.has(n.id));
+    const anchor = above ? siblings.findIndex((n) => n.id === above) : -1;
+    const lower = anchor >= 0 ? siblings[anchor]!.index : null;
+    const upper = anchor >= 0 ? (siblings[anchor + 1]?.index ?? null) : (siblings[0]?.index ?? null);
+    const indices = keysBetween(lower, upper, nodes.length);
+    const created: NodeId[] = [];
+    store.transact(copy ? 'copy layers' : 'move layers', (tx) => {
+      nodes.forEach((node, i) => {
+        const transform = multiply(toParent, worldTransform(store, node.id));
+        if (copy) {
+          const [root, ...rest] = cloneSubtree(store, node.id, { keepLineage: false });
+          tx.create({ ...root!, parent, index: indices[i]!, transform, seq: nextSeq(store, node.type as NodeType) });
+          rest.forEach((n) => tx.create(n));
+          created.push(root!.id);
+        } else {
+          tx.update(node.id, { parent, index: indices[i]!, transform });
+          created.push(node.id);
+        }
+      });
+      pruneAnimations(tx, store);
+    });
+    store.sealHistory();
+    editor.select(created);
+  },
+};
+
+/** 能玩的幻灯片：看得见、没隐藏的那几页，演示、导出网页和视频只放这些 */
+export function playableSlides(editor: Editor): ArtboardNode[] {
+  return slides(editor.store).filter((slide) => slide.visible && !slide.deck?.skip);
+}
+
+export interface ReorderSlidesArgs {
+  ids: readonly NodeId[];
+  /** 放到第几页的位置（按去掉这几页之后的顺序数）；复制时按全部的顺序数 */
+  index: number;
+  /** 复制这几页放过去（Alt 拖动），原来的不动 */
+  copy?: boolean;
+}
+
+/** 幻灯片条里拖动：把几页挪到（或复制到）某个位置，保持它们原来的先后 */
+export const reorderSlides: Command<ReorderSlidesArgs> = {
+  id: 'artboard.reorder',
+  enabled: (editor, args) => !!args && args.ids.some((id) => editor.store.get(id)?.type === 'artboard'),
+  run(editor, { ids, index, copy }) {
+    const { store } = editor;
+    const deck = slides(store);
+    const picked = deck.filter((s) => ids.includes(s.id));
+    if (picked.length === 0) return;
+    const rest = copy ? deck : deck.filter((s) => !ids.includes(s.id));
+    const at = Math.max(0, Math.min(index, rest.length));
+    const orders = keysBetween(rest[at - 1]?.deck?.order ?? null, rest[at]?.deck?.order ?? null, picked.length);
+    const result: NodeId[] = [];
+    store.transact(copy ? 'copy slides' : 'move slides', (tx) => {
+      picked.forEach((slide, i) => {
+        const id = copy ? duplicateArtboard(editor, tx, slide.id) : slide.id;
+        const current = (tx.get(id) as ArtboardNode).deck!;
+        tx.update(id, { deck: { ...current, order: orders[i]! } });
+        result.push(id);
+      });
+    });
+    store.sealHistory();
+    if (copy && result[0]) editor.setActiveArtboard(result[0]);
+  },
+};
+
+/** 隐藏幻灯片：演示、导出网页和视频时跳过，编辑时照常显示。几页一起切换：有没隐藏的就全隐藏，否则全显示 */
+export const toggleSkip: Command<readonly NodeId[]> = {
+  id: 'artboard.toggleSkip',
+  enabled: (editor, ids) => !!ids && ids.some((id) => (editor.store.get(id) as ArtboardNode | undefined)?.deck),
+  run(editor, ids) {
+    const { store } = editor;
+    const boards = ids.map((id) => store.get(id)).filter((n): n is ArtboardNode => n?.type === 'artboard' && !!n.deck);
+    const skip = boards.some((b) => !b.deck!.skip);
+    store.transact('hide slide', (tx) => {
+      for (const board of boards) {
+        const { skip: _old, ...deck } = board.deck!;
+        tx.update(board.id, { deck: skip ? { ...deck, skip: true } : deck });
+      }
+    });
+    store.sealHistory();
   },
 };

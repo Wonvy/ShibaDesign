@@ -56,11 +56,22 @@
       "duplicate": "Duplicate slide",
       "delete": "Delete slide",
       "empty": "No slides yet",
-      "count": "Slides: {{count}}"
+      "count": "Slides: {{count}}",
+      "hasTransition": "Has a transition",
+      "hasAnimation": "Has animations",
+      "hidden": "Hidden, skipped when presenting",
+      "insertAfter": "New slide after this",
+      "picked": "Selected: {{count}}"
     },
     "layers": {
       "empty": "Nothing here yet",
-      "renameHint": "Double-click to rename"
+      "renameHint": "Double-click to rename",
+      "search": "Search layers",
+      "noMatch": "Nothing found",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "animated": "Has animation",
+      "soloHint": "Alt-click: show only this"
     },
     "align": {
       "left": "Align left",
@@ -793,7 +804,11 @@
       "setGuidePosition": "Set position…",
       "window": "Window",
       "togglePanel": "Show or hide panel",
-      "hideUi": "Hide interface"
+      "hideUi": "Hide interface",
+      "hideSlide": "Hide slide (skip when presenting)",
+      "showSlide": "Unhide slide",
+      "moveLayers": "Move layers",
+      "reorderSlides": "Reorder slides"
     },
     "guide": {
       "vertical": "Vertical guide",

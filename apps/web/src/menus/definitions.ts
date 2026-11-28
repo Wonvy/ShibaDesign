@@ -21,6 +21,7 @@ import {
 import { i18n } from '../i18n';
 import { displayName } from '../names';
 import { openFileDialog } from '../components/FileMenu';
+import { slidesForMenu } from '../components/SlideStrip';
 import type { ViewToggle } from '@shiba/editor';
 import {
   WORKSPACE_PRESETS,
@@ -370,10 +371,13 @@ export function registerBuiltinMenus(): void {
   registerMenu('slide.thumb', (ctx) => {
     const id = ctx.subject ?? '';
     const { editor } = ctx;
+    // 点在多选里时对整个多选操作
+    const targets = slidesForMenu(id);
     const focus = (): void => {
       editor.setActiveArtboard(id);
-      editor.select([id]);
+      editor.select([...targets]);
     };
+    const skipped = targets.every((t) => (editor.store.get(t) as { deck?: { skip?: boolean } | null })?.deck?.skip);
     return [
       {
         id: 'slide.addAfter',
@@ -383,8 +387,17 @@ export function registerBuiltinMenus(): void {
           editor.commands.run('artboard.add');
         },
       },
-      cmd('artboard.duplicate', id, { labelKey: 'slide.duplicate' }),
-      cmd('artboard.delete', id, { labelKey: 'slide.delete' }),
+      {
+        id: 'slide.duplicate',
+        labelKey: 'slide.duplicate',
+        run: () => targets.forEach((t) => editor.commands.run('artboard.duplicate', t)),
+      },
+      {
+        id: 'slide.delete',
+        labelKey: 'slide.delete',
+        run: () => targets.forEach((t) => editor.commands.run('artboard.delete', t)),
+      },
+      cmd('artboard.toggleSkip', targets, { labelKey: skipped ? 'menu.showSlide' : 'menu.hideSlide' }),
       'separator',
       {
         id: 'slide.copy',

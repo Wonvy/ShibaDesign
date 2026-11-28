@@ -15,7 +15,18 @@ import { createComponent, detachInstances, goToMainComponent, placeInstance, res
 import { createGroup, releaseGroup } from './group';
 import { placeImage, setImageFill } from './image';
 import { createMask, releaseMask, setMaskMode, toggleMask } from './mask';
-import { fitArtboard, moveSlide, moveToSlide, resetImageRatio, selectByStyle, soloNode, toggleSlide } from './organize';
+import {
+  fitArtboard,
+  moveNodes,
+  moveSlide,
+  moveToSlide,
+  reorderSlides,
+  resetImageRatio,
+  selectByStyle,
+  soloNode,
+  toggleSkip,
+  toggleSlide,
+} from './organize';
 import { flattenShapes, offsetPath, outlineStroke, outlineText } from './path';
 import { copyProperties, pasteProperties } from './properties';
 import {
@@ -154,6 +165,9 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(soloNode)
     .register(selectByStyle)
     .register(resetImageRatio)
+    .register(moveNodes)
+    .register(reorderSlides)
+    .register(toggleSkip)
     .register(toggleView)
     .register(clearGuides)
     .register(clearAllGuides)
@@ -165,7 +179,8 @@ export type { Command } from './command';
 export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
 export type { SameKind } from './select';
-export type { SlideMove } from './organize';
+export type { MoveNodesArgs, ReorderSlidesArgs, SlideMove } from './organize';
+export { playableSlides } from './organize';
 export type { ViewToggle } from './view';
 export { cloneNodes } from './edit';
 export type { OffsetPathArgs } from './path';

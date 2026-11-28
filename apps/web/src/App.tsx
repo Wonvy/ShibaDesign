@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { slides } from '@shiba/core';
-import type { Editor } from '@shiba/editor';
+import { playableSlides, type Editor } from '@shiba/editor';
 import { DockHost } from './dock/DockHost';
 import { TopBar } from './components/TopBar';
 import { installClipboard } from './clipboard';
@@ -26,7 +26,11 @@ function Workspace(): ReactNode {
   const play = useCallback(() => {
     // 从当前这一页开始播；正在编辑文字的话先结束编辑，让文字落进文档
     editor.setTool('select');
-    const index = slides(editor.store).findIndex((s) => s.id === editor.getState().activeArtboardId);
+    // 播放器只放能玩的那几页（看得见、没隐藏的）：从当前这一页（它隐藏了的话是它后面的第一页）开始
+    const all = slides(editor.store);
+    const active = all.findIndex((s) => s.id === editor.getState().activeArtboardId);
+    const playable = playableSlides(editor);
+    const index = playable.findIndex((s) => all.indexOf(s) >= active);
     setPresenting(Math.max(0, index));
   }, [editor]);
   const stop = useCallback(() => setPresenting(null), []);
@@ -40,7 +44,7 @@ function Workspace(): ReactNode {
   useEffect(() => {
     editor.commands.register({ id: 'present.play', run: play }).register({
       id: 'present.playFromStart',
-      enabled: (e) => slides(e.store).length > 0,
+      enabled: (e) => playableSlides(e).length > 0,
       run: () => {
         editor.setTool('select');
         setPresenting(0);

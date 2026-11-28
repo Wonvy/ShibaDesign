@@ -6,7 +6,7 @@ import {
   toCssColor,
   type GradientFill,
 } from '@shiba/core';
-import type { Editor } from '@shiba/editor';
+import { playableSlides, type Editor } from '@shiba/editor';
 import { GifWriter, Mp4Writer } from '@shiba/io';
 import { recordPresentation, type FrameCanvas, type PresentationData, type RecordOptions } from '@shiba/player';
 import { compilePresentation } from './compile';
@@ -26,7 +26,7 @@ export async function renderVideo(
   settings: VideoSettings,
   progress: { onProgress?(fraction: number): void; signal?: AbortSignal } = {},
 ): Promise<Uint8Array> {
-  const visible = slides(editor.store).filter((slide) => slide.visible);
+  const visible = playableSlides(editor);
   const first = visible[0];
   if (!first) throw new Error('no slides');
   const { width, height } = videoSize({ width: first.size[0], height: first.size[1] }, settings.format, settings.size);

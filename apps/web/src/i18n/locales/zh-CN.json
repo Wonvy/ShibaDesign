@@ -56,11 +56,22 @@
       "duplicate": "复制幻灯片",
       "delete": "删除幻灯片",
       "empty": "还没有幻灯片",
-      "count": "{{count}} 页"
+      "count": "{{count}} 页",
+      "hasTransition": "有切换效果",
+      "hasAnimation": "有动画",
+      "hidden": "已隐藏，演示时跳过",
+      "insertAfter": "在后面新建一页",
+      "picked": "选中了 {{count}} 页"
     },
     "layers": {
       "empty": "这里还没有对象",
-      "renameHint": "双击重命名"
+      "renameHint": "双击重命名",
+      "search": "搜索图层",
+      "noMatch": "没有找到",
+      "expand": "展开",
+      "collapse": "折叠",
+      "animated": "有动画",
+      "soloHint": "按住 Alt 点：只显示这一个"
     },
     "align": {
       "left": "左对齐",
@@ -793,7 +804,11 @@
       "setGuidePosition": "设置位置…",
       "window": "窗口",
       "togglePanel": "打开或收起面板",
-      "hideUi": "隐藏界面"
+      "hideUi": "隐藏界面",
+      "hideSlide": "隐藏幻灯片（演示时跳过）",
+      "showSlide": "取消隐藏幻灯片",
+      "moveLayers": "移动图层",
+      "reorderSlides": "调整幻灯片顺序"
     },
     "guide": {
       "vertical": "竖辅助线",

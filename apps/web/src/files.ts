@@ -11,7 +11,7 @@ import {
   type NodeId,
   type Point,
 } from '@shiba/core';
-import type { Editor } from '@shiba/editor';
+import { playableSlides, type Editor } from '@shiba/editor';
 import {
   PdfImportError,
   SHIBA_EXTENSION,
@@ -680,7 +680,7 @@ async function saveExported(
  * 和导出 PDF 一样，能直接写文件的浏览器先选好保存位置再开始
  */
 export async function exportVideo(editor: Editor, settings: VideoSettings): Promise<void> {
-  if (!slides(editor.store).some((slide) => slide.visible)) {
+  if (playableSlides(editor).length === 0) {
     toast(t('present.empty'), 'error');
     return;
   }

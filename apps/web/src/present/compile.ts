@@ -9,7 +9,7 @@ import {
   type NodeId,
   type Rect,
 } from '@shiba/core';
-import type { Editor } from '@shiba/editor';
+import { playableSlides, type Editor } from '@shiba/editor';
 import type { PlayerLayer, PlayerSlide, PresentationData } from '@shiba/player';
 
 /**
@@ -66,7 +66,8 @@ export async function compilePresentation(
     return url;
   };
 
-  const visibleSlides = slides(store).filter((slide) => slide.visible);
+  // 看不见的画板、隐藏的幻灯片都不放
+  const visibleSlides = playableSlides(editor);
   const svg =
     options.layers === 'png'
       ? null

@@ -1,5 +1,5 @@
 import { slides } from '@shiba/core';
-import type { Editor } from '@shiba/editor';
+import { playableSlides, type Editor } from '@shiba/editor';
 
 /** 导出视频的设置和可选的档位。对话框只用到这些，录制和编码在 video.ts 里，用到时才加载 */
 
@@ -50,6 +50,6 @@ export function videoSize(
 
 /** 第一页幻灯片的大小，视频的画面比例按它定；没有幻灯片时返回 null */
 export function firstSlideSize(editor: Editor): { width: number; height: number } | null {
-  const first = slides(editor.store).find((slide) => slide.visible);
+  const first = playableSlides(editor)[0];
   return first ? { width: first.size[0], height: first.size[1] } : null;
 }

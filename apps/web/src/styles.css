@@ -2650,3 +2650,193 @@ button.template-card:hover,
 .section-floated:hover {
   color: var(--text);
 }
+
+/* ───────── 图层面板：搜索、折叠、锁、拖动 ───────── */
+
+.layers-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.layers-search {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin: 6px 8px 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+}
+
+.layers-search .field-input {
+  height: 24px;
+  color: var(--text);
+}
+
+.layers-list:focus {
+  outline: none;
+}
+
+.layers-list:focus-visible .layer-row.is-selected {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.layer-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.layer-toggle:disabled {
+  cursor: default;
+}
+
+.layer-badge {
+  flex: none;
+  color: var(--accent);
+}
+
+.layer-lock {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.layer-row:hover .layer-lock,
+.layer-lock.is-on,
+.layer-lock:focus-visible {
+  opacity: 1;
+}
+
+.layer-row.is-locked .layer-name {
+  color: var(--text-dim);
+}
+
+.layer-main {
+  touch-action: none;
+}
+
+.layer-row.is-drop-above {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.layer-row.is-drop-below {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.layer-row.is-drop-into {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* ───────── 幻灯片条：多选、拖动、插入、标记、网格 ───────── */
+
+.panel.slide-strip {
+  container-type: inline-size;
+}
+
+.slide-list:focus {
+  outline: none;
+}
+
+.slide-thumb {
+  touch-action: none;
+}
+
+.slide.is-picked .slide-thumb {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.slide.is-skipped .slide-thumb canvas {
+  opacity: 0.4;
+}
+
+.slide-number {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.slide-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  margin-top: 4px;
+  color: var(--text-dim);
+}
+
+.slide.is-drop-before {
+  box-shadow: 0 -2px 0 var(--accent);
+}
+
+.slide.is-drop-after {
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+.slide-insert {
+  position: absolute;
+  left: calc(50% + 12px);
+  bottom: -8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--text);
+  transform: translateX(-50%);
+  opacity: 0;
+}
+
+.slide:hover .slide-insert,
+.slide-insert:focus-visible {
+  opacity: 1;
+}
+
+.slide-insert:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 面板拖宽到放得下两列时排成网格，相当于"幻灯片浏览" */
+@container (min-width: 380px) {
+  .slide-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    align-content: start;
+    gap: 4px;
+  }
+
+  .slide.is-drop-before {
+    box-shadow: -2px 0 0 var(--accent);
+  }
+
+  .slide.is-drop-after {
+    box-shadow: 2px 0 0 var(--accent);
+  }
+}

@@ -82,6 +82,9 @@ export const COMMAND_LABELS: Record<string, string> = {
   'node.unlockAll': 'menu.unlockAll',
   'node.showAll': 'menu.showAll',
   'image.resetRatio': 'menu.resetRatio',
+  'artboard.toggleSkip': 'menu.hideSlide',
+  'node.moveTo': 'menu.moveLayers',
+  'artboard.reorder': 'menu.reorderSlides',
 
   'text.toggle|"bold"': 'text.bold',
   'text.toggle|"italic"': 'text.italic',

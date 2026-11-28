@@ -254,6 +254,8 @@ export interface SlideDeck {
   transition?: SlideTransition;
   /** 这一页的动画，按播放顺序排列。省略表示没有动画 */
   animations?: readonly SlideAnimation[];
+  /** 隐藏幻灯片：演示、导出网页和视频时跳过，编辑时照常显示。省略表示不隐藏 */
+  skip?: boolean;
 }
 
 export interface ArtboardNode extends BaseNode {
