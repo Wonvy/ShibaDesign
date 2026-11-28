@@ -665,6 +665,14 @@
       "quote": "在这里写一句想让人记住的话",
       "number": "01",
       "image": "图片"
+    },
+    "clipboard": {
+      "assetsMissing": "有 {{count}} 张图片没能一起复制过来（太大），粘贴后显示不出来",
+      "invalid": "剪贴板里的内容读不出来，可能来自更新的版本或者已经损坏",
+      "readDenied": "读不到剪贴板。请用 ⌘V（Windows 上是 Ctrl+V）粘贴，或者在浏览器里允许这个网站读取剪贴板",
+      "writeFailed": "写入剪贴板失败",
+      "copiedPng": "已复制为 PNG",
+      "copiedSvg": "已复制为 SVG 代码"
     }
   }
 }

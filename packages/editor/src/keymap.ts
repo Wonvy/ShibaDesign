@@ -71,6 +71,8 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: 'delete', command: 'edit.delete' },
   { key: 'backspace', command: 'edit.delete' },
   { key: 'mod+d', command: 'edit.duplicate' },
+  { key: 'mod+alt+c', command: 'edit.copyProperties' },
+  { key: 'mod+alt+v', command: 'edit.pasteProperties' },
   { key: 'mod+g', command: 'group.create' },
   { key: 'mod+shift+g', command: 'group.release' },
   { key: 'shift+h', command: 'arrange.flip', args: 'horizontal' },

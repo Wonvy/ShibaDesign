@@ -16,6 +16,7 @@ import { createGroup, releaseGroup } from './group';
 import { placeImage, setImageFill } from './image';
 import { createMask, releaseMask, setMaskMode } from './mask';
 import { offsetPath, outlineStroke, outlineText } from './path';
+import { copyProperties, pasteProperties } from './properties';
 import {
   addColorStyle,
   addTextStyle,
@@ -92,7 +93,9 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(redefineTextStyle)
     .register(removeTextStyle)
     .register(applyTextStyleCommand)
-    .register(detachTextStyle);
+    .register(detachTextStyle)
+    .register(copyProperties)
+    .register(pasteProperties);
 }
 
 export type { Command } from './command';
@@ -105,6 +108,7 @@ export { isMaskNode } from './mask';
 export { mainOf } from './component';
 export type { PlaceInstanceArgs } from './component';
 export { selectionColor } from './style';
+export { hasCopiedProperties } from './properties';
 export type {
   AddColorStyleArgs,
   AddTextStyleArgs,

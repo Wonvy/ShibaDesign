@@ -7,6 +7,7 @@ import { Inspector } from './components/Inspector';
 import { Sidebar } from './components/Sidebar';
 import { SlideStrip } from './components/SlideStrip';
 import { TopBar } from './components/TopBar';
+import { installClipboard } from './clipboard';
 import { createApp } from './editor/bootstrap';
 import { EditorProvider, useEditor, useEditorState } from './editor/context';
 import { Presenter } from './present/Presenter';
@@ -25,6 +26,8 @@ function Workspace(): ReactNode {
     setPresenting(Math.max(0, index));
   }, [editor]);
   const stop = useCallback(() => setPresenting(null), []);
+
+  useEffect(() => installClipboard(editor), [editor]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

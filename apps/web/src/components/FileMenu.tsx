@@ -3,17 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Editor } from '@shiba/editor';
 import { useEditor } from '../editor/context';
-import {
-  exportHtml,
-  exportPdf,
-  exportImage,
-  isImageFile,
-  openDocument,
-  placeImageFiles,
-  saveDocument,
-  saveDocumentAs,
-  useFileState,
-} from '../files';
+import { exportHtml, exportPdf, exportImage, openDocument, saveDocument, saveDocumentAs, useFileState } from '../files';
 import { Menu } from '../ui/Menu';
 import { ExportSvgDialog } from './ExportSvgDialog';
 import { ExportVideoDialog } from './ExportVideoDialog';
@@ -57,14 +47,10 @@ const GROUPS: Item[][] = [
   ],
 ];
 
-function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
-}
-
 /**
- * 文件相关的全局快捷键和粘贴图片。
+ * 文件相关的全局快捷键。
  * 这些快捷键在输入框里也要生效（否则会弹出浏览器自己的"保存网页"），所以单独监听，不走编辑器的快捷键表。
+ * 粘贴图片和文件在 clipboard.ts 里
  */
 function useFileShortcuts(editor: Editor, actions: MenuActions): void {
   useEffect(() => {
@@ -77,20 +63,8 @@ function useFileShortcuts(editor: Editor, actions: MenuActions): void {
       event.preventDefault();
       item.run(editor, actions);
     };
-    const onPaste = (event: ClipboardEvent): void => {
-      // 正在输入文字时，粘贴交给输入框自己处理
-      if (isEditable(event.target)) return;
-      const images = [...(event.clipboardData?.files ?? [])].filter(isImageFile);
-      if (images.length === 0) return;
-      event.preventDefault();
-      void placeImageFiles(editor, images);
-    };
     window.addEventListener('keydown', onKeyDown, true);
-    document.addEventListener('paste', onPaste);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown, true);
-      document.removeEventListener('paste', onPaste);
-    };
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [editor, actions]);
 }
 

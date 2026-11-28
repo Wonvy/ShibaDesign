@@ -665,6 +665,14 @@
       "quote": "Write something memorable here",
       "number": "01",
       "image": "Image"
+    },
+    "clipboard": {
+      "assetsMissing": "{{count}} image(s) were too large to copy along and won't show after pasting",
+      "invalid": "The clipboard content can't be read. It may come from a newer version or be damaged",
+      "readDenied": "Can't read the clipboard. Paste with ⌘V (Ctrl+V on Windows), or allow this site to read the clipboard in your browser",
+      "writeFailed": "Couldn't write to the clipboard",
+      "copiedPng": "Copied as PNG",
+      "copiedSvg": "Copied as SVG code"
     }
   }
 }

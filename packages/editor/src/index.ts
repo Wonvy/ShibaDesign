@@ -21,3 +21,4 @@ export * from './resize';
 export * from './ops';
 export * from './fill-handles';
 export * from './motion-handles';
+export * from './clipboard';
