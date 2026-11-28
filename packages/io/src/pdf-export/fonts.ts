@@ -1,6 +1,6 @@
 import { ContentStream } from './content';
 import { PdfString, formatNumber, latin1, pdfName, type PdfRef, type PdfValue, type PdfWriter } from './objects';
-import { subsetTrueType, type SfntFont } from './sfnt';
+import { subsetTrueType, type SfntFont } from '../font/sfnt';
 
 /**
  * 往 PDF 里嵌字体。

@@ -216,6 +216,21 @@ export class FontManager {
     };
   }
 
+  /**
+   * 几个家族里所有已经加载的字体文件（每个分片按字重挑一个），按家族的顺序排列。
+   * 导出时认字体文件用：有的字不在分片声明的区间里，排版引擎却从别的分片里找到了它
+   */
+  loadedFaces(families: readonly string[], weight: number, italic = false): LoadedFace[] {
+    const out: LoadedFace[] = [];
+    for (const name of families) {
+      for (const chunk of this.families.get(name)?.chunks ?? []) {
+        const face = this.loadedFace(chunk.skFamily, weight, italic);
+        if (face) out.push(face);
+      }
+    }
+    return out;
+  }
+
   /** 字体文件加载完成时通知。同一时刻完成的多个文件只通知一次 */
   onChange(listener: () => void): () => void {
     this.listeners.add(listener);

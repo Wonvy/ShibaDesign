@@ -37,7 +37,8 @@ import {
   type Camera,
   type FrameStats,
 } from '@shiba/renderer';
-import type { PdfExportOptions } from '@shiba/renderer/pdf';
+import type { PdfExportContext, PdfExportOptions } from '@shiba/renderer/pdf';
+import type { SvgExportOptions, SvgLayers } from '@shiba/renderer/svg';
 import { CommandRegistry } from './commands/command';
 import { InputController } from './input';
 import { DEFAULT_BINDINGS, Keymap } from './keymap';
@@ -630,23 +631,41 @@ export class Editor {
       import('@shiba/renderer/pdf'),
       ...artboards.map((id) => this.fontsReady(id)),
     ]);
-    return exportPdf(
-      {
-        ck: this.ck,
-        store: this.store,
-        registry: this.nodeTypes,
-        geometry: this.geometry,
-        layouts: this.textLayouts,
-        fonts: this.fonts,
-        appearances: this.textAppearances,
-        images: this.images,
-        assets: this.assets,
-        // 不知道怎么写成矢量的节点画成两倍图放进去
-        rasterize: (node) => this.rasterize(node.id, 2),
-      },
-      artboards,
-      options,
-    );
+    return exportPdf(this.exportContext(), artboards, options);
+  }
+
+  /** 把一个画板导出成 SVG 文件的内容。见渲染器的 svg.ts */
+  async exportSvg(artboard: NodeId, options: SvgExportOptions): Promise<string> {
+    const [{ exportSvg }] = await Promise.all([import('@shiba/renderer/svg'), this.fontsReady(artboard)]);
+    return exportSvg(this.exportContext(), artboard, options);
+  }
+
+  /**
+   * 把一批节点各自写成可以内联进网页的 SVG，网页播放器用它们当图层。用完要 dispose
+   */
+  async svgLayers(nodes: readonly NodeId[]): Promise<SvgLayers> {
+    const [{ SvgLayers }] = await Promise.all([
+      import('@shiba/renderer/svg'),
+      ...nodes.map((id) => this.fontsReady(id)),
+    ]);
+    return SvgLayers.create(this.exportContext(), nodes);
+  }
+
+  /** 导出 PDF、SVG 共用的上下文 */
+  private exportContext(): PdfExportContext {
+    return {
+      ck: this.ck,
+      store: this.store,
+      registry: this.nodeTypes,
+      geometry: this.geometry,
+      layouts: this.textLayouts,
+      fonts: this.fonts,
+      appearances: this.textAppearances,
+      images: this.images,
+      assets: this.assets,
+      // 不知道怎么写成矢量的节点画成两倍图放进去
+      rasterize: (node) => this.rasterize(node.id, 2),
+    };
   }
 
   /** snapshot 的同步部分：字体已经加载好时直接画 */

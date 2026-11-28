@@ -1,10 +1,10 @@
 import { unzlibSync } from 'fflate';
 
 /**
- * 读 TrueType / OpenType 字体文件，供导出 PDF 时嵌入字体。
+ * 读 TrueType / OpenType 字体文件，供导出 PDF、SVG 时嵌入字体。
  *
  * 只读嵌入需要的那几项：字形个数、每个字形的宽度、字体的上下沿和外框、名字，
- * 以及按用到的字形做子集（只留下用到的字形轮廓，PDF 小很多）。
+ * 以及按用到的字形做子集（只留下用到的字形轮廓，文件小很多）。
  * 字体文件来自字体包或者用户导入，按不可信输入处理：越界时抛错，由调用方改用别的办法。
  */
 
@@ -97,7 +97,7 @@ function checksum(data: Uint8Array): number {
 }
 
 /** 按表拼出字体文件。checksum 为空时现算；head 表里的整体校验值最后补上 */
-function buildSfnt(flavor: number, input: { tag: string; data: Uint8Array; checksum?: number }[]): Uint8Array {
+export function buildSfnt(flavor: number, input: { tag: string; data: Uint8Array; checksum?: number }[]): Uint8Array {
   const tables = [...input].sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0));
   const count = tables.length;
   let total = 12 + count * 16;
@@ -244,11 +244,20 @@ function postscriptName(bytes: Uint8Array, view: DataView, name: SfntTable | und
 /** 子集里保留的表。PDF 阅读器画 TrueType 字形只用得到这些；排版用的 GSUB、GPOS 之类都不要 */
 const KEEP_TABLES = ['head', 'hhea', 'hmtx', 'maxp', 'cvt ', 'fpgm', 'prep', 'cmap', 'OS/2', 'post', 'name'];
 
+export interface SubsetOptions {
+  /**
+   * 去掉 post 表里的字形名（改成 3.0 版）。字形名只在打印到 PostScript 设备时有用，
+   * 一个西文字体的字形名能有好几十 KB。PDF 阅读器有时靠它认字，所以只给网页字体用
+   */
+  dropGlyphNames?: boolean;
+}
+
 /**
  * TrueType 字体的子集：只保留用到的字形（以及复合字形引用的部件），其余字形清空。
  * 字形编号保持不变，所以 PDF 里可以直接用原来的字形编号。
+ * 字符映射表（cmap）原样保留，没留下的字形映射到空字形；当网页字体用时要用 unicode-range 限定它负责的字。
  */
-export function subsetTrueType(font: SfntFont, glyphs: Iterable<number>): Uint8Array {
+export function subsetTrueType(font: SfntFont, glyphs: Iterable<number>, options: SubsetOptions = {}): Uint8Array {
   const { bytes, tables } = font;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const head = tables.get('head')!;
@@ -321,6 +330,11 @@ export function subsetTrueType(font: SfntFont, glyphs: Iterable<number>): Uint8A
       // 新的位置表一律用 4 字节的格式
       data = data.slice();
       new DataView(data.buffer).setInt16(50, 1);
+    }
+    if (tag === 'post' && options.dropGlyphNames && data.length >= 32) {
+      // 3.0 版只有 32 字节的头，没有字形名
+      data = data.slice(0, 32);
+      new DataView(data.buffer).setUint32(0, 0x00030000);
     }
     out.push({ tag, data });
   }

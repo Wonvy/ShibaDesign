@@ -14,7 +14,8 @@ import type { PlayerLayer, PlayerSlide, PresentationData } from '@shiba/player';
 
 /**
  * 把文档里的幻灯片"编译"成播放器能直接播的数据：
- * 每一页上的每个对象渲染成一张透明背景的图片（由和画布同一个渲染引擎生成，所以静态外观完全一致），
+ * 每一页上的每个对象写成一段 SVG（和导出 SVG 是同一套代码）：矢量，放大播放也清晰，文字是真正的文字，
+ * 可以选中、复制、搜索；用到的字体做成子集，所有图层共用一份。写不成 SVG 的对象退回渲染成图片。
  * 动画列表排成带时刻和关键帧的步骤。
  */
 
@@ -24,7 +25,7 @@ export interface CompiledPresentation {
   dispose(): void;
 }
 
-/** 图层图片的倍率：两倍图，在普通和高分屏上放大播放都够清晰 */
+/** 退回成图片时的倍率：两倍图，在普通和高分屏上放大播放都够清晰 */
 const SNAPSHOT_SCALE = 2;
 
 function toDataUrl(bytes: Uint8Array): string {
@@ -51,51 +52,76 @@ export async function compilePresentation(
     return url;
   };
 
+  const visibleSlides = slides(store).filter((slide) => slide.visible);
+  const svg = await editor.svgLayers(
+    visibleSlides.flatMap((slide) =>
+      store
+        .children(slide.id)
+        .filter((node) => node.visible)
+        .map((node) => node.id),
+    ),
+  );
+
   const compiled: PlayerSlide[] = [];
-  for (const slide of slides(store)) {
-    if (!slide.visible) continue;
-    const layers: PlayerLayer[] = [];
-    const boxes = new Map<NodeId, Rect>();
-    for (const node of store.children(slide.id)) {
-      if (!node.visible) continue;
-      const snapshot = await editor.snapshot(node.id, SNAPSHOT_SCALE);
-      if (!snapshot) continue;
-      // 图片对应的是节点本地坐标里的 box；把"本地坐标 → 幻灯片"的变换平移到 box 的左上角
-      const m = multiply(node.transform, translation(snapshot.box.x, snapshot.box.y));
-      layers.push({
-        id: node.id,
-        key: node.lineageId,
-        src: toSrc(snapshot.png),
-        width: snapshot.box.w,
-        height: snapshot.box.h,
-        matrix: [m[0], m[1], m[2], m[3], m[4], m[5]],
-        blend: node.blendMode,
-        hidden: false,
+  let fonts = '';
+  try {
+    for (const slide of visibleSlides) {
+      const layers: PlayerLayer[] = [];
+      const boxes = new Map<NodeId, Rect>();
+      for (const node of store.children(slide.id)) {
+        if (!node.visible) continue;
+        let content: { svg?: string; src?: string; box: Rect } | null = null;
+        try {
+          content = svg.layer(node.id);
+        } catch (error) {
+          console.warn('[shiba] 图层写不成 SVG，改用图片', error);
+        }
+        if (!content) {
+          const snapshot = await editor.snapshot(node.id, SNAPSHOT_SCALE);
+          if (snapshot) content = { src: toSrc(snapshot.png), box: snapshot.box };
+        }
+        if (!content) continue;
+        // 内容对应的是节点本地坐标里的 box；把"本地坐标 → 幻灯片"的变换平移到 box 的左上角
+        const { box } = content;
+        const m = multiply(node.transform, translation(box.x, box.y));
+        layers.push({
+          id: node.id,
+          key: node.lineageId,
+          svg: content.svg,
+          src: content.src,
+          width: box.w,
+          height: box.h,
+          matrix: [m[0], m[1], m[2], m[3], m[4], m[5]],
+          blend: node.blendMode,
+          hidden: false,
+        });
+        boxes.set(node.id, transformRect(node.transform, editor.geometry.localBounds(node)));
+      }
+
+      const [width, height] = slide.size;
+      const schedule = scheduleAnimations(slide.deck?.animations ?? [], { slide: { width, height }, boxes });
+      const hidden = new Set(schedule.hiddenAtStart);
+      for (const layer of layers) layer.hidden = hidden.has(layer.id);
+
+      compiled.push({
+        width,
+        height,
+        background: !slide.fill
+          ? 'transparent'
+          : slide.fill.type === 'gradient'
+            ? gradientCss(slide.fill, width, height)
+            : toCssColor(slide.fill.color),
+        layers,
+        steps: schedule.steps.map((step) => step.map(({ target, ...rest }) => ({ layer: target, ...rest }))),
+        transition: slide.deck?.transition ?? { effect: 'none', duration: 0 },
       });
-      boxes.set(node.id, transformRect(node.transform, editor.geometry.localBounds(node)));
     }
-
-    const [width, height] = slide.size;
-    const schedule = scheduleAnimations(slide.deck?.animations ?? [], { slide: { width, height }, boxes });
-    const hidden = new Set(schedule.hiddenAtStart);
-    for (const layer of layers) layer.hidden = hidden.has(layer.id);
-
-    compiled.push({
-      width,
-      height,
-      background: !slide.fill
-        ? 'transparent'
-        : slide.fill.type === 'gradient'
-          ? gradientCss(slide.fill, width, height)
-          : toCssColor(slide.fill.color),
-      layers,
-      steps: schedule.steps.map((step) => step.map(({ target, ...rest }) => ({ layer: target, ...rest }))),
-      transition: slide.deck?.transition ?? { effect: 'none', duration: 0 },
-    });
+    fonts = svg.fontCss();
+  } finally {
+    svg.dispose();
   }
-
   return {
-    data: { title, slides: compiled },
+    data: { title, slides: compiled, fonts: fonts || undefined },
     dispose: () => urls.forEach((url) => URL.revokeObjectURL(url)),
   };
 }

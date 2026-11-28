@@ -13,6 +13,5 @@ export {
   type StreamOptions,
 } from './objects';
 export { ContentStream } from './content';
-export { FontFormatError, parseSfnt, subsetTrueType, toSfnt, type SfntFont } from './sfnt';
 export { EmbeddedFont, OutlineFont, TYPE3_CAPACITY, subsetTag, type OutlineGlyph } from './fonts';
 export { jpegInfo, writeJpeg, writeRgbaImage, type JpegInfo, type RgbaImage } from './images';

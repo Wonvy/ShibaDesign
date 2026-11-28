@@ -1,12 +1,9 @@
-import type { CanvasKit, GlyphRun as SkGlyphRun, Image, Path, Typeface } from 'canvaskit-wasm';
+import type { CanvasKit, Image } from 'canvaskit-wasm';
 import {
   gradientGeometry,
-  hasLiveAppearance,
   hasShapeStyle,
   normalizeStops,
   radialEllipseMatrix,
-  styleOfChar,
-  type CharacterStyle,
   invert,
   maskParts,
   multiply,
@@ -39,13 +36,17 @@ import {
   type PdfDict,
   type PdfRef,
 } from '@shiba/io';
-import { adjustmentMatrix } from './adjust';
+import { bakeImage, bakePlan } from './bake';
 import type { GeometryCache } from './geometry';
 import { placeImage, type ImageCache } from './images';
 import { isPlainShape, type NodeTypeDef, type NodeTypeRegistry } from './node-types';
+import { toPathData } from './path-data';
 import type { TextAppearances } from './text/appearance';
 import type { FontManager, LoadedFace } from './text/fonts';
 import type { TextLayouts } from './text/layout';
+import { TextShaper, type ShapedText } from './text/shaped';
+
+export { toPathData } from './path-data';
 
 /**
  * 把画板导出成矢量 PDF，每个画板一页。
@@ -115,45 +116,6 @@ interface Paint {
   blend: BlendMode;
 }
 
-/** 下划线或删除线：一条横线，y 是线的中心，坐标同字的位置 */
-interface DecorationLine {
-  x0: number;
-  x1: number;
-  y: number;
-  thickness: number;
-}
-
-/** 排好版的一段字：同一个字体文件、同一个字号、同一种样式 */
-interface ShapedRun {
-  face: string;
-  size: number;
-  glyphs: Uint16Array;
-  /** 每个字的位置 x0, y0, x1, y1……（节点本地坐标，y 是基线） */
-  positions: Float32Array;
-  /** 每个字代表的文字；一个字代表多个字符（连字）或者几个字合起来代表一个字符时，只有第一个有 */
-  text: string[];
-  /** 文字颜色；null 表示不画 */
-  color: Color | null;
-  /** 下划线、删除线。排版引擎给的结果里没有它们，按字体里记的位置和粗细自己画 */
-  lines: DecorationLine[];
-  /** 字体没有斜体文件时排版引擎把字形斜切成斜体（中文字体常见），这里是斜切量，0 表示没有 */
-  skew: number;
-  /** 字体没有粗体文件时排版引擎把字形描粗，这里是描边的宽度，0 表示没有 */
-  embolden: number;
-}
-
-/** 排版引擎模拟斜体时的斜切量，和 Skia 的一致 */
-const FAKE_ITALIC_SKEW = 0.25;
-
-/** 排版引擎模拟粗体时描边的宽度：9 号字是字号的 1/24，36 号字是 1/32，中间按字号插值（和 Skia 一致） */
-function fakeBoldWidth(size: number): number {
-  const t = Math.max(0, Math.min(1, (size - 9) / (36 - 9)));
-  return size * (1 / 24 + (1 / 32 - 1 / 24) * t);
-}
-
-/** 文字怎么写：按排版结果写字，或者因为拿不到字体文件只能画成图片 */
-type ShapedText = { runs: ShapedRun[] } | 'raster';
-
 /** 导出一组画板，返回 PDF 文件的字节 */
 export async function exportPdf(
   context: PdfExportContext,
@@ -182,14 +144,14 @@ class PdfExporter {
   /** 字形库 → 用它的字形做的 Type3 字体（一个字体只能放 256 个字形，所以可能有好几个） */
   private readonly outlineFonts = new Map<string, { name: string; ref: PdfRef; font: OutlineFont }[]>();
   private readonly shaped = new Map<NodeId, ShapedText>();
-  /** 认字体文件用的 Skia 字体，导出完释放 */
-  private readonly typefaces = new Map<string, Typeface | null>();
+  private readonly shaper: TextShaper;
   private counter = 0;
   /** 当前页面用到了透明度或混合模式 */
   private transparent = false;
 
   constructor(private readonly c: PdfExportContext) {
     this.resourcesRef = this.writer.alloc();
+    this.shaper = new TextShaper(c.ck, c.layouts, c.fonts, c.appearances);
   }
 
   async run(artboards: readonly NodeId[], options: PdfExportOptions): Promise<Uint8Array> {
@@ -223,8 +185,7 @@ class PdfExporter {
   }
 
   dispose(): void {
-    for (const typeface of this.typefaces.values()) typeface?.delete();
-    this.typefaces.clear();
+    this.shaper.dispose();
   }
 
   // ───────────── 页面与节点 ─────────────
@@ -607,75 +568,35 @@ class PdfExporter {
     scale: number,
   ): { name: string; width: number; height: number; pad: number } | null {
     const { ck } = this.c;
-    const matrix = adjustmentMatrix(fill.adjust);
-    const sigma = Math.max(0, fill.adjust?.blur ?? 0) / 2 / Math.max(scale, 1e-6);
-    const blurred = sigma > 0.01;
-    const pad = blurred && fill.fit === 'contain' ? Math.ceil(sigma * 3) : 0;
-    const width = image.width() + pad * 2;
-    const height = image.height() + pad * 2;
-    const key = `${fill.assetId}|${matrix?.join(',') ?? ''}|${blurred ? `${sigma.toFixed(2)}|${fill.fit}` : ''}`;
-    const cached = this.imageNames.get(key);
-    if (cached) return { name: cached, width, height, pad };
+    const plan = bakePlan(fill, image, scale);
+    const width = image.width() + plan.pad * 2;
+    const height = image.height() + plan.pad * 2;
+    const cached = this.imageNames.get(plan.key);
+    if (cached) return { name: cached, width, height, pad: plan.pad };
 
     let ref: PdfRef | null = null;
-    if (!matrix && !blurred && this.c.assets.meta(fill.assetId)?.mime === 'image/jpeg') {
+    if (!plan.matrix && plan.sigma === 0 && this.c.assets.meta(fill.assetId)?.mime === 'image/jpeg') {
       const bytes = this.c.assets.get(fill.assetId);
       if (bytes) ref = writeJpeg(this.writer, bytes);
     }
     if (!ref) {
-      let source = image;
-      let surface = null;
-      if (matrix || blurred) {
-        surface = ck.MakeSurface(width, height);
-        if (!surface) return null;
-        const canvas = surface.getCanvas();
-        canvas.clear(ck.TRANSPARENT);
-        // 和画布上一样用图片着色器填满一个矩形，而不是 drawImage：
-        // 实测 drawImage 加模糊时，半透明的边缘颜色会被多乘一次透明度，变成一圈暗边
-        const paint = new ck.Paint();
-        paint.setColor(ck.Color4f(1, 1, 1, 1));
-        const tile = fill.fit === 'contain' ? ck.TileMode.Decal : ck.TileMode.Clamp;
-        const shader = image.makeShaderOptions(tile, tile, ck.FilterMode.Linear, ck.MipmapMode.None, [
-          1,
-          0,
-          pad,
-          0,
-          1,
-          pad,
-          0,
-          0,
-          1,
-        ]);
-        const colorFilter = matrix ? ck.ColorFilter.MakeMatrix(matrix) : null;
-        const blur = blurred ? ck.ImageFilter.MakeBlur(sigma, sigma, tile, null) : null;
-        paint.setShader(shader);
-        paint.setColorFilter(colorFilter);
-        paint.setImageFilter(blur);
-        canvas.drawRect(ck.LTRBRect(0, 0, width, height), paint);
-        paint.delete();
-        shader.delete();
-        colorFilter?.delete();
-        blur?.delete();
-        source = surface.makeImageSnapshot();
-      }
-      const pixels = source.readPixels(0, 0, {
+      const baked = bakeImage(ck, fill, image, scale);
+      if (!baked) return null;
+      const pixels = baked.image.readPixels(0, 0, {
         width,
         height,
         colorType: ck.ColorType.RGBA_8888,
         alphaType: ck.AlphaType.Unpremul,
         colorSpace: ck.ColorSpace.SRGB,
       });
-      if (surface) {
-        source.delete();
-        surface.delete();
-      }
+      baked.dispose();
       if (!pixels) return null;
       ref = writeRgbaImage(this.writer, { width, height, pixels: pixels as Uint8Array });
     }
     const name = `I${this.imageNames.size + 1}`;
-    this.imageNames.set(key, name);
+    this.imageNames.set(plan.key, name);
     this.xobjects[name] = ref;
-    return { name, width, height, pad };
+    return { name, width, height, pad: plan.pad };
   }
 
   /** 画成图片放进去 */
@@ -717,9 +638,11 @@ class PdfExporter {
     const needed = new Map<string, LoadedFace>();
     const visit = (node: SceneNode): void => {
       if (!node.visible) return;
-      if (node.type === 'text') {
-        const shaped = this.shape(node, needed);
-        if (shaped) this.shaped.set(node.id, shaped);
+      // 按保真外观显示的文字用原文件的字形，不需要排版
+      if (node.type === 'text' && !this.shaper.frozen(node)) {
+        const shaped = this.shaper.shape(node);
+        this.shaped.set(node.id, shaped);
+        if (shaped !== 'raster') for (const run of shaped.runs) needed.set(run.face.key, run.face);
       }
       for (const child of this.c.store.children(node.id)) visit(child);
     };
@@ -740,90 +663,20 @@ class PdfExporter {
         }
       }),
     );
-    // 有字体文件取不到的文字只能画成图片
-    if (failed.size > 0) {
-      for (const [id, shaped] of this.shaped) {
-        if (shaped !== 'raster' && shaped.runs.some((run) => failed.has(run.face))) this.shaped.set(id, 'raster');
+    for (const [id, shaped] of this.shaped) {
+      if (shaped === 'raster') continue;
+      // 有字体文件取不到的文字只能画成图片
+      if (shaped.runs.some((run) => failed.has(run.face.key))) {
+        this.shaped.set(id, 'raster');
+        continue;
       }
+      // 字形编号按嵌入的字体文件对一遍，见 TextShaper.remapToEmbedded
+      for (const run of shaped.runs) this.shaper.remapToEmbedded(run, this.embedded.get(run.face.key)!.font.font.bytes);
     }
-  }
-
-  /** 排版一个文本节点，记下每段字的字体文件。按保真外观显示的文字不需要 */
-  private shape(node: TextNode, needed: Map<string, LoadedFace>): ShapedText | null {
-    if (hasLiveAppearance(node) && this.frozenReady(node)) return null;
-    const { ck, fonts } = this.c;
-    const toUtf16 = utf8Offsets(node.text);
-    const runs: ShapedRun[] = [];
-    for (const line of this.c.layouts.get(node).paragraph.getShapedLines()) {
-      for (const run of line.runs) {
-        const typeface = run.typeface as Typeface | null;
-        const count = run.glyphs.length;
-        const text: string[] = [];
-        for (let i = 0; i < count; i++) {
-          const from = toUtf16.get(run.offsets[i]!);
-          const to = toUtf16.get(run.offsets[i + 1]!);
-          text.push(from !== undefined && to !== undefined && to > from ? node.text.slice(from, to) : '');
-        }
-        // 这段字的样式（同一段字的样式一定相同，排版引擎在样式变化处会断开）
-        const style = styleOfChar(node, toUtf16.get(run.offsets[0]!) ?? 0);
-        const families = [style.fontFamily.latin, style.fontFamily.cjk];
-        const names = fonts.resolve(families, text.join(''), style.fontWeight, style.italic).names;
-        const face = this.identify(run, text.join(''), names, style.fontWeight, style.italic);
-        const lines = style.underline || style.strikethrough ? decorationLines(ck, run, style) : [];
-        typeface?.delete();
-        if (!face) return 'raster';
-        needed.set(face.key, face);
-        runs.push({
-          face: face.key,
-          size: run.size,
-          glyphs: Uint16Array.from(run.glyphs.subarray(0, count)),
-          positions: Float32Array.from(run.positions.subarray(0, count * 2)),
-          text,
-          color: style.color,
-          lines,
-          // 排版结果里的 fakeItalic 在 0.42 版里没有填，按"要斜体但字体文件不是斜体"推断
-          skew: run.fakeItalic || (style.italic && !face.italic) ? FAKE_ITALIC_SKEW : 0,
-          embolden: run.fakeBold ? fakeBoldWidth(run.size) : 0,
-        });
-      }
-    }
-    return { runs };
-  }
-
-  /**
-   * 认出一段排好的字用的是哪个字体文件。排版引擎给的结果里有它用的字体，但认不出是哪个文件；
-   * 所以拿这段字在这个字体里的字形编号，和每个候选文件比，编号完全一样的就是它。
-   * 同一个家族的不同分片覆盖不同的字，所以几乎不会认错；真有几个都一样，取排在前面的，排版引擎也是这么选的。
-   */
-  private identify(
-    run: SkGlyphRun,
-    text: string,
-    names: readonly string[],
-    weight: number,
-    italic: boolean,
-  ): LoadedFace | null {
-    const actual = (run.typeface as Typeface | null)?.getGlyphIDs(text) ?? null;
-    let fallback: LoadedFace | null = null;
-    for (const name of names) {
-      const face = this.c.fonts.loadedFace(name, weight, italic);
-      if (!face) continue;
-      fallback ??= face;
-      if (!actual) return face;
-      const typeface = this.typeface(face);
-      if (typeface && sameIds(typeface.getGlyphIDs(text), actual)) return face;
-    }
-    return fallback;
-  }
-
-  private typeface(face: LoadedFace): Typeface | null {
-    if (!this.typefaces.has(face.key)) {
-      this.typefaces.set(face.key, this.c.ck.Typeface.MakeTypefaceFromData(face.bytes.slice(0)));
-    }
-    return this.typefaces.get(face.key) ?? null;
   }
 
   private drawText(content: ContentStream, node: TextNode, paint: Paint): void {
-    if (hasLiveAppearance(node) && this.frozenReady(node)) {
+    if (this.shaper.frozen(node)) {
       if (node.fill) this.drawFrozenText(content, node, node.fill.color, paint);
       return;
     }
@@ -839,7 +692,7 @@ class PdfExporter {
     const textState: TextState = { spacing: 0 };
     const setColor = this.colorSetter(content, paint);
     for (const run of shaped.runs) {
-      const embedded = this.embedded.get(run.face);
+      const embedded = this.embedded.get(run.face.key);
       if (!embedded || !run.color) continue;
       setColor(run.color);
       const { font } = embedded;
@@ -886,11 +739,6 @@ class PdfExporter {
       if (state) content.graphicsState(state);
       content.fillColor(color);
     };
-  }
-
-  /** 保真外观用到的字形库都在 */
-  private frozenReady(node: TextNode): boolean {
-    return node.appearance!.runs.every((run) => this.c.appearances.library(run.library) !== null);
   }
 
   /** 按原文件的字形写字：字形做成 Type3 字体，每个字放在原来的位置 */
@@ -1057,33 +905,6 @@ function commonGap(gaps: readonly number[]): number {
 }
 
 /**
- * 一段字的下划线和删除线。位置和粗细取字体里记的值，没有时按字号估计，和排版引擎的做法一致：
- * 下划线在基线下方，删除线大约在小写字母的中间。线从第一个字的起点画到最后一个字的终点
- */
-function decorationLines(ck: CanvasKit, run: SkGlyphRun, style: CharacterStyle): DecorationLine[] {
-  const count = run.glyphs.length;
-  if (count === 0) return [];
-  const font = new ck.Font(run.typeface as Typeface | null, run.size);
-  const metrics = font.getMetrics();
-  font.delete();
-  const x0 = run.positions[0]!;
-  const x1 = run.positions[count * 2]!;
-  const baseline = run.positions[1]!;
-  const lines: DecorationLine[] = [];
-  if (style.underline) {
-    const thickness = metrics.underlineThickness || run.size / 14;
-    const position = metrics.underlinePosition && metrics.underlinePosition > 0 ? metrics.underlinePosition : thickness;
-    lines.push({ x0, x1, y: baseline + position + thickness / 2, thickness });
-  }
-  if (style.strikethrough) {
-    const thickness = metrics.strikeoutThickness || run.size / 14;
-    const position = metrics.strikeoutPosition ?? -run.size * 0.3;
-    lines.push({ x0, x1, y: baseline + position + thickness / 2, thickness });
-  }
-  return lines;
-}
-
-/**
  * 色标 → PDF 的函数：相邻两个色标之间是一段直线过渡（指数为 1 的插值函数），几段拼起来（拼接函数）。
  * 第一个色标之前、最后一个之后延续首尾的颜色；两个色标在同一位置（硬过渡）就是两段的分界
  */
@@ -1116,70 +937,7 @@ function stopFunction(stops: readonly GradientStop[], channels: (color: Color) =
   };
 }
 
-function sameIds(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
-
-/** UTF-8 字节偏移 → JavaScript 字符串下标。排版引擎给的字符位置是前者 */
-function utf8Offsets(text: string): Map<number, number> {
-  const map = new Map<number, number>();
-  let bytes = 0;
-  let index = 0;
-  for (const char of text) {
-    map.set(bytes, index);
-    const cp = char.codePointAt(0)!;
-    bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
-    index += char.length;
-  }
-  map.set(bytes, index);
-  return map;
-}
-
 function paintCount(node: SceneNode): number {
   if (!hasShapeStyle(node)) return 0;
   return (node.fill ? 1 : 0) + (node.stroke && node.stroke.width > 0 ? 1 : 0);
-}
-
-/**
- * Skia 路径 → 导入器用的那种路径数据（0 移动、1 直线、2 三次、3 二次、4 闭合）。
- * Skia 的椭圆和圆角用的是圆锥曲线，PDF 没有，换成三次曲线：
- * 对 90° 的圆弧这正是通常画圆用的那组控制点，对更小的弧误差也远小于一个像素。
- */
-export function toPathData(ck: CanvasKit, path: Path): number[] {
-  const cmds = path.toCmds();
-  const out: number[] = [];
-  let x = 0;
-  let y = 0;
-  for (let i = 0; i < cmds.length;) {
-    const verb = cmds[i++]!;
-    if (verb === ck.MOVE_VERB || verb === ck.LINE_VERB) {
-      x = cmds[i++]!;
-      y = cmds[i++]!;
-      out.push(verb === ck.MOVE_VERB ? 0 : 1, x, y);
-    } else if (verb === ck.QUAD_VERB) {
-      out.push(3, cmds[i]!, cmds[i + 1]!, cmds[i + 2]!, cmds[i + 3]!);
-      x = cmds[i + 2]!;
-      y = cmds[i + 3]!;
-      i += 4;
-    } else if (verb === ck.CONIC_VERB) {
-      const [cx, cy, ex, ey, w] = [cmds[i]!, cmds[i + 1]!, cmds[i + 2]!, cmds[i + 3]!, cmds[i + 4]!];
-      i += 5;
-      const k = (4 * w) / (3 * (1 + w));
-      out.push(2, x + k * (cx - x), y + k * (cy - y), ex + k * (cx - ex), ey + k * (cy - ey), ex, ey);
-      x = ex;
-      y = ey;
-    } else if (verb === ck.CUBIC_VERB) {
-      out.push(2, cmds[i]!, cmds[i + 1]!, cmds[i + 2]!, cmds[i + 3]!, cmds[i + 4]!, cmds[i + 5]!);
-      x = cmds[i + 4]!;
-      y = cmds[i + 5]!;
-      i += 6;
-    } else if (verb === ck.CLOSE_VERB) {
-      out.push(4);
-    } else {
-      break;
-    }
-  }
-  return out;
 }

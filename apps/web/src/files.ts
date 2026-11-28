@@ -19,6 +19,7 @@ import {
   ShibaFileError,
   packShiba,
   unpackShiba,
+  zipFiles,
   type PdfIssues,
 } from '@shiba/io';
 import { buildPresentationHtml } from '@shiba/player';
@@ -101,6 +102,10 @@ const MAX_PDF_BYTES = 512 * 1024 * 1024;
 const PNG_TYPES: PickerType[] = [{ description: 'PNG', accept: { 'image/png': ['.png'] } }];
 const HTML_TYPES: PickerType[] = [{ description: 'HTML', accept: { 'text/html': ['.html'] } }];
 const PDF_TYPES: PickerType[] = [{ description: 'PDF', accept: { [PDF_MIME]: [PDF_EXTENSION] } }];
+const SVG_MIME = 'image/svg+xml';
+const SVG_TYPES: PickerType[] = [{ description: 'SVG', accept: { [SVG_MIME]: ['.svg'] } }];
+const ZIP_MIME = 'application/zip';
+const ZIP_TYPES: PickerType[] = [{ description: 'ZIP', accept: { [ZIP_MIME]: ['.zip'] } }];
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/bmp';
 /** 图片长边超过这个值就在导入时缩小。解码后的图片整张放在内存和显存里，太大会拖垮整个画布 */
 const MAX_IMAGE_SIDE = 4096;
@@ -366,8 +371,8 @@ export async function exportHtml(editor: Editor): Promise<void> {
   }
 }
 
-/** 导出 PDF 的页面：先是幻灯片（按播放顺序），再是其余的画板 */
-function pdfPages(store: DocStore): NodeId[] {
+/** 导出全部画板时的顺序：先是幻灯片（按播放顺序），再是其余的画板 */
+function exportOrder(store: DocStore): NodeId[] {
   const ordered = slides(store).map((board) => board.id);
   const rest = artboards(store)
     .map((board) => board.id)
@@ -381,12 +386,12 @@ function pdfPages(store: DocStore): NodeId[] {
  * 而选择保存位置的对话框只能在用户刚点过菜单时弹出。
  */
 export async function exportPdf(editor: Editor): Promise<void> {
-  const pages = pdfPages(editor.store);
+  const pages = exportOrder(editor.store);
   if (pages.length === 0) {
     toast(t('file.noArtboards'), 'error');
     return;
   }
-  const title = (state.name ?? t('file.untitled')).replace(/\.(shiba|pdf)$/i, '');
+  const title = documentTitle();
   const name = `${title}.pdf`;
   let out: SaveHandle | null = null;
   try {
@@ -414,6 +419,94 @@ export async function exportPdf(editor: Editor): Promise<void> {
       return;
     }
     download(name, bytes, PDF_MIME);
+    toast(t('file.exported', { name }));
+  } catch (error) {
+    if (isAbort(error)) return;
+    console.error(error);
+    toast(t('file.saveFailed'), 'error');
+  }
+}
+
+/** 当前文档的标题：文件名去掉扩展名 */
+function documentTitle(): string {
+  return (state.name ?? t('file.untitled')).replace(/\.(shiba|pdf)$/i, '');
+}
+
+/** 文件名里不能出现的字符换成下划线 */
+function fileSafe(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  return name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || t('file.untitled');
+}
+
+export interface SvgExportChoice {
+  /** current：当前画板；all：全部画板，打包成 ZIP */
+  scope: 'current' | 'all';
+  /** text：保留成文字（内嵌字体子集）；outline：转成轮廓 */
+  text: 'text' | 'outline';
+}
+
+/** 导出 SVG 时有几个画板可选 */
+export function svgExportTargets(editor: Editor): { current: string | null; all: number } {
+  const active = editor.activeArtboard;
+  return { current: active ? displayName(active, t) : null, all: exportOrder(editor.store).length };
+}
+
+/**
+ * 导出 SVG：每个画板一个文件，导出全部画板时打包成一个 ZIP。
+ * 要在用户点"导出"的那一下里调用：能直接写文件的浏览器先弹出保存位置的对话框，再慢慢导出
+ */
+export async function exportSvg(editor: Editor, choice: SvgExportChoice): Promise<void> {
+  const { store } = editor;
+  const active = editor.activeArtboard;
+  const boards = choice.scope === 'all' ? exportOrder(store) : active ? [active.id] : [];
+  if (boards.length === 0) {
+    toast(t('file.noArtboards'), 'error');
+    return;
+  }
+  const single = boards.length === 1;
+  const boardName = (id: NodeId): string => {
+    const node = store.get(id);
+    return fileSafe(node ? displayName(node, t) : t('file.untitled'));
+  };
+  const name = single ? `${boardName(boards[0]!)}.svg` : `${fileSafe(documentTitle())}.zip`;
+  let out: SaveHandle | null = null;
+  try {
+    if (picker.showSaveFilePicker) {
+      out = await picker.showSaveFilePicker({ suggestedName: name, types: single ? SVG_TYPES : ZIP_TYPES });
+    }
+  } catch (error) {
+    if (isAbort(error)) return;
+    console.error(error);
+  }
+
+  const busy = busyToast(t('file.exportingSvg', { count: boards.length }));
+  let bytes: Uint8Array;
+  try {
+    const encoder = new TextEncoder();
+    const files: { name: string; bytes: Uint8Array }[] = [];
+    for (const [index, id] of boards.entries()) {
+      const node = store.get(id);
+      const title = node ? displayName(node, t) : undefined;
+      const svg = await editor.exportSvg(id, { text: choice.text, title });
+      // 打包的文件名前面加上序号，解压出来按幻灯片的顺序排
+      const prefix = single ? '' : `${String(index + 1).padStart(String(boards.length).length, '0')} `;
+      files.push({ name: `${prefix}${boardName(id)}.svg`, bytes: encoder.encode(svg) });
+    }
+    bytes = single ? files[0]!.bytes : zipFiles(files);
+  } catch (error) {
+    console.error(error);
+    busy.close();
+    toast(t('file.exportSvgFailed'), 'error');
+    return;
+  }
+  busy.close();
+  try {
+    if (out) {
+      await writeTo(out, bytes);
+      toast(t('file.exported', { name: out.name }));
+      return;
+    }
+    download(name, bytes, single ? SVG_MIME : ZIP_MIME);
     toast(t('file.exported', { name }));
   } catch (error) {
     if (isAbort(error)) return;

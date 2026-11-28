@@ -26,7 +26,8 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
     mover: HTMLElement;
     layer: HTMLElement;
     fx: HTMLElement;
-    image: HTMLImageElement;
+    /** 图层内容：<img>，或者装着内联 SVG 的元素 */
+    image: HTMLElement;
   }
   interface SlideView {
     data: PlayerSlide;
@@ -54,6 +55,12 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
   counter.style.cssText =
     'position:absolute;right:14px;bottom:10px;z-index:10;font:12px/1 system-ui,sans-serif;color:#fff;opacity:.45;pointer-events:none;text-shadow:0 0 3px #000;';
   stage.appendChild(counter);
+  if (data.fonts) {
+    // @font-face 放在哪里都对整个页面生效；放在舞台里，播放器关掉时跟着移除
+    const fonts = doc.createElement('style');
+    fonts.textContent = data.fonts;
+    stage.appendChild(fonts);
+  }
   root.appendChild(stage);
 
   let slideIndex = -1;
@@ -64,6 +71,28 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
   let destroyed = false;
 
   const matrixCss = (m: readonly number[]): string => `matrix(${m.join(',')})`;
+  let contentCount = 0;
+
+  /**
+   * 图层的内容元素。SVG 里的 id 换成这一份独有的前缀：平滑切换时前后两页、淡出的残影里会有同样的图层，
+   * id 重复的话，裁剪、蒙版、渐变的引用会指到别的那份上（比如已经隐藏的上一页），内容就看不见了
+   */
+  function makeContent(layerData: PlayerLayer): HTMLElement {
+    if (layerData.svg) {
+      const content = doc.createElement('div');
+      content.innerHTML = layerData.svg.split('\u0001').join(`p${++contentCount}-`);
+      // 内联的 SVG：放大不糊，文字可以选中、复制，也能被网页的查找搜到
+      content.style.cssText = 'position:absolute;inset:0;user-select:text;-webkit-user-select:text;cursor:default;';
+      content.dataset.layer = layerData.id;
+      return content;
+    }
+    const img = doc.createElement('img');
+    img.src = layerData.src || '';
+    img.alt = '';
+    img.draggable = false;
+    img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+    return img;
+  }
 
   function buildSlide(slide: PlayerSlide): SlideView {
     const frame = doc.createElement('div');
@@ -81,11 +110,7 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
       layer.style.cssText = `position:absolute;left:0;top:0;width:${layerData.width}px;height:${layerData.height}px;transform-origin:0 0;transform:${matrixCss(layerData.matrix)};`;
       const fx = doc.createElement('div');
       fx.style.cssText = 'position:absolute;inset:0;transform-origin:50% 50%;';
-      const image = doc.createElement('img');
-      image.src = layerData.src;
-      image.alt = '';
-      image.draggable = false;
-      image.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+      const image = makeContent(layerData);
       fx.appendChild(image);
       layer.appendChild(fx);
       mover.appendChild(layer);
@@ -239,9 +264,9 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
         const start = [m[0] * sx, m[1] * sx, m[2] * sy, m[3] * sy, m[4], m[5]];
         play(view.layer, [{ transform: matrixCss(start) }, { transform: matrixCss(view.data.matrix) }]);
 
-        if (source.data.src !== view.data.src) {
+        if ((source.data.svg || source.data.src) !== (view.data.svg || view.data.src)) {
           // 内容也变了：旧内容盖在上面淡出，露出新内容
-          const ghost = source.image.cloneNode(false) as HTMLImageElement;
+          const ghost = makeContent(source.data);
           view.fx.appendChild(ghost);
           play(ghost, [{ opacity: 1 }, { opacity: 0 }], 'ease');
           play(view.image, [{ opacity: 0 }, { opacity: 1 }], 'ease');
@@ -253,6 +278,9 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
       // 新的一页上没有的对象：搬到新页的最下面，原地淡出
       for (const view of unmatched) {
         const ghost = view.mover.cloneNode(true) as HTMLElement;
+        // 复制出来的 SVG 和原来的 id 一样，换成一份新的
+        const copied = ghost.querySelector('[data-layer]');
+        if (copied) copied.replaceWith(makeContent(view.data));
         next.el.insertBefore(ghost, next.el.firstChild);
         play(ghost, [{ opacity: 1 }, { opacity: 0 }], 'ease');
         cleanup.push(() => ghost.remove());
@@ -346,6 +374,9 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
   }
 
   function onClick(): void {
+    // 刚拖动鼠标选中了文字：这一下是选字，不是翻页
+    const selection = doc.getSelection();
+    if (selection && !selection.isCollapsed && selection.anchorNode && stage.contains(selection.anchorNode)) return;
     stage.focus();
     next();
   }

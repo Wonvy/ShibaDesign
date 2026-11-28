@@ -191,6 +191,7 @@
       "save": "Save",
       "saveAs": "Save as…",
       "exportPdf": "Export PDF",
+      "exportSvg": "Export SVG…",
       "exportPng": "Export PNG",
       "exportPng2x": "Export PNG (2×)",
       "untitled": "Untitled",
@@ -203,6 +204,8 @@
       "exportFailed": "Could not export: the object is empty, or the output exceeds 8192 pixels",
       "exportingPdf": "Exporting PDF ({{count}} pages)…",
       "exportPdfFailed": "Could not export the PDF",
+      "exportingSvg": "Exporting SVG (artboards: {{count}})…",
+      "exportSvgFailed": "Could not export the SVG",
       "noArtboards": "There are no artboards to export",
       "openFailed": "Could not open the file: {{reason}}",
       "reason": {
@@ -357,6 +360,21 @@
       "shapeHint": "Clips to the outline of the mask, ignoring its colors. Text and group masks use alpha instead.",
       "alphaHint": "Shows content where the mask is opaque and hides it where the mask is transparent; partial transparency and gradients count.",
       "luminanceHint": "Uses the brightness of the mask: white shows, black hides, gray is partly transparent."
+    },
+    "svgExport": {
+      "title": "Export SVG",
+      "scope": "Range",
+      "current": "Current artboard: {{name}}",
+      "noCurrent": "Current artboard (none selected)",
+      "all": "All artboards ({{count}})",
+      "allHint": "One SVG file per artboard, packed into a ZIP",
+      "text": "Text",
+      "asText": "Keep as text",
+      "asTextHint": "Searchable and copyable. The fonts used are embedded as subsets; design tools with the same fonts installed can edit the text",
+      "outline": "Convert to outlines",
+      "outlineHint": "Looks the same everywhere, but the text can no longer be edited",
+      "export": "Export",
+      "cancel": "Cancel"
     }
   }
 }

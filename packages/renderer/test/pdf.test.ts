@@ -8,6 +8,7 @@ import {
   DocStore,
   GLYPH_LIBRARY_MIME,
   createNode,
+  decodeGlyphLibrary,
   encodeGlyphLibrary,
   gradientColorAt,
   rgba,
@@ -374,6 +375,28 @@ describe('导出 PDF', () => {
     }
     expect(actual.length).toBe(expected.length);
     actual.forEach((x, i) => expect(x).toBeCloseTo(expected[i]!, 1));
+  });
+
+  it('排版用的 WOFF2 和嵌入用的 WOFF 字形编号不一致时，按字符换成嵌入文件里的字形（全角冒号）', async () => {
+    const env = setup();
+    text(env, '：', { style: { ...text(setup(), '').style, fontSize: 100 } });
+    const { textContent, bytes } = await exportAndOpen(env);
+    expect(textContent).toBe('：');
+    // 读回来的字形是上下两个窄窄的点；换错时是数字 4
+    const back = await reimport(bytes);
+    const library = back.result.assets.find((a) => a.meta.mime === GLYPH_LIBRARY_MIME)!;
+    const [outline] = decodeGlyphLibrary(library.bytes)!.glyphs;
+    const xs: number[] = [];
+    const ARITY = [2, 2, 6, 4, 0];
+    let moves = 0;
+    for (let i = 0; i < outline!.length;) {
+      const verb = outline![i++]!;
+      if (verb === 0) moves++;
+      for (let k = 0; k < ARITY[verb]!; k += 2) xs.push(outline![i + k]!);
+      i += ARITY[verb]!;
+    }
+    expect(moves).toBe(2);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.25);
   });
 
   it('从 PDF 导入、没改过的文字按原字形写成 Type3 字体，仍然能复制出文字', async () => {

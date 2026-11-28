@@ -191,6 +191,7 @@
       "save": "保存",
       "saveAs": "另存为…",
       "exportPdf": "导出 PDF",
+      "exportSvg": "导出 SVG…",
       "exportPng": "导出 PNG",
       "exportPng2x": "导出 PNG（2 倍）",
       "untitled": "未命名",
@@ -203,6 +204,8 @@
       "exportFailed": "无法导出：对象为空，或导出尺寸超过 8192 像素",
       "exportingPdf": "正在导出 PDF（{{count}} 页）…",
       "exportPdfFailed": "导出 PDF 失败",
+      "exportingSvg": "正在导出 SVG（{{count}} 个画板）…",
+      "exportSvgFailed": "导出 SVG 失败",
       "noArtboards": "没有可以导出的画板",
       "openFailed": "无法打开文件：{{reason}}",
       "reason": {
@@ -357,6 +360,21 @@
       "shapeHint": "按蒙版的轮廓裁剪，不看它的颜色。蒙版是文字或编组时按透明度遮。",
       "alphaHint": "按蒙版画出来的样子遮：不透明的地方显示，透明的地方隐藏，半透明和渐变都会起作用。",
       "luminanceHint": "按蒙版的明暗遮：白色显示，黑色隐藏，灰色半透明。"
+    },
+    "svgExport": {
+      "title": "导出 SVG",
+      "scope": "范围",
+      "current": "当前画板：{{name}}",
+      "noCurrent": "当前画板（没有选中画板）",
+      "all": "全部画板（{{count}} 个）",
+      "allHint": "每个画板一个 SVG 文件，打包成一个 ZIP",
+      "text": "文字",
+      "asText": "保留为文字",
+      "asTextHint": "可以搜索、复制。用到的字体做成子集内嵌在文件里，在装了同样字体的设计软件里可以直接改字",
+      "outline": "转成轮廓",
+      "outlineHint": "在哪里打开都一样，但不能再改字",
+      "export": "导出",
+      "cancel": "取消"
     }
   }
 }

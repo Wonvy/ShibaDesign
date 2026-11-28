@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./pdf": "./src/pdf.ts"
+    "./pdf": "./src/pdf.ts",
+    "./svg": "./src/svg.ts"
   },
   "dependencies": {
     "@shiba/core": "*",

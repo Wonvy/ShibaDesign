@@ -1,6 +1,6 @@
 /**
  * 播放器吃的数据。这是一份"编译好"的演示稿：
- * 每个对象已经渲染成一张图片，每条动画已经算成浏览器能直接执行的关键帧和时刻。
+ * 每个对象已经写成一段 SVG（或者渲染成一张图片），每条动画已经算成浏览器能直接执行的关键帧和时刻。
  * 播放器本身不认识文档模型，也不依赖编辑器的任何代码。
  */
 
@@ -11,8 +11,13 @@ export interface PlayerLayer {
   id: string;
   /** 跨页配对用的标识。两页上标识相同的图层，在"平滑"切换时会被当成同一个对象补间 */
   key: string;
-  /** 图层内容的图片地址（可以是 data: 或 blob: 地址） */
-  src: string;
+  /**
+   * 图层的内容：一段 SVG（矢量，文字可以选中和搜索），或者一张图片的地址（data: 或 blob:）。两者有一个就行，
+   * 都有时用 SVG。SVG 的 viewBox 对应图层的盒子，宽高写成 100%。
+   * SVG 里元素的 id 以字符 U+0001 开头，播放器每次放进网页时把它换成唯一的前缀，免得几份同样的图层 id 冲突
+   */
+  svg?: string;
+  src?: string;
   /** 图层盒子的大小，幻灯片坐标 */
   width: number;
   height: number;
@@ -63,6 +68,8 @@ export interface PlayerSlide {
 export interface PresentationData {
   title: string;
   slides: PlayerSlide[];
+  /** SVG 图层里的文字用到的字体（@font-face 规则），所有图层共用一份 */
+  fonts?: string;
 }
 
 export interface PlayerOptions {
