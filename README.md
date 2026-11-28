@@ -4,7 +4,7 @@
 
 作者：Wonvy · 仓库：<https://github.com/wonvy/ShibaDesign>
 
-产品范围、架构和路线图见 [docs/architecture.md](docs/architecture.md)，还没做的功能见 [docs/backlog.md](docs/backlog.md)。用 AI 开发工具接手时先看 [AGENTS.md](AGENTS.md)。
+产品范围、架构和路线图见 [docs/architecture.md](docs/architecture.md)，还没做的功能见 [docs/backlog.md](docs/backlog.md)，操作和界面的改版方案（右键菜单、快捷键、面板、吸附、圆角、UI 设计）见 [docs/interaction-plan.md](docs/interaction-plan.md)。用 AI 开发工具接手时先看 [AGENTS.md](AGENTS.md)。
 
 ## 运行
 
