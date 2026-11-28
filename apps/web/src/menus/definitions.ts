@@ -10,6 +10,7 @@ import {
 } from '@shiba/core';
 import {
   exportBySettings,
+  exportOriginalImage,
   exportHtml,
   exportImage,
   exportPdf,
@@ -200,6 +201,12 @@ function imageItems(ctx: MenuContext): MenuEntry[] {
       },
       { id: 'image.replace', labelKey: 'image.replace', run: () => void pickImageFill(ctx.editor) },
       cmd('image.resetRatio'),
+      {
+        id: 'image.exportOriginal',
+        labelKey: 'image.exportOriginal',
+        run: () => void exportOriginalImage(ctx.editor, node),
+        enabled: () => selected(ctx).length === 1,
+      },
     ]),
   ];
 }

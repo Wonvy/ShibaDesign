@@ -128,17 +128,21 @@ export const removeAnimation: Command<{ slideId: NodeId; id: string }> = {
   },
 };
 
-/** 在动画列表里上移或下移一条动画 */
-export const moveAnimation: Command<{ slideId: NodeId; id: string; delta: -1 | 1 }> = {
+/**
+ * 在动画列表里挪一条动画：delta 是上移（-1）或下移（1）一格；to 是直接挪到第几个（动画面板里拖动排序），
+ * 两个都给时按 to
+ */
+export const moveAnimation: Command<{ slideId: NodeId; id: string; delta?: -1 | 1; to?: number }> = {
   id: 'animation.move',
-  run(editor, { slideId, id, delta }) {
+  run(editor, { slideId, id, delta, to }) {
     const slide = slideById(editor.store, slideId);
     if (!slide) return;
     const list = [...(slide.deck!.animations ?? [])];
     const from = list.findIndex((a) => a.id === id);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= list.length) return;
-    [list[from], list[to]] = [list[to]!, list[from]!];
+    const target = to ?? from + (delta ?? 0);
+    if (from < 0 || target < 0 || target >= list.length || target === from) return;
+    const [moved] = list.splice(from, 1);
+    list.splice(target, 0, moved!);
     editor.store.transact('move animation', (tx) => setAnimations(tx, slide, list));
     editor.store.sealHistory();
   },

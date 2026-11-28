@@ -79,6 +79,9 @@ export function AnimationList(props: {
   const { editor, slide } = props;
   const { t } = useTranslation();
   const [openId, setOpenId] = useState<string | null>(null);
+  // 拖动排序：拖的是哪一条，现在停在哪一条上面（插在它前面还是后面）
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ index: number; after: boolean } | null>(null);
   const animations = slide.deck?.animations ?? [];
   if (animations.length === 0) return <p className="empty-note anim-empty">{t('animation.none')}</p>;
 
@@ -99,7 +102,37 @@ export function AnimationList(props: {
         return (
           <li
             key={animation.id}
-            className={`anim-item${props.highlight.has(animation.target) ? ' is-related' : ''}${active ? '' : ' is-inactive'}`}
+            className={`anim-item${props.highlight.has(animation.target) ? ' is-related' : ''}${active ? '' : ' is-inactive'}${
+              dropAt?.index === index ? (dropAt.after ? ' drop-after' : ' drop-before') : ''
+            }`}
+            draggable
+            onDragStart={(event) => {
+              setDragId(animation.id);
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', animation.id);
+            }}
+            onDragOver={(event) => {
+              if (!dragId) return;
+              event.preventDefault();
+              const box = event.currentTarget.getBoundingClientRect();
+              setDropAt({ index, after: event.clientY > box.top + box.height / 2 });
+            }}
+            onDragEnd={() => {
+              setDragId(null);
+              setDropAt(null);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const from = animations.findIndex((a) => a.id === dragId);
+              if (dragId && dropAt && from >= 0) {
+                // 插到这一条的前面或后面；拖的那一条先拿出来，后面的位置往前挪一格
+                let to = dropAt.index + (dropAt.after ? 1 : 0);
+                if (from < to) to -= 1;
+                editor.commands.run('animation.move', { slideId: slide.id, id: dragId, to });
+              }
+              setDragId(null);
+              setDropAt(null);
+            }}
           >
             <button
               type="button"

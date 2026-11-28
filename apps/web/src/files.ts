@@ -634,6 +634,30 @@ export async function exportSvg(editor: Editor, choice: SvgExportChoice): Promis
   );
 }
 
+/** 导出图片填充用的原图（导入时的文件，没有任何调整）：存成原来的格式，文件名用导入时的名字 */
+export async function exportOriginalImage(editor: Editor, node: SceneNode): Promise<void> {
+  const fill = 'fill' in node && node.fill?.type === 'image' ? node.fill : null;
+  if (!fill) return;
+  const bytes = editor.assets.get(fill.assetId);
+  const meta = editor.assets.meta(fill.assetId);
+  if (!bytes || !meta) {
+    toast(t('file.exportFailed'), 'error');
+    return;
+  }
+  const extension = meta.mime.split('/')[1]?.replace('jpeg', 'jpg').replace('svg+xml', 'svg') ?? 'png';
+  const base = meta.name ? meta.name.replace(/\.[^.]+$/, '') : fileSafe(displayName(node, t));
+  const name = `${fileSafe(base)}.${extension}`;
+  const types: PickerType[] = [{ description: extension.toUpperCase(), accept: { [meta.mime]: [`.${extension}`] } }];
+  await saveExported(
+    name,
+    types,
+    meta.mime,
+    t('export.exporting', { count: 1 }),
+    async () => bytes,
+    t('file.exportFailed'),
+  );
+}
+
 /** 一条导出设置导出成的文件内容；做不成（比如不是画板却要 PDF）时返回 null */
 async function renderExport(editor: Editor, node: SceneNode, setting: ExportSetting): Promise<Uint8Array | null> {
   const title = displayName(node, t);

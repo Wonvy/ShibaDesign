@@ -348,7 +348,8 @@
       "fitContain": "适应",
       "fitStretch": "拉伸",
       "unsupported": "无法识别这张图片：{{name}}",
-      "downscaled": "「{{name}}」尺寸较大，已缩小到长边 {{size}} 像素"
+      "downscaled": "「{{name}}」尺寸较大，已缩小到长边 {{size}} 像素",
+      "exportOriginal": "导出原图"
     },
     "group": {
       "create": "编组",

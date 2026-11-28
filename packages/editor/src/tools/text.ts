@@ -126,6 +126,8 @@ function writeSelection(textarea: HTMLTextAreaElement, anchor: number, focus: nu
 export function registerTextTool(editor: Editor): void {
   let session: Session | null = null;
   let pending: Pending | null = null;
+  /** 上一次双击的时刻和位置：紧接着在同一处再点一下是三击，选中一整段 */
+  let lastDoubleClick: { at: number; x: number; y: number } | null = null;
   /** 正在进行的"解冻后开始编辑"的编号。换了工具或者又点了别的文字，之前那次就作废 */
   let opening = 0;
 
@@ -408,6 +410,35 @@ export function registerTextTool(editor: Editor): void {
       moveVertically(event.key === 'ArrowUp' ? -1 : 1, event.shiftKey);
       return;
     }
+    // ⌥←→ 改选中的字的字距、⌥↑↓ 改行高（Illustrator 的习惯）；按住 Shift 一次改得多一些
+    if (event.altKey && !mod && event.key.startsWith('Arrow')) {
+      event.preventDefault();
+      const current = currentStyle();
+      if (!current) return;
+      const big = event.shiftKey ? 5 : 1;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        const delta = (event.key === 'ArrowRight' ? 0.5 : -0.5) * big;
+        const next = Math.round((current.style.letterSpacing + delta) * 10) / 10;
+        applyStyle({ letterSpacing: next }, `letter-spacing:${session.nodeId}`, true);
+      } else {
+        const delta = (event.key === 'ArrowUp' ? -0.05 : 0.05) * big;
+        editor.updateSelection(
+          'line height',
+          (n) =>
+            n.type === 'text'
+              ? {
+                  style: {
+                    ...n.style,
+                    lineHeight: Math.max(0.5, Math.round((n.style.lineHeight + delta) * 100) / 100),
+                  },
+                }
+              : null,
+          `line-height:${session.nodeId}`,
+        );
+        syncFromDocument();
+      }
+      return;
+    }
     const toggle = mod && !event.altKey ? TOGGLE_KEYS[`${event.shiftKey ? 'shift+' : ''}${key}`] : undefined;
     if (toggle) {
       event.preventDefault();
@@ -668,6 +699,21 @@ export function registerTextTool(editor: Editor): void {
           return;
         }
         const offset = editor.textLayouts.offsetAt(node, local.x, local.y);
+        const triple =
+          lastDoubleClick !== null &&
+          performance.now() - lastDoubleClick.at < TRIPLE_CLICK_MS &&
+          Math.hypot(e.x - lastDoubleClick.x, e.y - lastDoubleClick.y) < 6;
+        lastDoubleClick = null;
+        if (triple) {
+          // 三击：选中这一段（两个换行之间）
+          const text = node.text;
+          const start = text.lastIndexOf('\n', Math.max(0, offset - 1)) + 1;
+          const breakAt = text.indexOf('\n', offset);
+          writeSelection(session.textarea, start, breakAt < 0 ? text.length : breakAt);
+          session.dragAnchor = null;
+          refresh();
+          return;
+        }
         const anchor = e.shift ? readSelection(session.textarea).anchor : offset;
         writeSelection(session.textarea, anchor, offset);
         session.dragAnchor = anchor;
@@ -726,6 +772,7 @@ export function registerTextTool(editor: Editor): void {
       if (!session || !node) return;
       const word = editor.textLayouts.wordAt(node, offsetAt(node, e.world));
       writeSelection(session.textarea, word.start, word.end);
+      lastDoubleClick = { at: performance.now(), x: e.x, y: e.y };
       refresh();
     },
 
@@ -872,6 +919,9 @@ const TOGGLE_KEYS: Record<string, TextToggle> = {
   u: 'underline',
   'shift+x': 'strikethrough',
 };
+
+/** 双击后多久之内再点一下算三击，毫秒 */
+const TRIPLE_CLICK_MS = 450;
 
 /** 编辑文字时也走快捷键表的命令 */
 const EDITING_COMMANDS = new Set(['text.fontStep', 'text.paragraph', 'text.list']);

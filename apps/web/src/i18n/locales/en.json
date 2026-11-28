@@ -348,7 +348,8 @@
       "fitContain": "Contain",
       "fitStretch": "Stretch",
       "unsupported": "Could not read this image: {{name}}",
-      "downscaled": "“{{name}}” is large and was scaled down to {{size}} pixels on its long side"
+      "downscaled": "“{{name}}” is large and was scaled down to {{size}} pixels on its long side",
+      "exportOriginal": "Export original image"
     },
     "group": {
       "create": "Group",

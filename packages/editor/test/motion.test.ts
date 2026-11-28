@@ -235,3 +235,18 @@ describe('演讲者备注', () => {
     expect(slide().deck!.notes).toBe('');
   });
 });
+
+describe('动画排序', () => {
+  it('直接挪到第几个（拖动排序）；上移下移照旧；一步撤销', () => {
+    const { editor, store, slide } = setup();
+    for (const effect of ['entrance.fade', 'motion.line', 'motion.arc'])
+      editor.commands.run('animation.add', { effect });
+    const ids = animations(slide()).map((a) => a.id);
+    editor.commands.run('animation.move', { slideId: slide().id, id: ids[0]!, to: 2 });
+    expect(animations(slide()).map((a) => a.id)).toEqual([ids[1], ids[2], ids[0]]);
+    editor.commands.run('animation.move', { slideId: slide().id, id: ids[0]!, delta: -1 });
+    expect(animations(slide()).map((a) => a.id)).toEqual([ids[1], ids[0], ids[2]]);
+    store.undo();
+    expect(animations(slide()).map((a) => a.id)).toEqual([ids[1], ids[2], ids[0]]);
+  });
+});

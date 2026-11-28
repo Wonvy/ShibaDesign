@@ -3425,3 +3425,12 @@ button.template-card:hover,
   font-size: 12px;
   color: var(--text-dim);
 }
+
+/* 动画列表拖动排序的插入位置 */
+.anim-item.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.anim-item.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
