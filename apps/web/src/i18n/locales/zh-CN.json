@@ -47,13 +47,16 @@
       "mask": "蒙版",
       "path": "路径",
       "assets": "资源",
-      "component": "组件"
+      "component": "组件",
+      "properties": "属性",
+      "notes": "备注"
     },
     "slide": {
       "add": "新建幻灯片",
       "duplicate": "复制幻灯片",
       "delete": "删除幻灯片",
-      "empty": "还没有幻灯片"
+      "empty": "还没有幻灯片",
+      "count": "{{count}} 页"
     },
     "layers": {
       "empty": "这里还没有对象",
@@ -787,13 +790,40 @@
       "clearGuides": "清除全部辅助线",
       "clearBoardGuides": "清除这个画板的辅助线",
       "removeGuide": "删除辅助线",
-      "setGuidePosition": "设置位置…"
+      "setGuidePosition": "设置位置…",
+      "window": "窗口",
+      "togglePanel": "打开或收起面板",
+      "hideUi": "隐藏界面"
     },
     "guide": {
       "vertical": "竖辅助线",
       "horizontal": "横辅助线",
       "xPosition": "X（相对所在的画板）",
       "yPosition": "Y（相对所在的画板）"
+    },
+    "dock": {
+      "collapse": "收起",
+      "expand": "展开",
+      "close": "关闭",
+      "float": "变成浮动面板",
+      "toLeft": "停靠到左栏",
+      "toRight": "停靠到右栏",
+      "toBottom": "停靠到下方",
+      "reset": "恢复默认布局",
+      "workspace": "工作区",
+      "preset": {
+        "design": "设计",
+        "present": "演示",
+        "photo": "修图"
+      },
+      "popOut": "弹出成浮动面板",
+      "inFloating": "「{{name}}」在浮动面板里，点这里找到它",
+      "imageEmpty": "选中一张图片（或者填了图片的形状）",
+      "notesEmpty": "当前不是幻灯片，没有备注",
+      "sectionEmpty": "选中可以用这一项的对象",
+      "pin": "钉在这张图片上",
+      "unpin": "取消固定，跟着选区走",
+      "original": "按住看原图"
     }
   }
 }

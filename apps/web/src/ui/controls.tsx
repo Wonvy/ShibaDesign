@@ -24,10 +24,13 @@ export function IconButton(props: {
   );
 }
 
-export function Section(props: { title: string; children: ReactNode }): ReactNode {
+export function Section(props: { title: string; children: ReactNode; actions?: ReactNode }): ReactNode {
   return (
     <section className="section">
-      <h3 className="section-title">{props.title}</h3>
+      <h3 className="section-title">
+        <span>{props.title}</span>
+        {props.actions}
+      </h3>
       {props.children}
     </section>
   );

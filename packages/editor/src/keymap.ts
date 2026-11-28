@@ -195,6 +195,10 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: 'mod+enter', command: 'present.play' },
   { key: 'mod+shift+enter', command: 'present.playFromStart' },
   { key: 'mod+r', command: 'node.rename' },
+  { key: 'alt+1', command: 'dock.show', args: 'layers' },
+  { key: 'alt+2', command: 'dock.show', args: 'assets' },
+  { key: 'alt+3', command: 'dock.show', args: 'slides' },
+  { key: 'mod+\\', command: 'dock.toggleHidden' },
   { key: 'mod+k', command: 'help.commandPalette' },
   { key: 'shift+/', command: 'help.shortcuts' },
 ];

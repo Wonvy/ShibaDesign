@@ -47,13 +47,16 @@
       "mask": "Mask",
       "path": "Path",
       "assets": "Assets",
-      "component": "Component"
+      "component": "Component",
+      "properties": "Properties",
+      "notes": "Notes"
     },
     "slide": {
       "add": "New slide",
       "duplicate": "Duplicate slide",
       "delete": "Delete slide",
-      "empty": "No slides yet"
+      "empty": "No slides yet",
+      "count": "Slides: {{count}}"
     },
     "layers": {
       "empty": "Nothing here yet",
@@ -787,13 +790,40 @@
       "clearGuides": "Clear all guides",
       "clearBoardGuides": "Clear this artboard's guides",
       "removeGuide": "Delete guide",
-      "setGuidePosition": "Set position…"
+      "setGuidePosition": "Set position…",
+      "window": "Window",
+      "togglePanel": "Show or hide panel",
+      "hideUi": "Hide interface"
     },
     "guide": {
       "vertical": "Vertical guide",
       "horizontal": "Horizontal guide",
       "xPosition": "X (relative to its artboard)",
       "yPosition": "Y (relative to its artboard)"
+    },
+    "dock": {
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "close": "Close",
+      "float": "Float this panel",
+      "toLeft": "Dock left",
+      "toRight": "Dock right",
+      "toBottom": "Dock bottom",
+      "reset": "Reset layout",
+      "workspace": "Workspace",
+      "preset": {
+        "design": "Design",
+        "present": "Presentation",
+        "photo": "Photo"
+      },
+      "popOut": "Pop out as a floating panel",
+      "inFloating": "“{{name}}” is in a floating panel. Click to find it",
+      "imageEmpty": "Select an image (or a shape filled with one)",
+      "notesEmpty": "This isn't a slide, so there are no notes",
+      "sectionEmpty": "Select an object this applies to",
+      "pin": "Pin to this image",
+      "unpin": "Unpin and follow the selection",
+      "original": "Hold to see the original"
     }
   }
 }

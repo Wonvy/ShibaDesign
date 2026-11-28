@@ -2242,3 +2242,411 @@ button.template-card:hover,
 .menu-list .menu-separator {
   margin: 4px 2px;
 }
+
+/* ───────── 面板系统：停靠区、选项卡、浮动窗 ───────── */
+
+.workspace.dock-workspace {
+  display: flex;
+  position: relative;
+  min-height: 0;
+}
+
+.dock-center {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-center > .canvas-host {
+  flex: 1;
+}
+
+.dock-zone {
+  position: relative;
+  flex: none;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  background: var(--panel);
+}
+
+.dock-zone-left {
+  border-right: 1px solid var(--border);
+}
+
+.dock-zone-right {
+  border-left: 1px solid var(--border);
+}
+
+.dock-zone-bottom {
+  border-top: 1px solid var(--border);
+}
+
+.dock-groups {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-groups.is-horizontal {
+  flex-direction: row;
+}
+
+.dock-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dock-group-splitter {
+  position: relative;
+  flex: none;
+  height: 1px;
+  background: var(--border);
+  cursor: row-resize;
+}
+
+.dock-group-splitter::after {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+}
+
+.dock-group-splitter.is-horizontal {
+  width: 1px;
+  height: auto;
+  cursor: col-resize;
+}
+
+.dock-group-splitter.is-horizontal::after {
+  inset: 0 -3px;
+}
+
+.dock-splitter {
+  position: absolute;
+  z-index: 5;
+}
+
+.dock-splitter:hover {
+  background: var(--accent-soft);
+}
+
+.dock-splitter-left {
+  top: 0;
+  bottom: 0;
+  right: -3px;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.dock-splitter-right {
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.dock-splitter-bottom {
+  left: 0;
+  right: 0;
+  top: -3px;
+  height: 6px;
+  cursor: row-resize;
+}
+
+.dock-tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 4px 0 6px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.dock-tab {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  touch-action: none;
+}
+
+.dock-tab:hover {
+  background: var(--panel-2);
+}
+
+.dock-tab.is-active {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.dock-tabs-fill {
+  flex: 1;
+  align-self: stretch;
+}
+
+.dock-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.dock-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.dock-action:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.dock-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.dock-body > .inspector {
+  flex: 1;
+  border: 0;
+}
+
+.dock-body > .slide-strip {
+  flex: 1;
+  max-height: none;
+  border: 0;
+}
+
+.dock-body > .panel-body {
+  flex: 1;
+}
+
+.dock-strip {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 6px 3px;
+  background: var(--panel);
+}
+
+.dock-strip-left,
+.dock-strip-right {
+  flex-direction: column;
+  width: 28px;
+}
+
+.dock-strip-left {
+  border-right: 1px solid var(--border);
+}
+
+.dock-strip-right {
+  border-left: 1px solid var(--border);
+}
+
+.dock-strip-bottom {
+  height: 28px;
+  padding: 3px 6px;
+  border-top: 1px solid var(--border);
+}
+
+.dock-strip.is-drop {
+  background: var(--accent-soft);
+}
+
+.dock-strip-tab {
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dock-strip-left .dock-strip-tab,
+.dock-strip-right .dock-strip-tab {
+  writing-mode: vertical-rl;
+}
+
+.dock-strip-bottom .dock-strip-tab {
+  padding: 2px 8px;
+}
+
+.dock-strip-tab:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.dock-floating-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.dock-float {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.dock-float-title .dock-tabs {
+  cursor: move;
+}
+
+.dock-float.is-collapsed .dock-tabs {
+  border-bottom: 0;
+}
+
+.dock-float-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+
+.dock-drop {
+  position: fixed;
+  z-index: 70;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.dock-drop.is-area {
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.dock-ghost {
+  position: fixed;
+  z-index: 71;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.dock-empty {
+  margin: 14px;
+}
+
+.dock-notes {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+}
+
+.dock-notes textarea {
+  flex: 1;
+}
+
+.image-dock,
+.inspector-section-dock {
+  padding: 10px 14px 14px;
+}
+
+.image-dock-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.image-dock-original {
+  flex: 1;
+}
+
+.panel-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 6px 0 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-popout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  opacity: 0;
+}
+
+.section:hover .section-popout,
+.section-popout:focus-visible {
+  opacity: 1;
+}
+
+.section-popout:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.section-floated {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: left;
+}
+
+.section-floated:hover {
+  color: var(--text);
+}

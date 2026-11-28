@@ -2,10 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { slides } from '@shiba/core';
 import type { Editor } from '@shiba/editor';
-import { CanvasHost } from './components/CanvasHost';
-import { Inspector } from './components/Inspector';
-import { Sidebar } from './components/Sidebar';
-import { SlideStrip } from './components/SlideStrip';
+import { DockHost } from './dock/DockHost';
 import { TopBar } from './components/TopBar';
 import { installClipboard } from './clipboard';
 import { GuideDialog } from './components/GuideDialog';
@@ -54,14 +51,7 @@ function Workspace(): ReactNode {
   return (
     <div className="app">
       <TopBar onPlay={play} />
-      <div className="workspace">
-        <aside className="sidebar">
-          {viewMode === 'slides' && <SlideStrip />}
-          <Sidebar />
-        </aside>
-        <CanvasHost />
-        <Inspector />
-      </div>
+      <DockHost />
       <Toasts />
       <ContextMenuHost />
       <GuideDialog />

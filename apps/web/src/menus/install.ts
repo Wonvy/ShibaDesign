@@ -1,5 +1,6 @@
 import type { Editor } from '@shiba/editor';
-import { requestRename } from '../ui/rename';
+import { showPanel, toggleHidden, togglePanel } from '../dock/store';
+import { onRenameRequest, requestRename } from '../ui/rename';
 import { selectionContext } from './context';
 import { contextMenuId, registerBuiltinMenus } from './definitions';
 import { openContextMenu, openOverlay } from './overlays';
@@ -26,6 +27,9 @@ export function installMenus(editor: Editor): () => void {
       enabled: (e) => e.selection.length === 1,
       run: (e) => requestRename(e.selection[0]!),
     })
+    .register<string>({ id: 'dock.show', run: (_e, id) => showPanel(id) })
+    .register<string>({ id: 'dock.toggle', run: (_e, id) => togglePanel(id) })
+    .register({ id: 'dock.toggleHidden', run: () => toggleHidden() })
     .register({ id: 'help.commandPalette', run: () => openOverlay('palette') })
     .register({ id: 'help.shortcuts', run: () => openOverlay('shortcuts') });
 
@@ -57,7 +61,10 @@ export function installMenus(editor: Editor): () => void {
     });
   };
   window.addEventListener('keydown', onKeyDown);
+  // 重命名要在图层面板里进行：先把它打开、切过去
+  const stopRename = onRenameRequest(() => showPanel('layers'));
   return () => {
+    stopRename();
     window.removeEventListener('keydown', onKeyDown);
     if (editor.contextMenuHandler) editor.contextMenuHandler = null;
   };

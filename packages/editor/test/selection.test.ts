@@ -239,6 +239,8 @@ describe('快捷键表', () => {
       'node.rename',
       'help.commandPalette',
       'help.shortcuts',
+      'dock.show',
+      'dock.toggleHidden',
     ]);
     const missing = DEFAULT_BINDINGS.filter((b) => !fromWeb.has(b.command) && !s.editor.commands.has(b.command));
     expect(missing).toEqual([]);

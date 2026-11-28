@@ -22,6 +22,18 @@ import { i18n } from '../i18n';
 import { displayName } from '../names';
 import { openFileDialog } from '../components/FileMenu';
 import type { ViewToggle } from '@shiba/editor';
+import {
+  WORKSPACE_PRESETS,
+  closeTab,
+  findTab,
+  isTabVisible,
+  moveTab,
+  presetLayout,
+  type DropTarget,
+  type ZoneId,
+} from '../dock/layout';
+import { listDockPanels } from '../dock/registry';
+import { getLayout, resetLayout, setLayout } from '../dock/store';
 import { labelKeyFor } from './labels';
 import { registerMenu, type MenuContext, type MenuEntry, type MenuItemDef } from './model';
 import { toast } from '../ui/toast';
@@ -612,6 +624,66 @@ export function registerBuiltinMenus(): void {
     cmd('present.playFromStart'),
   ]);
 
+  registerMenu('dock.tab', (ctx) => {
+    const tab = ctx.subject ?? '';
+    const move = (target: DropTarget): void => setLayout((current) => moveTab(current, tab, target));
+    const firstGroup = (zone: ZoneId): DropTarget => {
+      const group = getLayout().zones[zone].groups[0];
+      return group ? { kind: 'tabs', group: group.id, index: group.tabs.length } : { kind: 'split', zone, index: 0 };
+    };
+    const where = findTab(getLayout(), tab);
+    return [
+      { id: 'tab.close', labelKey: 'dock.close', run: () => setLayout((current) => closeTab(current, tab)) },
+      {
+        id: 'tab.float',
+        labelKey: 'dock.float',
+        enabled: () => where?.kind !== 'float',
+        run: () => move({ kind: 'float', x: Math.max(16, window.innerWidth - 640), y: 100, w: 300, h: 460 }),
+      },
+      'separator',
+      {
+        id: 'tab.left',
+        labelKey: 'dock.toLeft',
+        enabled: () => !(where?.kind === 'zone' && where.zone === 'left'),
+        run: () => move(firstGroup('left')),
+      },
+      {
+        id: 'tab.right',
+        labelKey: 'dock.toRight',
+        enabled: () => !(where?.kind === 'zone' && where.zone === 'right'),
+        run: () => move(firstGroup('right')),
+      },
+      {
+        id: 'tab.bottom',
+        labelKey: 'dock.toBottom',
+        enabled: () => !(where?.kind === 'zone' && where.zone === 'bottom'),
+        run: () => move(firstGroup('bottom')),
+      },
+      'separator',
+      { id: 'tab.reset', labelKey: 'dock.reset', run: resetLayout },
+    ];
+  });
+
+  registerMenu('bar.window', () => [
+    ...listDockPanels().map((panel): MenuItemDef => ({
+      id: `panel:${panel.id}`,
+      labelKey: panel.titleKey,
+      command: 'dock.toggle',
+      args: panel.id,
+      checked: () => isTabVisible(getLayout(), panel.id),
+    })),
+    'separator',
+    sub('workspace', 'dock.workspace', () =>
+      WORKSPACE_PRESETS.map((preset) => ({
+        id: `workspace:${preset}`,
+        labelKey: `dock.preset.${preset}`,
+        run: () => setLayout(presetLayout(preset, { width: window.innerWidth, height: window.innerHeight })),
+      })),
+    ),
+    { id: 'dock.reset', labelKey: 'dock.reset', run: resetLayout },
+    cmd('dock.toggleHidden', undefined, { checked: () => getLayout().hidden }),
+  ]);
+
   registerMenu('bar.help', () => [
     { id: 'help.commandPalette', labelKey: 'menu.commandPalette', command: 'help.commandPalette' },
     { id: 'help.shortcuts', labelKey: 'menu.shortcuts', command: 'help.shortcuts' },
@@ -625,6 +697,7 @@ export const MENU_BAR: readonly { id: string; labelKey: string }[] = [
   { id: 'bar.object', labelKey: 'menu.object' },
   { id: 'bar.text', labelKey: 'menu.text' },
   { id: 'bar.view', labelKey: 'menu.view' },
+  { id: 'bar.window', labelKey: 'menu.window' },
   { id: 'bar.help', labelKey: 'menu.help' },
 ];
 

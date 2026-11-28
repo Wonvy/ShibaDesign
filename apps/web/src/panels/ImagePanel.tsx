@@ -125,14 +125,18 @@ export function ImagePanel({ editor, nodes }: PanelProps): ReactNode {
   if (!first) return null;
   const adjust = first.adjust ?? NO_ADJUSTMENTS;
 
+  // 改的是面板显示的这几个对象（属性栏里就是选中的；浮动的图片调整面板钉住时是钉住的那张图）
   const update = (label: string, change: (fill: ImageFill) => ImageFill, mergeKey?: string): void =>
-    editor.updateSelection(
+    store.transact(
       label,
-      (node) => {
-        const fill = imageFillOf(node);
-        return fill ? { fill: change(fill) } : null;
+      (tx) => {
+        for (const { id } of nodes) {
+          const node = tx.get(id);
+          const fill = node ? imageFillOf(node) : null;
+          if (fill) tx.update(id, { fill: change(fill) });
+        }
       },
-      mergeKey,
+      mergeKey ? { mergeKey } : {},
     );
 
   /** 把 fill 上的一个可选字段设成 value；value 是 undefined 时去掉这个字段 */

@@ -115,6 +115,11 @@ export const COMMAND_LABELS: Record<string, string> = {
   'view.setMode|"canvas"': 'view.canvas',
   'view.setMode|"slides"': 'view.slides',
 
+  'dock.show|"layers"': 'panel.layers',
+  'dock.show|"assets"': 'panel.assets',
+  'dock.show|"slides"': 'panel.slides',
+  'dock.toggle': 'menu.togglePanel',
+  'dock.toggleHidden': 'menu.hideUi',
   'present.play': 'present.play',
   'present.playFromStart': 'menu.playFromStart',
   'help.commandPalette': 'menu.commandPalette',
@@ -136,7 +141,7 @@ export function commandGroup(command: string): string {
   if (prefix === 'tool') return 'tools';
   if (prefix === 'edit' || prefix === 'select') return command.startsWith('select.') ? 'select' : 'edit';
   if (prefix === 'text') return command === 'text.outline' ? 'object' : 'text';
-  if (prefix === 'view') return 'view';
+  if (prefix === 'view' || prefix === 'dock') return 'view';
   if (prefix === 'present') return 'present';
   if (prefix === 'help') return 'help';
   return 'object';

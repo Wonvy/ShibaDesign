@@ -47,7 +47,11 @@ function SlideThumb(props: { slide: ArtboardNode; index: number; active: boolean
         aria-label={name}
         aria-current={props.active}
         style={{ aspectRatio: `${slide.size[0]} / ${slide.size[1]}` }}
-        onClick={() => editor.setActiveArtboard(slide.id)}
+        onClick={() => {
+          editor.setActiveArtboard(slide.id);
+          // 画布视图里：把视口挪到这个画板
+          if (editor.viewMode === 'canvas') editor.zoomToFit(editor.geometry.worldBounds(slide));
+        }}
       >
         <canvas ref={canvasRef} />
       </button>
@@ -84,10 +88,10 @@ export function SlideStrip(): ReactNode {
 
   return (
     <div className="panel slide-strip">
-      <h2 className="panel-title">
-        {t('panel.slides')}
+      <div className="panel-toolbar">
+        <span className="panel-count">{t('slide.count', { count: deck.length })}</span>
         <LayoutMenu />
-      </h2>
+      </div>
       <div className="panel-body" onContextMenu={(event) => openPanelMenu(event, editor, 'slide.empty')}>
         {deck.length === 0 && <p className="empty-note">{t('slide.empty')}</p>}
         {deck.map((slide, index) => (

@@ -239,7 +239,7 @@ export function AnimationPanel({ editor, nodes }: PanelProps): ReactNode {
 /**
  * 这一页的演讲者备注：演示时显示在演讲者视图里。打字时直接写进文档，一次编辑（从点进去到离开）是一步撤销
  */
-function SlideNotes({ editor, slide }: { editor: Editor; slide: ArtboardNode }): ReactNode {
+export function SlideNotes({ editor, slide }: { editor: Editor; slide: ArtboardNode }): ReactNode {
   const { t } = useTranslation();
   const mergeKey = useRef<string | null>(null);
   const finish = (): void => {
