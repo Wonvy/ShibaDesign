@@ -11,6 +11,9 @@ export class InputController {
   private panning: { x: number; y: number } | null = null;
   private spaceHeld = false;
   private cursor = 'default';
+  /** 最后一次指针事件的位置，按下或松开修饰键时用它把新的修饰键状态告诉工具 */
+  private lastPointer: { clientX: number; clientY: number; button: number } | null = null;
+  private pointerId: number | null = null;
 
   constructor(
     private readonly element: HTMLCanvasElement,
@@ -27,7 +30,15 @@ export class InputController {
     element.addEventListener('contextmenu', (e) => e.preventDefault(), options);
     window.addEventListener('keydown', this.onKeyDown, options);
     window.addEventListener('keyup', this.onKeyUp, options);
-    window.addEventListener('blur', () => (this.spaceHeld = false), options);
+    window.addEventListener(
+      'blur',
+      () => {
+        this.spaceHeld = false;
+        // 拖到一半切到别的程序：松手事件可能收不到，当成取消
+        this.cancelDrag();
+      },
+      options,
+    );
   }
 
   dispose(): void {
@@ -44,19 +55,53 @@ export class InputController {
   }
 
   private info(event: PointerEvent | MouseEvent): PointerInfo {
+    this.lastPointer = { clientX: event.clientX, clientY: event.clientY, button: event.button };
+    return this.infoAt(event.clientX, event.clientY, event, event.button);
+  }
+
+  private infoAt(
+    clientX: number,
+    clientY: number,
+    keys: { shiftKey: boolean; altKey: boolean; metaKey: boolean; ctrlKey: boolean },
+    button: number,
+  ): PointerInfo {
     const rect = this.element.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
     return {
       x,
       y,
       world: this.editor.screenToWorld(x, y),
-      shift: event.shiftKey,
-      alt: event.altKey,
-      mod: event.metaKey || event.ctrlKey,
-      button: event.button,
+      shift: keys.shiftKey,
+      alt: keys.altKey,
+      mod: keys.metaKey || keys.ctrlKey,
+      button,
       down: this.pointerDown,
     };
+  }
+
+  /**
+   * 拖动中按下或松开了修饰键：鼠标没动也要让工具按新的状态重算一次，
+   * 比如拖到一半按下 Shift 立刻锁定方向，按下 Alt 立刻变成复制
+   */
+  private refreshModifiers(event: KeyboardEvent): void {
+    const last = this.lastPointer;
+    if (!this.pointerDown || !last) return;
+    this.editor.tool.onPointerMove?.(this.infoAt(last.clientX, last.clientY, event, last.button), this.editor);
+    this.editor.requestRender();
+  }
+
+  /** 取消正在进行的拖动：工具撤回这次拖动的改动，之后的松手不再交给工具 */
+  private cancelDrag(): boolean {
+    if (!this.pointerDown) return false;
+    this.pointerDown = false;
+    if (this.pointerId !== null && this.element.hasPointerCapture(this.pointerId)) {
+      this.element.releasePointerCapture(this.pointerId);
+    }
+    this.pointerId = null;
+    this.editor.tool.onCancel?.(this.editor);
+    this.editor.requestRender();
+    return true;
   }
 
   private onMouseDown = (event: MouseEvent): void => {
@@ -82,6 +127,7 @@ export class InputController {
     }
     if (event.button !== 0) return;
     this.pointerDown = true;
+    this.pointerId = event.pointerId;
     this.editor.tool.onPointerDown?.(this.info(event), this.editor);
     this.editor.requestRender();
   };
@@ -105,6 +151,7 @@ export class InputController {
     }
     if (!this.pointerDown) return;
     this.pointerDown = false;
+    this.pointerId = null;
     this.editor.tool.onPointerUp?.(this.info(event), this.editor);
     this.editor.requestRender();
   };
@@ -129,9 +176,19 @@ export class InputController {
       // 正在编辑文字，但焦点跑到了别处（比如刚点过属性面板里的按钮）。
       // 这时按键应该继续进到文字里，而不是触发"按 V 切换工具"这类快捷键。
       // 先把焦点还给输入框；浏览器会把这次按键产生的字符送到新的焦点上。
-      const isModifierOnly = ['Shift', 'Control', 'Alt', 'Meta'].includes(event.key);
-      if (!isModifierOnly) target.focus({ preventScroll: true });
+      if (!isModifier(event.key)) target.focus({ preventScroll: true });
       return;
+    }
+    if (this.pointerDown) {
+      if (event.key === 'Escape') {
+        this.cancelDrag();
+        event.preventDefault();
+        return;
+      }
+      if (isModifier(event.key)) {
+        this.refreshModifiers(event);
+        return;
+      }
     }
     if (event.key === ' ') {
       if (!this.spaceHeld) {
@@ -153,11 +210,16 @@ export class InputController {
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
+    if (isModifier(event.key)) this.refreshModifiers(event);
     if (event.key === ' ') {
       this.spaceHeld = false;
       this.applyCursor();
     }
   };
+}
+
+function isModifier(key: string): boolean {
+  return key === 'Shift' || key === 'Control' || key === 'Alt' || key === 'Meta';
 }
 
 /** 焦点在输入框里时，快捷键不应该生效 */

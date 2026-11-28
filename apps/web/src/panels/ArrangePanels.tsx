@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { MASK_MODES, type AlignMode, type BooleanOp, type DistributeMode } from '@shiba/core';
 import type { OrderMode } from '@shiba/editor';
 import { IconButton } from '../ui/controls';
+import { formatShortcut } from '../ui/shortcut';
 import type { PanelProps } from './registry';
 
 const ALIGN: { mode: AlignMode; icon: LucideIcon }[] = [
@@ -120,15 +121,7 @@ export function OrderPanel({ editor }: PanelProps): ReactNode {
 /** 在提示文字后面附上快捷键 */
 function withKey(editor: PanelProps['editor'], label: string, command: string): string {
   const key = editor.keymap.keyFor(command);
-  if (!key) return label;
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const pretty = key
-    .split('+')
-    .map((part) =>
-      part === 'mod' ? (mac ? '⌘' : 'Ctrl') : part === 'shift' ? (mac ? '⇧' : 'Shift') : part.toUpperCase(),
-    )
-    .join(mac ? '' : '+');
-  return `${label} (${pretty})`;
+  return key ? `${label} (${formatShortcut(key)})` : label;
 }
 
 /**

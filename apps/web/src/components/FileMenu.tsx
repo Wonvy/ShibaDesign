@@ -17,22 +17,9 @@ import {
 import { Menu } from '../ui/Menu';
 import { ExportSvgDialog } from './ExportSvgDialog';
 import { ExportVideoDialog } from './ExportVideoDialog';
+import { formatShortcut } from '../ui/shortcut';
 import { NewDocumentDialog } from './NewDocumentDialog';
 import { SaveTemplateDialog } from './SaveTemplateDialog';
-
-const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
-
-/** 把 'mod+shift+s' 这样的写法变成当前系统上的显示方式 */
-function shortcut(keys: string): string {
-  return keys
-    .split('+')
-    .map((key) => {
-      if (key === 'mod') return IS_MAC ? '⌘' : 'Ctrl';
-      if (key === 'shift') return IS_MAC ? '⇧' : 'Shift';
-      return key.toUpperCase();
-    })
-    .join(IS_MAC ? '' : '+');
-}
 
 /** 菜单项要打开的对话框 */
 interface MenuActions {
@@ -139,7 +126,7 @@ export function FileMenu(): ReactNode {
                   }}
                 >
                   <span className="menu-text">{t(item.labelKey)}</span>
-                  {item.keys && <span className="menu-shortcut">{shortcut(item.keys)}</span>}
+                  {item.keys && <span className="menu-shortcut">{formatShortcut(item.keys)}</span>}
                 </button>
               ))}
             </div>

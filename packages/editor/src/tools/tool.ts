@@ -16,6 +16,11 @@ export interface Tool {
   onPointerMove?(event: PointerInfo, editor: Editor): void;
   onPointerUp?(event: PointerInfo, editor: Editor): void;
   onDoubleClick?(event: PointerInfo, editor: Editor): void;
+  /**
+   * 拖动到一半被取消（按了 Esc、窗口失去焦点）：把这次拖动的改动撤回，像没拖过一样。
+   * 之后不会再收到这次拖动的 onPointerUp
+   */
+  onCancel?(editor: Editor): void;
   /** 返回 true 表示已处理，编辑器不再查快捷键表 */
   onKeyDown?(event: KeyboardEvent, editor: Editor): boolean;
   /** 在覆盖层上画工具自己的辅助图形；ctx 的单位是 CSS 像素 */

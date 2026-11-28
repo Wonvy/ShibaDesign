@@ -1,18 +1,34 @@
 export interface KeyBinding {
-  /** 形如 'mod+shift+z'、'delete'、'v'。修饰键顺序固定为 mod、alt、shift */
+  /**
+   * 形如 'mod+shift+z'、'delete'、'v'、'shift+1'。修饰键顺序固定为 mod、alt、shift。
+   * 字母和数字写键帽上的字（按物理键匹配，见 keyOf），其余的键写 event.key 的小写
+   */
   key: string;
   command: string;
   args?: unknown;
 }
 
-/** 把键盘事件规范化成 KeyBinding.key 的写法 */
+/**
+ * 把键盘事件规范化成 KeyBinding.key 的写法。
+ * 字母和数字按物理键（event.code）认：Mac 上按住 Option 时 event.key 是别的字符（⌥K 是 "˚"），
+ * Shift 加数字在不同键盘布局下也不一样（美式键盘 Shift+1 是 "!"），按 event.key 配不上。
+ * 代价是法语 AZERTY 这类布局按的是键的位置，不是键帽上的字（Figma 也是这样取舍的）。
+ * 标点、方向键、功能键仍按 event.key。
+ */
 export function keyOf(event: KeyboardEvent): string {
   const parts: string[] = [];
   if (event.metaKey || event.ctrlKey) parts.push('mod');
   if (event.altKey) parts.push('alt');
   if (event.shiftKey) parts.push('shift');
-  parts.push(event.key.length === 1 ? event.key.toLowerCase() : event.key.toLowerCase());
+  parts.push(baseKey(event));
   return parts.join('+');
+}
+
+function baseKey(event: KeyboardEvent): string {
+  const code = event.code ?? '';
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  return (event.key ?? '').toLowerCase();
 }
 
 /** 快捷键表。后加入的绑定优先，所以用户自定义可以覆盖默认值 */
@@ -80,6 +96,6 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: '=', command: 'view.zoomIn' },
   { key: 'shift++', command: 'view.zoomIn' },
   { key: '-', command: 'view.zoomOut' },
-  { key: 'shift+!', command: 'view.zoomToFit' },
-  { key: 'shift+)', command: 'view.zoom100' },
+  { key: 'shift+1', command: 'view.zoomToFit' },
+  { key: 'shift+0', command: 'view.zoom100' },
 ];

@@ -695,6 +695,13 @@ export function registerTextTool(editor: Editor): void {
       }
     },
 
+    onCancel() {
+      // 拖出文本框拖到一半取消：什么都不建；编辑中拖选文字时，已经选中的那段保留
+      pending = null;
+      if (session) session.dragAnchor = null;
+      editor.requestRender();
+    },
+
     onPointerUp() {
       if (session) {
         session.dragAnchor = null;

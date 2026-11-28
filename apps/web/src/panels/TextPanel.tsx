@@ -31,6 +31,7 @@ import {
 import type { TextToggle } from '@shiba/editor';
 import { useEditorState } from '../editor/context';
 import { ColorField, IconButton, NumberField } from '../ui/controls';
+import { formatShortcut } from '../ui/shortcut';
 import type { PanelProps } from './registry';
 import { ColorStyleField, TextStyleRow } from './StylePickers';
 
@@ -41,11 +42,9 @@ const ALIGN: { align: TextAlign; icon: LucideIcon; labelKey: string }[] = [
   { align: 'justify', icon: TextAlignJustify, labelKey: 'text.alignJustify' },
 ];
 
-const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
-
 /** 快捷键在当前系统上的写法 */
 function shortcut(key: string, shift = false): string {
-  return IS_MAC ? `⌘${shift ? '⇧' : ''}${key}` : `Ctrl+${shift ? 'Shift+' : ''}${key}`;
+  return formatShortcut(`mod+${shift ? 'shift+' : ''}${key.toLowerCase()}`);
 }
 
 const TOGGLES: { key: TextToggle; icon: LucideIcon; labelKey: string; shortcut: string }[] = [

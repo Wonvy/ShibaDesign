@@ -13,7 +13,7 @@ export interface Patch {
 
 export interface StoreChange {
   patches: readonly Patch[];
-  source: 'transact' | 'undo' | 'redo' | 'load';
+  source: 'transact' | 'undo' | 'redo' | 'load' | 'abandon';
 }
 
 export interface TransactOptions {
@@ -241,6 +241,23 @@ export class DocStore {
   /** 结束一段连续操作：之后的事务不再并入上一步撤销 */
   sealHistory(): void {
     this.sealed = true;
+  }
+
+  /**
+   * 放弃一段还没结束的连续操作（比如拖动到一半按了 Esc）：把带这个合并键的那一步整个撤回，
+   * 从撤销历史里拿掉，也不放进重做。最上面那一步不是它、或者已经封口了，什么都不做，返回 false
+   */
+  abandon(mergeKey: string): boolean {
+    const top = this.undoStack.at(-1);
+    if (this.sealed || !top || top.mergeKey !== mergeKey) return false;
+    this.undoStack.pop();
+    this.apply(top.patches.values(), 'before');
+    this.sealed = true;
+    this.emit({
+      patches: [...top.patches.values()].map((p) => ({ id: p.id, before: p.after, after: p.before })),
+      source: 'abandon',
+    });
+    return true;
   }
 
   get canUndo(): boolean {

@@ -83,6 +83,35 @@ describe('DocStore', () => {
     expect(store.require(rect.id).transform).toEqual(translation(50, 60));
   });
 
+  it('放弃一段还没结束的连续操作：撤回、不留在撤销和重做里', () => {
+    const store = DocStore.create();
+    const rect = addRect(store, store.root.id, 0, 0);
+    store.sealHistory();
+    for (let i = 1; i <= 3; i++) {
+      store.transact('drag', (tx) => tx.update(rect.id, { transform: translation(i * 10, 0) }), { mergeKey: 'drag' });
+    }
+    const sources: string[] = [];
+    store.subscribe((change) => sources.push(change.source));
+    expect(store.abandon('drag')).toBe(true);
+    expect(store.require(rect.id).transform).toEqual(translation(0, 0));
+    expect(store.canRedo).toBe(false);
+    expect(sources).toEqual(['abandon']);
+    // 撤销的是创建矩形那一步，拖动那一步已经没了
+    store.undo();
+    expect(store.has(rect.id)).toBe(false);
+  });
+
+  it('合并键对不上、或者已经封口时不放弃', () => {
+    const store = DocStore.create();
+    const rect = addRect(store, store.root.id, 0, 0);
+    store.sealHistory();
+    store.transact('drag', (tx) => tx.update(rect.id, { transform: translation(10, 0) }), { mergeKey: 'drag' });
+    expect(store.abandon('other')).toBe(false);
+    store.sealHistory();
+    expect(store.abandon('drag')).toBe(false);
+    expect(store.require(rect.id).transform).toEqual(translation(10, 0));
+  });
+
   it('相同 mergeKey 的连续事务合并为一步撤销', () => {
     const store = DocStore.create();
     const rect = addRect(store, store.root.id, 0, 0);

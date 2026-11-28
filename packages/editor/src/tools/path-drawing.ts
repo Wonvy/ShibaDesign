@@ -111,6 +111,13 @@ export function createPathDrawingTool(options: PathDrawingOptions): Tool {
       dragging = false;
     },
 
+    onCancel(editor) {
+      // 拖控制柄拖到一半取消：这次单击放下的锚点也不要了
+      if (dragging && anchors.length > fixed) anchors.pop();
+      dragging = false;
+      editor.requestRender();
+    },
+
     onKeyDown(event, editor) {
       if (event.key === 'Enter') {
         end(editor, false);

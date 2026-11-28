@@ -52,6 +52,12 @@ export function createShapeTool(kind: 'rect' | 'ellipse'): Tool {
       drag = null;
     },
 
+    onCancel(editor) {
+      // 已经画出来的形状撤掉，像没画过一样
+      if (drag?.nodeId) editor.store.abandon(drag.key);
+      drag = null;
+    },
+
     onPointerDown(e, editor) {
       drag = {
         start: e.world,

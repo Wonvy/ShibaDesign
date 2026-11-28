@@ -6,12 +6,12 @@ import { useEditor, useEditorState } from '../editor/context';
 import { pickAndPlaceImages } from '../files';
 import { toolbarItems } from '../toolbar';
 import { IconButton } from '../ui/controls';
+import { formatShortcut } from '../ui/shortcut';
 import { FileMenu } from './FileMenu';
 import { LanguageMenu } from './LanguageMenu';
 import { ThemeMenu } from './ThemeMenu';
 
 const VIEW_MODES: ViewMode[] = ['canvas', 'slides'];
-const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 export function TopBar(props: { onPlay: () => void }): ReactNode {
   const editor = useEditor();
@@ -24,7 +24,7 @@ export function TopBar(props: { onPlay: () => void }): ReactNode {
 
   const withShortcut = (label: string, command: string, args?: unknown): string => {
     const key = editor.keymap.keyFor(command, args);
-    return key ? `${label} (${key.toUpperCase()})` : label;
+    return key ? `${label} (${formatShortcut(key)})` : label;
   };
 
   return (
@@ -83,7 +83,7 @@ export function TopBar(props: { onPlay: () => void }): ReactNode {
       <div className="spacer" />
 
       <div className="group">
-        <IconButton title={`${t('present.play')} (${IS_MAC ? '⌘' : 'Ctrl+'}↵)`} onClick={props.onPlay}>
+        <IconButton title={`${t('present.play')} (${formatShortcut('mod+enter')})`} onClick={props.onPlay}>
           <Play size={16} />
         </IconButton>
       </div>

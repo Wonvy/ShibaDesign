@@ -41,7 +41,8 @@ const ROTATE_SNAP = Math.PI / 12;
 type Drag =
   | { kind: 'pending'; x: number; y: number; world: Point; collapseTo: NodeId | null }
   | { kind: 'move'; world: Point; originals: Map<NodeId, SceneNode>; key: string }
-  | { kind: 'marquee'; start: Point; current: Point; base: readonly NodeId[] }
+  // base 是框选开始时保留的选区（按着 Shift 时），before 是按下鼠标之前的选区，取消时换回去
+  | { kind: 'marquee'; start: Point; current: Point; base: readonly NodeId[]; before: readonly NodeId[] }
   // 只选一个对象：沿对象自己的方向缩放
   | {
       kind: 'resize-local';
@@ -265,8 +266,9 @@ export function createSelectTool(): Tool {
 
       const target = editor.overlayLayer?.hitArtboardLabel(e.x, e.y) ?? editor.pick(e.world).node?.id ?? null;
       if (!target) {
+        const before = [...editor.selection];
         if (!e.shift) editor.clearSelection();
-        drag = { kind: 'marquee', start: e.world, current: e.world, base: e.shift ? [...editor.selection] : [] };
+        drag = { kind: 'marquee', start: e.world, current: e.world, base: e.shift ? before : [], before };
         return;
       }
 
@@ -402,6 +404,15 @@ export function createSelectTool(): Tool {
         if (e.shift) angle = Math.round(angle / ROTATE_SNAP) * ROTATE_SNAP;
         store.transact('rotate', (tx) => rotateNodes(tx, store, originals, ids, pivot, angle), { mergeKey: key });
       }
+    },
+
+    onCancel(editor) {
+      const cancelled = drag;
+      drag = null;
+      if (!cancelled) return;
+      if (cancelled.kind === 'marquee') editor.select(cancelled.before);
+      else if ('key' in cancelled) editor.store.abandon(cancelled.key);
+      editor.setCursor('default');
     },
 
     onPointerUp(_e, editor) {
