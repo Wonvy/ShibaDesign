@@ -294,6 +294,36 @@ export class DocStore {
     return this.undoStack.length > 0;
   }
 
+  /** 撤销会撤掉的那一步的名字（事务的 label，比如 'move'）；没有可撤销的时为 null */
+  get undoLabel(): string | null {
+    return this.undoStack.at(-1)?.label ?? null;
+  }
+
+  /** 重做会做的那一步的名字；没有可重做的时为 null */
+  get redoLabel(): string | null {
+    return this.redoStack.at(-1)?.label ?? null;
+  }
+
+  /**
+   * 撤销历史：labels 从早到晚列出做过的每一步，后面接着撤销掉、还能重做的；
+   * position 是现在停在第几步之后（0 是一步都没做的样子）
+   */
+  history(): { labels: string[]; position: number } {
+    const done = this.undoStack.map((e) => e.label);
+    const undone = [...this.redoStack].reverse().map((e) => e.label);
+    return { labels: [...done, ...undone], position: done.length };
+  }
+
+  /** 回到历史里的某一步之后：往回撤销或者往前重做到那里 */
+  goToHistory(position: number): void {
+    while (this.undoStack.length > position && this.undo()) {
+      // 一步步撤销
+    }
+    while (this.undoStack.length < position && this.redo()) {
+      // 一步步重做
+    }
+  }
+
   get canRedo(): boolean {
     return this.redoStack.length > 0;
   }

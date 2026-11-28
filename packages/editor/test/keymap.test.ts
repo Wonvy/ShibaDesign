@@ -38,3 +38,23 @@ describe('快捷键匹配', () => {
     expect(keymap.match(key({ key: ')', code: 'Digit0', shiftKey: true }))?.command).toBe('view.zoom100');
   });
 });
+
+describe('自定义快捷键', () => {
+  it('改过的命令不再用默认的键；去掉的没有快捷键；用户的键优先', () => {
+    const keymap = new Keymap().add(
+      { key: 'v', command: 'tool.set', args: 'select' },
+      { key: 'r', command: 'tool.set', args: 'rect' },
+    );
+    keymap.setOverrides([
+      { command: 'tool.set', args: 'rect', key: 'shift+r' },
+      { command: 'tool.set', args: 'select', key: null },
+    ]);
+    expect(keymap.keyFor('tool.set', 'rect')).toBe('shift+r');
+    expect(keymap.keyFor('tool.set', 'select')).toBeUndefined();
+    expect(keymap.bindingFor('r')).toBeUndefined();
+    expect(keymap.bindingFor('shift+r')).toMatchObject({ command: 'tool.set', args: 'rect' });
+    expect(keymap.list().map((b) => b.key)).toEqual(['shift+r']);
+    keymap.setOverrides([]);
+    expect(keymap.keyFor('tool.set', 'select')).toBe('v');
+  });
+});

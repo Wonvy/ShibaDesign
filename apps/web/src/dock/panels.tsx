@@ -3,6 +3,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ImageFill, NodeId, SceneNode } from '@shiba/core';
 import { AssetsPanel } from '../components/AssetsPanel';
+import { HistoryPanel } from '../components/HistoryPanel';
 import { InspectPanel } from '../components/InspectPanel';
 import { Inspector } from '../components/Inspector';
 import { LayersPanel } from '../components/LayersPanel';
@@ -31,6 +32,13 @@ export function registerBuiltinDockPanels(): void {
     defaultPlace: { zone: 'right' },
   });
   registerDockPanel({ id: 'notes', titleKey: 'panel.notes', component: NotesPanel, defaultPlace: { zone: 'bottom' } });
+  registerDockPanel({
+    id: 'history',
+    titleKey: 'panel.history',
+    component: HistoryPanel,
+    defaultPlace: 'float',
+    floatSize: { w: 240, h: 360 },
+  });
   registerDockPanel({
     id: 'image',
     titleKey: 'panel.image',

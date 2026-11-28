@@ -41,3 +41,12 @@ describe('菜单的名字', () => {
     expect(tidy(entries)).toEqual([item, 'separator', item]);
   });
 });
+
+describe('撤销历史的名字', () => {
+  it('中英文语言包里的条目一样多', () => {
+    const zhKeys = Object.keys(zh.strings.history).sort();
+    const enKeys = Object.keys(en.strings.history).sort();
+    expect(enKeys).toEqual(zhKeys);
+    expect(zhKeys).toContain('move');
+  });
+});

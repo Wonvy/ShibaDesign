@@ -6,6 +6,7 @@ import { createStarterDocument, trackChanges } from '../files';
 import { DEFAULT_FONTS, registerFonts } from '../fonts';
 import { i18n } from '../i18n';
 import { displayName } from '../names';
+import { loadOverrides } from '../shortcuts';
 import { enableDraftAutosave, loadDraft } from '../storage/draft';
 import { currentTheme, subscribeTheme } from '../theme';
 
@@ -17,6 +18,8 @@ export async function createApp(): Promise<Editor> {
   const store = DocStore.fromJSON(draft?.document ?? createStarterDocument());
   const editor = createEditor({ ck, store, assets, theme: currentTheme().canvas, defaultFonts: DEFAULT_FONTS });
   registerFonts(editor.fonts);
+  // 用户在快捷键表里改过的快捷键
+  editor.keymap.setOverrides(loadOverrides());
 
   // 内核不产生给人看的文字，节点的默认名由界面层按当前语言生成
   editor.labelOf = (node) => displayName(node, i18n.t.bind(i18n), store);

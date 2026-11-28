@@ -78,3 +78,38 @@ describe('撤销分组', () => {
     expect(store.get(rect.id)).toBeUndefined();
   });
 });
+
+describe('撤销历史', () => {
+  it('按步列出名字，记住停在哪一步；回到某一步是撤销或重做到那里', () => {
+    const store = DocStore.create();
+    const rect = store.transact('create', (tx) =>
+      tx.create(
+        createNode('rect', {
+          parent: store.root.id,
+          index: 'a0',
+          seq: 1,
+          size: [10, 10],
+          cornerRadius: 0,
+          fill: null,
+          stroke: null,
+        }),
+      ),
+    );
+    store.sealHistory();
+    store.transact('move', (tx) => tx.update(rect.id, { transform: [1, 0, 0, 1, 5, 5] }));
+    store.sealHistory();
+    store.transact('resize', (tx) => tx.update(rect.id, { size: [20, 20] }));
+    store.sealHistory();
+    expect(store.history()).toEqual({ labels: ['create', 'move', 'resize'], position: 3 });
+    expect(store.undoLabel).toBe('resize');
+    store.goToHistory(1);
+    expect(store.history().position).toBe(1);
+    expect(store.get(rect.id)?.size).toEqual([10, 10]);
+    expect(store.redoLabel).toBe('move');
+    store.goToHistory(3);
+    expect(store.get(rect.id)?.size).toEqual([20, 20]);
+    store.goToHistory(0);
+    expect(store.get(rect.id)).toBeUndefined();
+    expect(store.undoLabel).toBeNull();
+  });
+});

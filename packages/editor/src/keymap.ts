@@ -49,18 +49,63 @@ function baseKey(event: KeyboardEvent): string {
 }
 
 /** 快捷键表。后加入的绑定优先，所以用户自定义可以覆盖默认值 */
+/** 用户改过的快捷键：这个命令（带参数）换成 key；key 是 null 表示不要快捷键 */
+export interface KeyOverride {
+  command: string;
+  args?: unknown;
+  key: string | null;
+}
+
+/** 命令连同参数的标识，判断两条绑定是不是同一个操作 */
+export function bindingId(command: string, args?: unknown): string {
+  return `${command}|${JSON.stringify(args)}`;
+}
+
 export class Keymap {
   private bindings: KeyBinding[] = [];
+  private overrides: KeyOverride[] = [];
+  private cache: KeyBinding[] | null = null;
 
   add(...bindings: KeyBinding[]): this {
     this.bindings.push(...bindings);
+    this.cache = null;
     return this;
+  }
+
+  /**
+   * 用户自定义的快捷键（快捷键表里改的）：改过的命令不再用默认的键，换成用户给的（或者没有），
+   * 用户的绑定排在最后，同一个键上用户的优先
+   */
+  setOverrides(overrides: readonly KeyOverride[]): void {
+    this.overrides = [...overrides];
+    this.cache = null;
+  }
+
+  getOverrides(): readonly KeyOverride[] {
+    return this.overrides;
+  }
+
+  /** 默认绑定（不含用户改的），恢复默认时对照用 */
+  defaults(): readonly KeyBinding[] {
+    return this.bindings;
+  }
+
+  private effective(): KeyBinding[] {
+    if (this.cache) return this.cache;
+    const changed = new Set(this.overrides.map((o) => bindingId(o.command, o.args)));
+    const base = this.bindings.filter((b) => !changed.has(bindingId(b.command, b.args)));
+    const added = this.overrides.flatMap((o) =>
+      o.key ? [{ key: o.key, command: o.command, ...(o.args !== undefined ? { args: o.args } : {}) }] : [],
+    );
+    this.cache = [...base, ...added];
+    return this.cache;
   }
 
   match(event: KeyboardEvent): KeyBinding | undefined {
     const key = keyOf(event);
-    for (let i = this.bindings.length - 1; i >= 0; i--) {
-      if (this.bindings[i]!.key === key) return this.bindings[i];
+    const bindings = this.effective();
+    for (let i = bindings.length - 1; i >= 0; i--) {
+      if (bindings[i]!.key === key) return bindings[i];
     }
     return undefined;
   }
@@ -68,16 +113,24 @@ export class Keymap {
   /** 当前生效的全部绑定（同一个键后加的覆盖先加的），快捷键表用 */
   list(): KeyBinding[] {
     const byKey = new Map<string, KeyBinding>();
-    for (const binding of this.bindings) byKey.set(binding.key, binding);
+    for (const binding of this.effective()) byKey.set(binding.key, binding);
     return [...byKey.values()];
   }
 
   /** 某个命令当前绑定的快捷键，用于在界面上显示 */
   keyFor(command: string, args?: unknown): string | undefined {
-    for (let i = this.bindings.length - 1; i >= 0; i--) {
-      const b = this.bindings[i]!;
+    const bindings = this.effective();
+    for (let i = bindings.length - 1; i >= 0; i--) {
+      const b = bindings[i]!;
       if (b.command === command && JSON.stringify(b.args) === JSON.stringify(args)) return b.key;
     }
+    return undefined;
+  }
+
+  /** 这个键现在给了哪个操作（用户改快捷键时检查冲突） */
+  bindingFor(key: string): KeyBinding | undefined {
+    const bindings = this.effective();
+    for (let i = bindings.length - 1; i >= 0; i--) if (bindings[i]!.key === key) return bindings[i];
     return undefined;
   }
 }

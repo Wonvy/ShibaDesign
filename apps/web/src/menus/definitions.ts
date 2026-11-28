@@ -20,6 +20,7 @@ import {
   saveDocumentAs,
 } from '../files';
 import { i18n } from '../i18n';
+import { historyName } from '../history';
 import { displayName } from '../names';
 import { openFileDialog } from '../components/FileMenu';
 import { slidesForMenu } from '../components/SlideStrip';
@@ -250,6 +251,12 @@ function objectItems(ctx: MenuContext, here: boolean): MenuEntry[] {
     'separator',
     { id: 'export', labelKey: 'menu.exportSelection', run: () => void exportImage(ctx.editor, 'png', 2) },
   ];
+}
+
+/** 撤销、重做菜单项的文字：带上要撤销（重做）的那一步的名字 */
+function undoLabel(ctx: MenuContext, which: 'undo' | 'redo'): Partial<MenuItemDef> {
+  const name = historyName(which === 'undo' ? ctx.editor.store.undoLabel : ctx.editor.store.redoLabel);
+  return name ? { label: i18n.t(which === 'undo' ? 'menu.undoAction' : 'menu.redoAction', { action: name }) } : {};
 }
 
 /** 一个打勾的视图选项 */
@@ -571,8 +578,9 @@ export function registerBuiltinMenus(): void {
   ]);
 
   registerMenu('bar.edit', (ctx) => [
-    cmd('edit.undo'),
-    cmd('edit.redo'),
+    // 撤销、重做显示要撤销的是什么（"撤销 移动"）；不认识的事务名只显示"撤销"
+    cmd('edit.undo', undefined, undoLabel(ctx, 'undo')),
+    cmd('edit.redo', undefined, undoLabel(ctx, 'redo')),
     'separator',
     ...clipboardItems(ctx, false),
     'separator',
