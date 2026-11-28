@@ -24,6 +24,7 @@ export class InputController {
     element.addEventListener('pointermove', this.onPointerMove, options);
     element.addEventListener('pointerup', this.onPointerUp, options);
     element.addEventListener('pointercancel', this.onPointerUp, options);
+    element.addEventListener('pointerleave', () => this.editor.setHover(null), options);
     element.addEventListener('dblclick', this.onDoubleClick, options);
     element.addEventListener('mousedown', this.onMouseDown, options);
     element.addEventListener('wheel', this.onWheel, { ...options, passive: false });
@@ -77,6 +78,7 @@ export class InputController {
       mod: keys.metaKey || keys.ctrlKey,
       button,
       down: this.pointerDown,
+      space: this.spaceHeld,
     };
   }
 
@@ -89,6 +91,10 @@ export class InputController {
     if (!this.pointerDown || !last) return;
     this.editor.tool.onPointerMove?.(this.infoAt(last.clientX, last.clientY, event, last.button), this.editor);
     this.editor.requestRender();
+  }
+
+  private isCanvasFocus(target: EventTarget | null): boolean {
+    return target === this.element || target === document.body || target === document.documentElement || !target;
   }
 
   /** 取消正在进行的拖动：工具撤回这次拖动的改动，之后的松手不再交给工具 */
@@ -193,11 +199,16 @@ export class InputController {
     if (event.key === ' ') {
       if (!this.spaceHeld) {
         this.spaceHeld = true;
-        this.applyCursor();
+        // 拖动中按下空格：让工具挪动正在画的东西；没在拖动时是抓手
+        if (this.pointerDown) this.refreshModifiers(event);
+        else this.applyCursor();
       }
       event.preventDefault();
       return;
     }
+    // 回车、Tab 只在焦点在画布上（或者没有焦点）时当快捷键：焦点在面板的按钮上时，回车是按下按钮、Tab 是移动焦点
+    const plain = !event.metaKey && !event.ctrlKey;
+    if ((event.key === 'Enter' || event.key === 'Tab') && plain && !this.isCanvasFocus(event.target)) return;
     if (this.editor.tool.onKeyDown?.(event, this.editor)) {
       event.preventDefault();
       this.editor.requestRender();
@@ -213,6 +224,7 @@ export class InputController {
     if (isModifier(event.key)) this.refreshModifiers(event);
     if (event.key === ' ') {
       this.spaceHeld = false;
+      if (this.pointerDown) this.refreshModifiers(event);
       this.applyCursor();
     }
   };

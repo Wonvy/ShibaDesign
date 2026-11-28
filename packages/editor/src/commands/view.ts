@@ -23,6 +23,16 @@ export const zoom100: Command = {
   run: (editor) => editor.zoomBy(1 / editor.camera.zoom),
 };
 
+/** 缩放到选区（⇧2）：选中的对象正好放满视口 */
+export const zoomToSelection: Command = {
+  id: 'view.zoomToSelection',
+  enabled: (editor) => editor.selection.length > 0,
+  run(editor) {
+    const bounds = editor.selectionBounds();
+    if (bounds) editor.zoomToFit(bounds);
+  },
+};
+
 /** 在自由画布和幻灯片两种视图之间切换。数据不变，只换相机和界面 */
 export const setViewMode: Command<ViewMode> = {
   id: 'view.setMode',

@@ -418,6 +418,12 @@ export function registerTextTool(editor: Editor): void {
       event.preventDefault();
       return;
     }
+    // 快捷键表里改字号、对齐、列表的那几条，编辑文字时照样能用
+    const binding = mod ? editor.keymap.match(event) : undefined;
+    if (binding && EDITING_COMMANDS.has(binding.command) && editor.commands.run(binding.command, binding.args)) {
+      event.preventDefault();
+      return;
+    }
     if (event.key === 'Tab') event.preventDefault();
   };
 
@@ -827,6 +833,17 @@ export function registerTextTool(editor: Editor): void {
     },
   };
 
+  /** 字号加大、减小（⇧⌘. / ⇧⌘,）：按常用字号的档位跳 */
+  const fontStep: Command<1 | -1> = {
+    id: 'text.fontStep',
+    enabled: () => session !== null || editor.selectedNodes().some((n) => n.type === 'text'),
+    run(_editor, direction) {
+      const current = currentStyle();
+      if (!current) return;
+      applyStyle({ fontSize: steppedFontSize(current.style.fontSize, direction) }, undefined, true);
+    },
+  };
+
   const toggleText: Command<TextToggle> = {
     id: 'text.toggle',
     enabled: () => session !== null || editor.selectedNodes().some((n) => n.type === 'text'),
@@ -837,6 +854,7 @@ export function registerTextTool(editor: Editor): void {
 
   editor.tools.register(tool);
   editor.commands.register(editText);
+  editor.commands.register(fontStep);
   editor.commands.register(styleText);
   editor.commands.register(toggleText);
   editor.commands.register(paragraphText);
@@ -854,3 +872,18 @@ const TOGGLE_KEYS: Record<string, TextToggle> = {
   u: 'underline',
   'shift+x': 'strikethrough',
 };
+
+/** 编辑文字时也走快捷键表的命令 */
+const EDITING_COMMANDS = new Set(['text.fontStep', 'text.paragraph', 'text.list']);
+
+/** 常用字号的档位，和常见的设计软件差不多 */
+const FONT_SIZE_STEPS = [
+  6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 120, 144, 192, 240, 288,
+];
+
+/** 从 size 往大（1）或往小（-1）跳到下一个档位；超出档位时按 1.25 倍放大缩小 */
+export function steppedFontSize(size: number, direction: 1 | -1): number {
+  if (direction > 0) return FONT_SIZE_STEPS.find((s) => s > size + 0.01) ?? Math.round(size * 1.25);
+  const smaller = [...FONT_SIZE_STEPS].reverse().find((s) => s < size - 0.01);
+  return smaller ?? Math.max(1, Math.round(size / 1.25));
+}

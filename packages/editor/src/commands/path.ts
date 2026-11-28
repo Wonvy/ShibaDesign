@@ -263,3 +263,28 @@ export function replaceTextWithOutlines(
   store.sealHistory();
   return plans.map((plan) => plan.node.id);
 }
+
+/**
+ * 拼合（⌘E）：把矩形、椭圆、布尔组换成普通的钢笔路径（布尔组换成运算的结果，运算对象去掉），
+ * 填充、描边不变，id 和血缘沿用（动画、平滑切换接得上）。之后可以改锚点
+ */
+export const flattenShapes: Command = {
+  id: 'path.flatten',
+  enabled: (editor) => shapes(editor).some((node) => node.type !== 'path'),
+  run(editor) {
+    const { store } = editor;
+    const plans = shapes(editor)
+      .filter((node) => node.type !== 'path')
+      .flatMap((node) => {
+        const path = pathNode(editor, editor.geometry.outlineOf(node), IDENTITY, {
+          fill: node.fill,
+          stroke: node.stroke,
+        });
+        return path ? [{ node, path }] : [];
+      });
+    if (plans.length === 0) return;
+    store.transact('flatten', (tx) => plans.forEach(({ node, path }) => replaceNode(editor, tx, node, [path])));
+    store.sealHistory();
+    editor.select(plans.map((p) => p.node.id));
+  },
+};

@@ -1,6 +1,7 @@
 import {
   hasLiveAppearance,
   applyToPoint,
+  isInstanceCopy,
   invert,
   isDescendantOf,
   rectContainsPoint,
@@ -19,6 +20,7 @@ import {
   type TextNode,
 } from '@shiba/core';
 import { pruneAnimations, setAnimationPath } from '../commands/animation';
+import { cloneNodes } from '../commands/edit';
 import type { Editor } from '../editor';
 import { dragGradientPoint, imageRect, panImage, zoomImage, type GradientPoint } from '../fill-handles';
 import { dragMotionPoint, hitMotionHandle, toPathPoint, type MotionPart, type MotionPathView } from '../motion-handles';
@@ -37,12 +39,31 @@ import type { Tool } from './tool';
 const DRAG_THRESHOLD = 3;
 /** 按住 Shift 旋转时吸附的步长：15° */
 const ROTATE_SNAP = Math.PI / 12;
+/** 按住 Shift 移动时方向吸附的步长：45° */
+const MOVE_SNAP = Math.PI / 4;
 
 type Drag =
   | { kind: 'pending'; x: number; y: number; world: Point; collapseTo: NodeId | null }
-  | { kind: 'move'; world: Point; originals: Map<NodeId, SceneNode>; key: string }
-  // base 是框选开始时保留的选区（按着 Shift 时），before 是按下鼠标之前的选区，取消时换回去
-  | { kind: 'marquee'; start: Point; current: Point; base: readonly NodeId[]; before: readonly NodeId[] }
+  // copies：按着 Alt 拖动时复制出来的副本（原件 id → 副本 id），拖动的是副本，原件留在原处
+  | {
+      kind: 'move';
+      world: Point;
+      originals: Map<NodeId, SceneNode>;
+      key: string;
+      canCopy: boolean;
+      copies: Map<NodeId, NodeId> | null;
+    }
+  // base 是框选开始时保留的选区（按着 Shift 时），before 是按下鼠标之前的选区，取消时换回去；
+  // deep：按着 ⌘ 框选，选的是编组里面的成员
+  | {
+      kind: 'marquee';
+      start: Point;
+      current: Point;
+      base: readonly NodeId[];
+      before: readonly NodeId[];
+      deep: boolean;
+      remove: boolean;
+    }
   // 只选一个对象：沿对象自己的方向缩放
   | {
       kind: 'resize-local';
@@ -243,8 +264,9 @@ export function createSelectTool(): Tool {
     id: 'select',
     cursor: 'default',
 
-    onDeactivate() {
+    onDeactivate(editor) {
       drag = null;
+      editor.setHover(null);
     },
 
     onPointerDown(e, editor) {
@@ -264,11 +286,23 @@ export function createSelectTool(): Tool {
       }
       if (beginTransform(editor, e.world, e.x, e.y)) return;
 
-      const target = editor.overlayLayer?.hitArtboardLabel(e.x, e.y) ?? editor.pick(e.world).node?.id ?? null;
+      editor.setHover(null);
+      // ⌘ 单击直接选中最里面的对象（深选），不管套了几层编组
+      const picked = e.mod ? editor.pickDeep(e.world) : editor.pick(e.world).node;
+      const target = editor.overlayLayer?.hitArtboardLabel(e.x, e.y) ?? picked?.id ?? null;
       if (!target) {
         const before = [...editor.selection];
-        if (!e.shift) editor.clearSelection();
-        drag = { kind: 'marquee', start: e.world, current: e.world, base: e.shift ? before : [], before };
+        const keep = e.shift || e.alt;
+        if (!keep) editor.clearSelection();
+        drag = {
+          kind: 'marquee',
+          start: e.world,
+          current: e.world,
+          base: keep ? before : [],
+          before,
+          deep: e.mod,
+          remove: e.alt && !e.shift,
+        };
         return;
       }
 
@@ -308,6 +342,8 @@ export function createSelectTool(): Tool {
         else if (hit?.kind === 'resize') editor.setCursor(handleCursor(hit.handle, overlay?.frameAngle() ?? 0));
         else if (hit) editor.setCursor('pointer');
         else {
+          // 悬停高亮：单击会选中的那个对象（按着 ⌘ 时是深选会选中的那个）
+          if (!hit) editor.setHover((e.mod ? editor.pickDeep(e.world) : editor.pick(e.world).node)?.id ?? null);
           // 调整图片时，形状里面可以直接拖动图片
           const target = fillTarget(editor);
           const local = target ? toLocalPoint(target.toLocal, e.world) : null;
@@ -326,6 +362,9 @@ export function createSelectTool(): Tool {
           world: drag.world,
           originals: new Map(ids.map((id) => [id, store.require(id)])),
           key: editor.newMergeKey('move'),
+          // 实例里的东西不能复制（会往实例里加东西），这时 Alt 不起作用
+          canCopy: ids.every((id) => !isInstanceCopy(store.get(id))),
+          copies: null,
         };
       }
 
@@ -333,36 +372,72 @@ export function createSelectTool(): Tool {
         let dx = e.world.x - drag.world.x;
         let dy = e.world.y - drag.world.y;
         if (e.shift) {
-          if (Math.abs(dx) > Math.abs(dy)) dy = 0;
-          else dx = 0;
+          // 锁定在 0°、45°、90°……的方向上，长度取在这个方向上的投影
+          const angle = Math.round(Math.atan2(dy, dx) / MOVE_SNAP) * MOVE_SNAP;
+          const length = dx * Math.cos(angle) + dy * Math.sin(angle);
+          dx = Math.abs(Math.cos(angle)) < 1e-9 ? 0 : length * Math.cos(angle);
+          dy = Math.abs(Math.sin(angle)) < 1e-9 ? 0 : length * Math.sin(angle);
         }
-        const { originals, key } = drag;
-        store.transact('move', (tx) => translateFromOriginals(tx, store, originals, dx, dy), { mergeKey: key });
+        const move = drag;
+        const { originals, key } = move;
+        const wantCopy = e.alt && move.canCopy;
+        if (wantCopy && !move.copies) {
+          // 按下 Alt：原件回到原处，在它上面复制一份，拖动的换成副本
+          store.transact(
+            'move',
+            (tx) => {
+              translateFromOriginals(tx, store, originals, 0, 0);
+              move.copies = cloneNodes(editor, tx, [...originals.keys()], 0, 0);
+            },
+            { mergeKey: key },
+          );
+          editor.select([...move.copies!.values()]);
+          editor.setCursor('copy');
+        } else if (!wantCopy && move.copies) {
+          // 松开 Alt：副本删掉，拖动的换回原件
+          const copies = move.copies;
+          store.transact('move', (tx) => copies.forEach((copy) => tx.remove(copy)), { mergeKey: key });
+          move.copies = null;
+          editor.select([...originals.keys()]);
+          editor.setCursor('default');
+        }
+        const moving = move.copies ? copyOriginals(originals, move.copies) : originals;
+        store.transact('move', (tx) => translateFromOriginals(tx, store, moving, dx, dy), { mergeKey: key });
         return;
       }
 
       if (drag.kind === 'marquee') {
+        if (e.space) {
+          // 按住空格挪动整个选框
+          drag.start = { x: drag.start.x + e.world.x - drag.current.x, y: drag.start.y + e.world.y - drag.current.y };
+        }
         drag.current = e.world;
         const rect = rectFromPoints(drag.start.x, drag.start.y, e.world.x, e.world.y);
-        const hits = editor
-          .selectableNodes()
+        const candidates = drag.deep ? groupMembersOf(editor, editor.selectableNodes()) : editor.selectableNodes();
+        const hits = candidates
           .filter((node) => rectsIntersect(editor.geometry.worldBounds(node), rect))
           .map((node) => node.id);
-        editor.select([...drag.base, ...hits]);
+        if (drag.remove) {
+          // 按着 Alt 框选：从原来的选区里减掉框到的
+          const removed = new Set(hits);
+          editor.select(drag.base.filter((id) => !removed.has(id)));
+        } else {
+          editor.select([...new Set([...drag.base, ...hits])]);
+        }
         return;
       }
 
       if (drag.kind === 'resize-local') {
         const { id, box, originals, key } = drag;
         const [lx, ly] = applyToPoint(drag.toLocal, e.world.x, e.world.y);
-        const next = resizeBounds(box, drag.handle, { x: lx, y: ly }, e.shift);
+        const next = resizeBounds(box, drag.handle, { x: lx, y: ly }, e.shift, e.alt);
         store.transact('resize', (tx) => resizeLocal(tx, store, originals, id, box, next), { mergeKey: key });
         return;
       }
 
       if (drag.kind === 'resize-world') {
         const { ids, originals, from, key } = drag;
-        const to = resizeBounds(from, drag.handle, e.world, e.shift);
+        const to = resizeBounds(from, drag.handle, e.world, e.shift, e.alt);
         store.transact('resize', (tx) => resizeInWorld(tx, store, originals, ids, from, to), { mergeKey: key });
         return;
       }
@@ -412,6 +487,7 @@ export function createSelectTool(): Tool {
       if (!cancelled) return;
       if (cancelled.kind === 'marquee') editor.select(cancelled.before);
       else if ('key' in cancelled) editor.store.abandon(cancelled.key);
+      if (cancelled.kind === 'move' && cancelled.copies) editor.select([...cancelled.originals.keys()]);
       editor.setCursor('default');
     },
 
@@ -421,10 +497,11 @@ export function createSelectTool(): Tool {
       if (!finished) return;
       if (finished.kind === 'pending' && finished.collapseTo) editor.select([finished.collapseTo]);
       if (finished.kind === 'move') {
+        const moved = finished.copies ? [...finished.copies.values()] : [...finished.originals.keys()];
         editor.store.transact(
           'move',
           (tx) => {
-            reparentByPosition(editor, tx, finished.originals.keys());
+            reparentByPosition(editor, tx, moved);
             // 对象被拖到别的幻灯片上之后，它在原来那一页的动画就没有意义了
             pruneAnimations(tx, editor.store);
           },
@@ -432,7 +509,7 @@ export function createSelectTool(): Tool {
         );
       }
       if (finished.kind !== 'pending' && finished.kind !== 'marquee') editor.store.sealHistory();
-      if (finished.kind === 'rotate') editor.setCursor('default');
+      if (finished.kind === 'rotate' || (finished.kind === 'move' && finished.copies)) editor.setCursor('default');
     },
 
     onDoubleClick(e, editor) {
@@ -484,4 +561,29 @@ export function createSelectTool(): Tool {
       ctx.restore();
     },
   };
+}
+
+/** 拖动副本用的"原件"：副本刚复制出来时和原件重合，按原件的变换算位移（复制出来的画板放在别处，也拉回来跟着走） */
+function copyOriginals(
+  originals: ReadonlyMap<NodeId, SceneNode>,
+  copies: ReadonlyMap<NodeId, NodeId>,
+): Map<NodeId, SceneNode> {
+  const out = new Map<NodeId, SceneNode>();
+  for (const [source, copy] of copies) {
+    const original = originals.get(source);
+    if (original) out.set(copy, { ...original, id: copy } as SceneNode);
+  }
+  return out;
+}
+
+/** ⌘ 框选的候选：编组展开成里面的成员（一层层展开到不是编组为止），看不见、锁定的不算 */
+function groupMembersOf(editor: Editor, nodes: readonly SceneNode[]): SceneNode[] {
+  const out: SceneNode[] = [];
+  const visit = (node: SceneNode): void => {
+    if (!node.visible || node.locked) return;
+    if (node.type === 'group') editor.store.children(node.id).forEach(visit);
+    else out.push(node);
+  };
+  nodes.forEach(visit);
+  return out;
 }

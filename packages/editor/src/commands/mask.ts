@@ -45,6 +45,15 @@ export const releaseMask: Command = {
   },
 };
 
+/** 创建或释放蒙版（⌥⌘M）：选中的是蒙版组就释放，否则用选中的对象建一个 */
+export const toggleMask: Command = {
+  id: 'mask.toggle',
+  enabled: (editor) => maskGroups(editor).length > 0 || groupMembers(editor).length >= 2,
+  run(editor) {
+    editor.commands.run(maskGroups(editor).length > 0 ? 'mask.release' : 'mask.create');
+  },
+};
+
 /** 换蒙版的模式 */
 export const setMaskMode: Command<MaskMode> = {
   id: 'mask.setMode',

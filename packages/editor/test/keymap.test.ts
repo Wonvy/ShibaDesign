@@ -20,10 +20,12 @@ describe('快捷键匹配', () => {
     expect(keyOf(key({ key: 'V', code: 'KeyV', shiftKey: true }))).toBe('shift+v');
   });
 
-  it('标点、方向键、功能键按 event.key 认', () => {
+  it('标点也按物理键认，写不按 Shift 时的字；方向键、功能键按 event.key 认', () => {
     expect(keyOf(key({ key: ']', code: 'BracketRight', metaKey: true }))).toBe('mod+]');
+    expect(keyOf(key({ key: '“', code: 'BracketLeft', metaKey: true, altKey: true }))).toBe('mod+alt+[');
+    expect(keyOf(key({ key: '+', code: 'Equal', shiftKey: true }))).toBe('shift+=');
+    expect(keyOf(key({ key: '>', code: 'Period', shiftKey: true, metaKey: true }))).toBe('mod+shift+.');
     expect(keyOf(key({ key: 'ArrowLeft', code: 'ArrowLeft', shiftKey: true }))).toBe('shift+arrowleft');
-    expect(keyOf(key({ key: '+', code: 'Equal', shiftKey: true }))).toBe('shift++');
   });
 
   it('没有 code 的事件（模拟出来的、某些虚拟键盘）退回 event.key', () => {

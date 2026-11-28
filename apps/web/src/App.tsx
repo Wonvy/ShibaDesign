@@ -29,16 +29,17 @@ function Workspace(): ReactNode {
 
   useEffect(() => installClipboard(editor), [editor]);
 
+  // 演示的两个命令在界面层注册（要打开演示界面），快捷键 ⌘↵、⇧⌘↵ 在快捷键表里
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-        event.preventDefault();
-        play();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [play]);
+    editor.commands.register({ id: 'present.play', run: play }).register({
+      id: 'present.playFromStart',
+      enabled: (e) => slides(e.store).length > 0,
+      run: () => {
+        editor.setTool('select');
+        setPresenting(0);
+      },
+    });
+  }, [editor, play]);
 
   return (
     <div className="app">

@@ -51,7 +51,14 @@ export function handleCursor(handle: Handle, frameAngle = 0): string {
 }
 
 /** 拖动某个控制柄到 pointer 后的新矩形。不允许翻转，最小 1 像素 */
-export function resizeBounds(start: Rect, handle: Handle, pointer: Point, keepAspect: boolean): Rect {
+export function resizeBounds(
+  start: Rect,
+  handle: Handle,
+  pointer: Point,
+  keepAspect: boolean,
+  fromCenter = false,
+): Rect {
+  if (fromCenter) return resizeFromCenter(start, handle, pointer, keepAspect);
   let left = start.x;
   let top = start.y;
   let right = start.x + start.w;
@@ -71,6 +78,24 @@ export function resizeBounds(start: Rect, handle: Handle, pointer: Point, keepAs
     else bottom = top + h;
   }
   return { x: left, y: top, w: right - left, h: bottom - top };
+}
+
+/** 按住 Alt 缩放：中心不动，拖动的边和对边一起往外或往里 */
+function resizeFromCenter(start: Rect, handle: Handle, pointer: Point, keepAspect: boolean): Rect {
+  const cx = start.x + start.w / 2;
+  const cy = start.y + start.h / 2;
+  let halfW = start.w / 2;
+  let halfH = start.h / 2;
+  if (handle.includes('e')) halfW = Math.max(MIN_SIZE / 2, pointer.x - cx);
+  if (handle.includes('w')) halfW = Math.max(MIN_SIZE / 2, cx - pointer.x);
+  if (handle.includes('s')) halfH = Math.max(MIN_SIZE / 2, pointer.y - cy);
+  if (handle.includes('n')) halfH = Math.max(MIN_SIZE / 2, cy - pointer.y);
+  if (keepAspect && handle.length === 2 && start.w > 0 && start.h > 0) {
+    const scale = Math.max(halfW / (start.w / 2), halfH / (start.h / 2));
+    halfW = (start.w / 2) * scale;
+    halfH = (start.h / 2) * scale;
+  }
+  return { x: cx - halfW, y: cy - halfH, w: halfW * 2, h: halfH * 2 };
 }
 
 /**

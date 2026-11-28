@@ -1,5 +1,6 @@
 import {
   cloneSubtree,
+  hasLiveAppearance,
   isInstanceCopy,
   keyBetween,
   nextSeq,
@@ -7,9 +8,12 @@ import {
   translated,
   type NodeId,
   type NodeType,
+  type TextNode,
+  type Transaction,
 } from '@shiba/core';
 import type { Editor } from '../editor';
 import { translateNode } from '../ops';
+import { captureOriginals, resizeLocal } from '../resize';
 import { pruneAnimations } from './animation';
 import { duplicateArtboard } from './artboard';
 import type { Command } from './command';
@@ -73,40 +77,100 @@ export const deleteSelection: Command = {
   },
 };
 
-/** 复制选中的对象。实例里的东西不能复制（会往实例里加东西），跳过 */
+/**
+ * 在调用方的事务里复制一组节点（各自放在原件上面），返回原件 id → 副本 id。
+ * 画板整个复制（保留血缘，动画跟着换，见 duplicateArtboard），别的对象挪 (dx, dy)。
+ * 实例里的东西不能复制（会往实例里加东西），跳过。创建副本和 Alt 拖动复制共用
+ */
+export function cloneNodes(
+  editor: Editor,
+  tx: Transaction,
+  ids: readonly NodeId[],
+  dx: number,
+  dy: number,
+): Map<NodeId, NodeId> {
+  const { store } = editor;
+  const out = new Map<NodeId, NodeId>();
+  for (const id of topLevelOnly(store, ids)) {
+    const source = store.get(id);
+    if (!source || !source.parent || isInstanceCopy(source)) continue;
+    if (source.type === 'artboard') {
+      out.set(id, duplicateArtboard(editor, tx, source.id));
+      continue;
+    }
+    const siblings = store.children(source.parent);
+    const above = siblings[siblings.findIndex((s) => s.id === id) + 1];
+    const [root, ...rest] = cloneSubtree(store, id, { keepLineage: false });
+    tx.create({
+      ...root!,
+      index: keyBetween(source.index, above?.index ?? null),
+      seq: nextSeq(store, source.type as NodeType),
+      transform: translated(source.transform, dx, dy),
+    });
+    rest.forEach((node) => tx.create(node));
+    out.set(id, root!.id);
+  }
+  return out;
+}
+
+/** 复制选中的对象，错开一点放；紧接着挪过副本的话按挪过的偏移放 */
 export const duplicate: Command = {
   id: 'edit.duplicate',
   enabled: (editor) => editor.selectedNodes().some((n) => !isInstanceCopy(n)),
   run(editor) {
     const { store } = editor;
-    const created: NodeId[] = [];
-    const sources = new Map<NodeId, NodeId>();
     const { dx, dy } = repeatOffset(editor);
-    store.transact('duplicate', (tx) => {
-      for (const id of topLevelOnly(store, editor.selection)) {
-        const source = store.get(id);
-        if (!source || !source.parent || isInstanceCopy(source)) continue;
-        if (source.type === 'artboard') {
-          created.push(duplicateArtboard(editor, tx, source.id));
-          continue;
-        }
-        const siblings = store.children(source.parent);
-        const above = siblings[siblings.findIndex((s) => s.id === id) + 1];
-        const [root, ...rest] = cloneSubtree(store, id, { keepLineage: false });
-        tx.create({
-          ...root!,
-          index: keyBetween(source.index, above?.index ?? null),
-          seq: nextSeq(store, source.type as NodeType),
-          transform: translated(source.transform, dx, dy),
-        });
-        rest.forEach((node) => tx.create(node));
-        created.push(root!.id);
-        sources.set(root!.id, source.id);
-      }
-    });
+    const map = store.transact('duplicate', (tx) => cloneNodes(editor, tx, editor.selection, dx, dy));
     store.sealHistory();
+    const created = [...map.values()];
     editor.select(created);
-    lastDuplicate.set(editor, sources);
+    // 只记普通对象：画板的副本放在别处，不按偏移重复
+    lastDuplicate.set(
+      editor,
+      new Map([...map].filter(([source]) => store.get(source)?.type !== 'artboard').map(([s, c]) => [c, s])),
+    );
+  },
+};
+
+/** 复制一份并挪一下（⌥ 加方向键，Illustrator 的习惯） */
+export const duplicateNudge: Command<{ dx: number; dy: number }> = {
+  id: 'edit.duplicateNudge',
+  enabled: (editor) => editor.selectedNodes().some((n) => !isInstanceCopy(n) && n.type !== 'artboard'),
+  run(editor, { dx, dy }) {
+    const { store } = editor;
+    const ids = editor
+      .selectedNodes()
+      .filter((n) => n.type !== 'artboard')
+      .map((n) => n.id);
+    const map = store.transact('duplicate', (tx) => cloneNodes(editor, tx, ids, dx, dy));
+    store.sealHistory();
+    editor.select([...map.values()]);
+  },
+};
+
+/** 用键盘改大小（⌘ 加方向键）：改右边和下边，每个对象沿自己的方向改。连续按是一步撤销 */
+export const resizeBy: Command<{ dw: number; dh: number }> = {
+  id: 'edit.resize',
+  enabled: (editor) => editor.selectedNodes().some((n) => !n.locked),
+  run(editor, { dw, dh }) {
+    const { store } = editor;
+    const ids = topLevelOnly(store, editor.selection);
+    const textWidth = (node: TextNode): number =>
+      hasLiveAppearance(node) ? node.size[0] : editor.textLayouts.get(node).width;
+    const originals = captureOriginals(store, ids, textWidth);
+    store.transact(
+      'resize',
+      (tx) => {
+        for (const id of ids) {
+          const node = originals.get(id);
+          if (!node) continue;
+          const box = editor.geometry.localBounds(node);
+          const next = { ...box, w: Math.max(1, box.w + dw), h: Math.max(1, box.h + dh) };
+          resizeLocal(tx, store, originals, id, box, next);
+        }
+      },
+      { mergeKey: `resize:${editor.selection.join(',')}` },
+    );
   },
 };
 

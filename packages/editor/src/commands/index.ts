@@ -14,8 +14,8 @@ import { createBoolean, releaseBoolean, setBooleanOp } from './boolean';
 import { createComponent, detachInstances, goToMainComponent, placeInstance, resetInstances } from './component';
 import { createGroup, releaseGroup } from './group';
 import { placeImage, setImageFill } from './image';
-import { createMask, releaseMask, setMaskMode } from './mask';
-import { offsetPath, outlineStroke, outlineText } from './path';
+import { createMask, releaseMask, setMaskMode, toggleMask } from './mask';
+import { flattenShapes, offsetPath, outlineStroke, outlineText } from './path';
 import { copyProperties, pasteProperties } from './properties';
 import {
   addColorStyle,
@@ -31,8 +31,31 @@ import {
   updateTextStyle,
 } from './style';
 import { flipSelection, rotateSelection } from './transform';
-import { deleteSelection, deselect, duplicate, nudge, redo, selectAll, setTool, undo } from './edit';
-import { setViewMode, zoom100, zoomIn, zoomOut, zoomToFit } from './view';
+import {
+  deleteSelection,
+  deselect,
+  duplicate,
+  duplicateNudge,
+  nudge,
+  redo,
+  resizeBy,
+  selectAll,
+  setTool,
+  undo,
+} from './edit';
+import {
+  selectChildren,
+  selectInverse,
+  selectNext,
+  selectParent,
+  selectPrevious,
+  selectSame,
+  showAll,
+  toggleLock,
+  toggleVisible,
+  unlockAll,
+} from './select';
+import { setViewMode, zoom100, zoomIn, zoomOut, zoomToFit, zoomToSelection } from './view';
 
 /** 注册所有内置命令 */
 export function registerBuiltinCommands(editor: Editor): void {
@@ -95,12 +118,29 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(applyTextStyleCommand)
     .register(detachTextStyle)
     .register(copyProperties)
-    .register(pasteProperties);
+    .register(pasteProperties)
+    .register(duplicateNudge)
+    .register(resizeBy)
+    .register(zoomToSelection)
+    .register(toggleMask)
+    .register(flattenShapes)
+    .register(selectParent)
+    .register(selectChildren)
+    .register(selectNext)
+    .register(selectPrevious)
+    .register(selectInverse)
+    .register(selectSame)
+    .register(toggleLock)
+    .register(toggleVisible)
+    .register(unlockAll)
+    .register(showAll);
 }
 
 export type { Command } from './command';
 export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
+export type { SameKind } from './select';
+export { cloneNodes } from './edit';
 export type { OffsetPathArgs } from './path';
 export type { AddArtboardArgs } from './artboard';
 export { pruneAnimations, setAnimationPath, setSlideNotes, slideLayerOf } from './animation';

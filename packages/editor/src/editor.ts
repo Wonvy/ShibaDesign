@@ -108,6 +108,7 @@ export class Editor {
    * 点击画布后焦点要回到它身上，而不是画布，否则输入法会断开。
    */
   keyboardTarget: HTMLElement | null = null;
+  private hoverId: NodeId | null = null;
 
   private state: EditorState;
   private listeners = new Set<() => void>();
@@ -488,6 +489,25 @@ export class Editor {
       }
     }
     return { node, artboard: artboardOf(this.store, node.id) };
+  }
+
+  /**
+   * 点下面最里面的那个对象，不管套了几层编组（⌘ 单击深选）。点在画板空白处、空白处时返回 null
+   */
+  pickDeep(world: Point): SceneNode | null {
+    const hit = this.geometry.hitTest(world.x, world.y, this.roots(), 4 / this.camera.zoom);
+    return hit && hit.type !== 'artboard' ? hit : null;
+  }
+
+  /** 鼠标停在哪个对象上（画布上用细线描出来）。只影响覆盖层，不进状态 */
+  get hover(): NodeId | null {
+    return this.hoverId;
+  }
+
+  setHover(id: NodeId | null): void {
+    if (this.hoverId === id) return;
+    this.hoverId = id;
+    this.requestRender();
   }
 
   /**

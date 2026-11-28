@@ -1,6 +1,7 @@
 import {
   applyToPoint,
   artboards,
+  hasShapeStyle,
   maskParts,
   multiply,
   normalizeStops,
@@ -23,6 +24,8 @@ const HANDLE_HIT = 7;
 const ROTATE_OFFSET = 24;
 const ROTATE_RADIUS = 4.5;
 const ROTATE_HIT = 9;
+/** 鼠标在选区框四个角外侧这么远以内时也能旋转（手柄被别的东西挡住时也转得了），屏幕像素 */
+const ROTATE_CORNER_ZONE = 20;
 const LABEL_FONT = '12px system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
 const LABEL_HEIGHT = 18;
 
@@ -92,6 +95,7 @@ export class Overlay {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawArtboardLabels();
+    this.drawHover();
     this.drawSelection();
     // 选中对象的动作路径画在选区框上面，见 motion-handles.ts
     drawMotionPaths(ctx, editor);
@@ -132,6 +136,12 @@ export class Overlay {
       if (Math.abs(x - p.x) <= HANDLE_HIT && Math.abs(y - p.y) <= HANDLE_HIT) return { kind: 'resize', handle };
     }
     if (frame.rotate && Math.hypot(x - frame.rotate.x, y - frame.rotate.y) <= ROTATE_HIT) return { kind: 'rotate' };
+    if (frame.rotate && !insidePolygon(frame.corners, x, y)) {
+      for (const corner of frame.corners) {
+        const distance = Math.hypot(x - corner.x, y - corner.y);
+        if (distance > HANDLE_HIT && distance <= ROTATE_CORNER_ZONE) return { kind: 'rotate' };
+      }
+    }
     return null;
   }
 
@@ -337,6 +347,29 @@ export class Overlay {
     ctx.restore();
   }
 
+  /** 鼠标停着的对象（单击会选中的那个）用细线描出来；已经选中的不描 */
+  private drawHover(): void {
+    const { ctx, editor } = this;
+    const id = editor.hover;
+    const node = id ? editor.store.get(id) : undefined;
+    if (!node || !node.visible || editor.selection.includes(node.id)) return;
+    ctx.save();
+    ctx.strokeStyle = editor.theme.accent;
+    ctx.lineWidth = 1.5;
+    if (hasShapeStyle(node) && node.type !== 'boolean') {
+      // 形状描它自己的轮廓
+      const path = new Path2D(editor.geometry.outlineOf(node).toSVGString());
+      const m = this.localToScreen(node.id);
+      const scale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1;
+      ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      ctx.lineWidth = 1.5 / scale;
+      ctx.stroke(path);
+    } else {
+      strokePolygon(ctx, this.nodeCorners(node));
+    }
+    ctx.restore();
+  }
+
   private drawSelection(): void {
     const { ctx, editor } = this;
     const nodes = editor.selectedNodes();
@@ -398,6 +431,20 @@ function handlePoint(frame: ScreenFrame, handle: Handle): Point {
     x: tl.x + (tr.x - tl.x) * anchor.x + (bl.x - tl.x) * anchor.y,
     y: tl.y + (tr.y - tl.y) * anchor.x + (bl.y - tl.y) * anchor.y,
   };
+}
+
+/** 点在不在一个凸多边形（选区框可能是斜的）里面 */
+function insidePolygon(points: readonly Point[], x: number, y: number): boolean {
+  let sign = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i]!;
+    const b = points[(i + 1) % points.length]!;
+    const cross = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+    if (Math.abs(cross) < 1e-9) continue;
+    if (sign === 0) sign = Math.sign(cross);
+    else if (Math.sign(cross) !== sign) return false;
+  }
+  return true;
 }
 
 function strokePolygon(ctx: CanvasRenderingContext2D, points: readonly Point[]): void {

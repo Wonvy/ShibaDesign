@@ -73,7 +73,7 @@ export function scene(
 /** 一次指针事件。相机没动时屏幕坐标就是世界坐标 */
 export function pointer(
   world: Point,
-  options: { down?: boolean; shift?: boolean; alt?: boolean; mod?: boolean } = {},
+  options: { down?: boolean; shift?: boolean; alt?: boolean; mod?: boolean; space?: boolean } = {},
 ): PointerInfo {
   return {
     x: world.x,
@@ -84,5 +84,6 @@ export function pointer(
     mod: options.mod ?? false,
     button: 0,
     down: options.down ?? true,
+    space: options.space ?? false,
   };
 }

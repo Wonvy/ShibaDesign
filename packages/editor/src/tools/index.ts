@@ -20,3 +20,5 @@ export function registerBuiltinTools(editor: Editor): void {
 
 export type { Tool } from './tool';
 export type { TextToggle } from './text';
+export { dragRect } from './shape';
+export { steppedFontSize } from './text';

@@ -57,4 +57,6 @@ export interface PointerInfo {
   button: number;
   /** 当前是否有按键按住（拖动中） */
   down: boolean;
+  /** 按着空格：拖动中按住空格时，挪动的是正在画的东西（形状、选框），而不是继续改大小 */
+  space?: boolean;
 }
