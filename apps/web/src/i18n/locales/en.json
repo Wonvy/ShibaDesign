@@ -90,6 +90,20 @@
       "fill": "Fill",
       "stroke": "Stroke",
       "strokeWidth": "Width",
+      "strokeStyle": "Style",
+      "solid": "Solid",
+      "dashed": "Dashed",
+      "dotted": "Dotted",
+      "dashPattern": "Dashes",
+      "dashOffset": "Offset",
+      "cap": "Caps",
+      "capButt": "Butt",
+      "capRound": "Round",
+      "capSquare": "Square",
+      "join": "Corners",
+      "joinMiter": "Miter",
+      "joinRound": "Round",
+      "joinBevel": "Bevel",
       "opacity": "Opacity",
       "blendMode": "Blend mode",
       "add": "Add",
@@ -275,7 +289,8 @@
       "zoom": "Zoom",
       "panX": "Horizontal position",
       "panY": "Vertical position",
-      "reset": "Reset all"
+      "reset": "Reset all",
+      "onCanvas": "Adjust on canvas"
     },
     "kind": {
       "entrance": "Entrance",
@@ -357,7 +372,6 @@
         "gradients": "gradients ×{{count}} (now solid colours)",
         "patterns": "pattern fills ×{{count}}",
         "softMasks": "soft masks ×{{count}}",
-        "dashes": "dashed strokes ×{{count}} (now solid)",
         "fallbackText": "text without embedded fonts ×{{count}} (default font used)",
         "images": "unreadable images ×{{count}}"
       }
@@ -369,7 +383,8 @@
       "reverse": "Reverse",
       "stop": "Color stop",
       "addStop": "Click the bar to add a stop; drag a stop to move it",
-      "removeStop": "Remove stop"
+      "removeStop": "Remove stop",
+      "onCanvas": "Drag the start and end points on the canvas (or double-click the gradient; Esc to finish)"
     },
     "mask": {
       "create": "Create mask",

@@ -10,6 +10,7 @@
 
 import type { SlideAnimation, SlideTransition } from './animation';
 import type { ParagraphOverride } from './paragraphs';
+import type { StrokeCap, StrokeJoin } from './stroke';
 
 export type NodeId = string;
 
@@ -138,9 +139,16 @@ export interface GradientFill {
 
 export type Fill = SolidFill | ImageFill | GradientFill;
 
+/** 描边，居中画在轮廓上。端点、拐角、虚线见 stroke.ts，省略时是平头、尖角、实线 */
 export interface Stroke {
   color: Color;
   width: number;
+  /** 虚线：实线段和空白交替的长度，文档单位。省略或空数组是实线 */
+  dash?: readonly number[];
+  /** 虚线从路径起点往后错开多少 */
+  dashOffset?: number;
+  cap?: StrokeCap;
+  join?: StrokeJoin;
 }
 
 export interface BaseNode {

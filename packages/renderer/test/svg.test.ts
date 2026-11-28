@@ -251,6 +251,28 @@ describe('导出 SVG', () => {
     });
   });
 
+  it('虚线描边写成 stroke-dasharray，矩形改写成路径（虚线从路径起点排，和画布一致）', async () => {
+    const env = setup();
+    env.add(
+      createNode('rect', {
+        ...env.on(),
+        size: [100, 60],
+        cornerRadius: 0,
+        fill: null,
+        stroke: { color: rgba(0, 0, 0), width: 2, dash: [6], dashOffset: 1, cap: 'square', join: 'round' },
+      }),
+    );
+    const svg = await exportBoard(env);
+    expect(elements(svg, 'rect')).toHaveLength(1);
+    expect(elements(svg, 'path')[0]).toMatchObject({
+      d: 'M0 0L100 0L100 60L0 60Z',
+      'stroke-dasharray': '6 6',
+      'stroke-dashoffset': '1',
+      'stroke-linecap': 'square',
+      'stroke-linejoin': 'round',
+    });
+  });
+
   it('编组的不透明度写在 <g> 上（先合成再整体变淡），只有一个对象时不多包一层', async () => {
     const env = setup();
     const group = env.add(createNode('group', { ...env.on(), opacity: 0.5, transform: [1, 0, 0, 1, 10, 10] }));

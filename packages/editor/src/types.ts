@@ -1,4 +1,5 @@
 import type { CharacterStyle, Color, NodeId, Point } from '@shiba/core';
+import type { FillEditing } from './fill-handles';
 
 /** canvas：自由画布，所有画板可见；slides：一次只看一个画板 */
 export type ViewMode = 'canvas' | 'slides';
@@ -18,6 +19,8 @@ export interface EditorState {
   resourceEpoch: number;
   /** 正在编辑的文字和其中选中的范围；不在编辑文字时为 null */
   textEditing: TextEditing | null;
+  /** 正在画布上调整填充（渐变的起点终点、图片在形状里的位置）的节点；没有时为 null。见 fill-handles.ts */
+  fillEditing: FillEditing | null;
 }
 
 /** 正在编辑的文字。属性面板按它显示和修改选中那几个字的样式 */

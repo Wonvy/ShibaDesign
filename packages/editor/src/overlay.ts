@@ -1,13 +1,19 @@
 import {
   applyToPoint,
   artboards,
+  maskParts,
+  multiply,
+  normalizeStops,
+  toCssColor,
   worldTransform,
+  type Matrix,
   type NodeId,
   type Point,
   type Rect,
   type SceneNode,
 } from '@shiba/core';
 import type { Editor } from './editor';
+import { gradientHandlePoints, imageRect, type GradientPoint } from './fill-handles';
 import { HANDLES, handleAnchor, type Handle } from './resize';
 
 const HANDLE_SIZE = 8;
@@ -23,7 +29,29 @@ interface LabelBox extends Rect {
   id: NodeId;
 }
 
-export type HandleHit = { kind: 'resize'; handle: Handle } | { kind: 'rotate' };
+export type HandleHit =
+  | { kind: 'resize'; handle: Handle }
+  | { kind: 'rotate' }
+  /** 在画布上调整渐变时的手柄 */
+  | { kind: 'gradient'; point: GradientPoint }
+  /** 在画布上调整图片时，图片四个角的缩放手柄（0 左上、1 右上、2 右下、3 左下） */
+  | { kind: 'image'; corner: number };
+
+/** 填充手柄的半径、点中的范围，屏幕像素 */
+const FILL_HANDLE_RADIUS = 6;
+const FILL_HANDLE_HIT = 9;
+
+/** 在画布上调整填充时，手柄在屏幕上的位置 */
+type FillHandles =
+  | {
+      kind: 'gradient';
+      start: Point;
+      end: Point;
+      aspect: Point | null;
+      /** 起点和终点的颜色（第一个和最后一个色标），画在手柄里 */
+      colors: [string, string];
+    }
+  | { kind: 'image'; corners: Point[] };
 
 /** 选区框在屏幕上的样子：四个角、旋转手柄的位置、整体转了多少 */
 interface ScreenFrame {
@@ -76,8 +104,24 @@ export class Overlay {
     return null;
   }
 
-  /** 屏幕上的某个点是否落在选区的缩放控制柄或旋转手柄上 */
+  /**
+   * 屏幕上的某个点是否落在选区的缩放控制柄或旋转手柄上。
+   * 在画布上调整填充时只有填充的手柄（缩放、旋转手柄不显示，也点不中）
+   */
   hitHandle(x: number, y: number): HandleHit | null {
+    const handles = this.fillHandles();
+    if (handles) {
+      const near = (p: Point | null): boolean => p !== null && Math.hypot(x - p.x, y - p.y) <= FILL_HANDLE_HIT;
+      if (handles.kind === 'gradient') {
+        // 手柄重叠时优先拿终点：起点终点重合时还能拖开
+        if (near(handles.end)) return { kind: 'gradient', point: 'end' };
+        if (near(handles.start)) return { kind: 'gradient', point: 'start' };
+        if (near(handles.aspect)) return { kind: 'gradient', point: 'aspect' };
+        return null;
+      }
+      const corner = handles.corners.findIndex((p) => near(p));
+      return corner >= 0 ? { kind: 'image', corner } : null;
+    }
     const frame = this.screenFrame();
     if (!frame) return null;
     for (const handle of HANDLES) {
@@ -85,6 +129,55 @@ export class Overlay {
       if (Math.abs(x - p.x) <= HANDLE_HIT && Math.abs(y - p.y) <= HANDLE_HIT) return { kind: 'resize', handle };
     }
     if (frame.rotate && Math.hypot(x - frame.rotate.x, y - frame.rotate.y) <= ROTATE_HIT) return { kind: 'rotate' };
+    return null;
+  }
+
+  /** 节点本地坐标 → 屏幕坐标 */
+  private localToScreen(id: NodeId): Matrix {
+    const { camera } = this.editor;
+    return multiply([camera.zoom, 0, 0, camera.zoom, camera.x, camera.y], worldTransform(this.editor.store, id));
+  }
+
+  /** 正在画布上调整填充时，手柄在屏幕上的位置；没在调整时返回 null */
+  private fillHandles(): FillHandles | null {
+    const { editor } = this;
+    const editing = editor.fillEditing;
+    if (!editing || editor.getState().tool !== 'select') return null;
+    const node = editor.store.get(editing.id);
+    const fill = node && 'fill' in node ? node.fill : null;
+    if (!node || !fill) return null;
+    const box = editor.geometry.localBounds(node);
+    const m = this.localToScreen(node.id);
+    const screen = (p: Point): Point => {
+      const [x, y] = applyToPoint(m, p.x, p.y);
+      return { x, y };
+    };
+    if (fill.type === 'gradient') {
+      const points = gradientHandlePoints(fill, box);
+      const stops = normalizeStops(fill.stops);
+      const color = (i: number): string => (stops[i] ? toCssColor({ ...stops[i]!.color, a: 1 }) : '#fff');
+      return {
+        kind: 'gradient',
+        start: screen(points.start),
+        end: screen(points.end),
+        aspect: points.aspect ? screen(points.aspect) : null,
+        colors: [color(0), color(stops.length - 1)],
+      };
+    }
+    if (fill.type === 'image') {
+      const meta = editor.assets.meta(fill.assetId);
+      if (!meta || !meta.width || !meta.height) return null;
+      const rect = imageRect(fill, box, { width: meta.width, height: meta.height });
+      return {
+        kind: 'image',
+        corners: [
+          { x: rect.x, y: rect.y },
+          { x: rect.x + rect.w, y: rect.y },
+          { x: rect.x + rect.w, y: rect.y + rect.h },
+          { x: rect.x, y: rect.y + rect.h },
+        ].map(screen),
+      };
+    }
     return null;
   }
 
@@ -168,6 +261,79 @@ export class Overlay {
     }
   }
 
+  /** 填充的手柄：渐变是起点到终点的连线和两头的圆点（填着首尾的颜色），图片是整张图的范围和四个角 */
+  private drawFillHandles(handles: FillHandles): void {
+    const { ctx, editor } = this;
+    ctx.save();
+    const dot = (p: Point, fill: string, radius = FILL_HANDLE_RADIUS): void => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      // 白色内圈加主题色外圈，在什么颜色上都看得清
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = editor.theme.accent;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius + 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+    };
+    const line = (a: Point, b: Point, dashed: boolean): void => {
+      ctx.setLineDash(dashed ? [4, 3] : []);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = editor.theme.accent;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    if (handles.kind === 'gradient') {
+      line(handles.start, handles.end, false);
+      if (handles.aspect) {
+        line(handles.start, handles.aspect, true);
+        dot(handles.aspect, editor.theme.handleFill, FILL_HANDLE_RADIUS - 2);
+      }
+      dot(handles.start, handles.colors[0]);
+      dot(handles.end, handles.colors[1]);
+    } else {
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = editor.theme.accent;
+      strokePolygon(ctx, handles.corners);
+      ctx.setLineDash([]);
+      for (const corner of handles.corners) dot(corner, editor.theme.handleFill, FILL_HANDLE_RADIUS - 1);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 选中的是蒙版组里的内容时，用虚线画出蒙版的轮廓：内容在蒙版外面的部分看不见，靠它知道露出来的范围
+   */
+  private drawMaskOutline(nodes: readonly SceneNode[]): void {
+    const { ctx, editor } = this;
+    const only = nodes.length === 1 ? nodes[0]! : null;
+    const parent = only?.parent ? editor.store.get(only.parent) : undefined;
+    if (!only || parent?.type !== 'group' || !parent.mask) return;
+    const { mask } = maskParts(editor.store, parent);
+    if (!mask?.visible || mask.id === only.id) return;
+    const path = new Path2D(editor.geometry.outlineOf(mask).toSVGString());
+    const m = this.localToScreen(mask.id);
+    const scale = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])) || 1;
+    ctx.save();
+    ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    ctx.lineWidth = 1.5 / scale;
+    ctx.setLineDash([5 / scale, 4 / scale]);
+    ctx.strokeStyle = editor.theme.accent;
+    ctx.stroke(path);
+    ctx.restore();
+  }
+
   private drawSelection(): void {
     const { ctx, editor } = this;
     const nodes = editor.selectedNodes();
@@ -184,8 +350,12 @@ export class Overlay {
 
     ctx.lineWidth = nodes.length > 1 ? 1 : 1.5;
     strokePolygon(ctx, frame.corners);
+    this.drawMaskOutline(nodes);
 
-    if (editor.getState().tool === 'select') {
+    const handles = this.fillHandles();
+    if (handles) {
+      this.drawFillHandles(handles);
+    } else if (editor.getState().tool === 'select') {
       if (frame.rotate) {
         ctx.lineWidth = 1;
         ctx.beginPath();

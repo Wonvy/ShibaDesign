@@ -196,7 +196,15 @@ function isFiniteData(data: ArrayLike<number>): boolean {
 }
 
 function toStroke(stroke: PdfPathItem['stroke']): Stroke | null {
-  return stroke ? { color: stroke.color, width: round(stroke.width) } : null;
+  if (!stroke) return null;
+  return {
+    color: stroke.color,
+    width: round(stroke.width),
+    ...(stroke.dash ? { dash: stroke.dash.map(round) } : {}),
+    ...(stroke.dash && stroke.dashOffset ? { dashOffset: round(stroke.dashOffset) } : {}),
+    ...(stroke.cap ? { cap: stroke.cap } : {}),
+    ...(stroke.join ? { join: stroke.join } : {}),
+  };
 }
 
 function boxPath(box: Box): PathData {

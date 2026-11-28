@@ -4,18 +4,25 @@ import { useTranslation } from 'react-i18next';
 import {
   BLEND_MODES,
   IMAGE_FITS,
+  STROKE_CAPS,
+  STROKE_JOINS,
+  dashKind,
+  dashPreset,
   defaultGradient,
   hasShapeStyle,
   solid,
   type BlendMode,
-  type Color,
   type Fill,
   type GradientFill,
   type ImageFit,
   type Rect,
   type SceneNode,
+  type Stroke,
+  type StrokeCap,
+  type StrokeJoin,
 } from '@shiba/core';
 import { DEFAULT_FILL, DEFAULT_STROKE, type Editor } from '@shiba/editor';
+import { useEditorState } from '../editor/context';
 import { pickImageFill } from '../files';
 import { ColorField, IconButton, NumberField } from '../ui/controls';
 import { GradientEditor } from './GradientEditor';
@@ -41,6 +48,55 @@ const FIT_LABELS: Record<ImageFit, string> = {
   contain: 'image.fitContain',
   stretch: 'image.fitStretch',
 };
+
+const DASH_KINDS = ['solid', 'dashed', 'dotted'] as const;
+const CAP_LABELS: Record<StrokeCap, string> = {
+  butt: 'prop.capButt',
+  round: 'prop.capRound',
+  square: 'prop.capSquare',
+};
+const JOIN_LABELS: Record<StrokeJoin, string> = {
+  miter: 'prop.joinMiter',
+  round: 'prop.joinRound',
+  bevel: 'prop.joinBevel',
+};
+
+/** 一串用空格或逗号分开的长度；有一项不是非负数就返回 null */
+function parseDash(text: string): number[] | null {
+  const parts = text.split(/[\s,，]+/).filter(Boolean);
+  if (parts.length === 0) return [];
+  const values = parts.map(Number);
+  return values.every((v) => Number.isFinite(v) && v >= 0) && values.length <= 16 ? values : null;
+}
+
+/** 虚线间隔的输入框：输入时只改草稿，回车或失焦时提交，写错了恢复原样 */
+function DashField(props: { value: readonly number[]; label: string; onCommit: (dash: number[]) => void }): ReactNode {
+  const shown = props.value.map((v) => String(Math.round(v * 100) / 100)).join(' ');
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = (text: string): void => {
+    setDraft(null);
+    const parsed = parseDash(text);
+    if (parsed && parsed.join(' ') !== props.value.join(' ')) props.onCommit(parsed);
+  };
+  return (
+    <label className="field">
+      <input
+        className="field-input"
+        aria-label={props.label}
+        value={draft ?? shown}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === 'Escape') {
+            setDraft(null);
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    </label>
+  );
+}
 
 /** 资源库里一张图片的小预览 */
 function AssetThumb({ editor, assetId }: { editor: Editor; assetId: string }): ReactNode {
@@ -83,8 +139,19 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
       mergeKey,
     );
 
-  const setStroke = (next: { color: Color; width: number } | null, mergeKey?: string): void =>
+  const setStroke = (next: Stroke | null, mergeKey?: string): void =>
     editor.updateSelection('stroke', (node) => (hasShapeStyle(node) ? { stroke: next } : null), mergeKey);
+  /** 改每个对象自己描边的某几项，其余保持原样 */
+  const patchStroke = (patch: Partial<Stroke>, mergeKey?: string): void => {
+    editor.updateSelection(
+      'stroke',
+      (node) => (hasShapeStyle(node) && node.stroke ? { stroke: { ...node.stroke, ...patch } } : null),
+      mergeKey,
+    );
+    if (!mergeKey) seal();
+  };
+  const kind = stroke ? dashKind(stroke) : 'solid';
+  const fillEditing = useEditorState((s) => s.fillEditing);
 
   const removeFill = (
     <IconButton
@@ -203,6 +270,15 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
             bounds={editor.geometry.localBounds(fillable[0])}
             update={updateGradient}
             seal={seal}
+            onCanvas={
+              nodes.length === 1
+                ? {
+                    active: fillEditing?.id === first.id && fillEditing.kind === 'gradient',
+                    toggle: () =>
+                      editor.setFillEditing(fillEditing?.id === first.id ? null : { id: first.id, kind: 'gradient' }),
+                  }
+                : undefined
+            }
           />
         </div>
       )}
@@ -241,7 +317,7 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
                 <ColorField
                   label={t('prop.stroke')}
                   value={stroke.color}
-                  onChange={(c) => setStroke({ color: c, width: stroke.width }, 'stroke-color')}
+                  onChange={(c) => patchStroke({ color: c }, 'stroke-color')}
                   onCommit={seal}
                 />
                 <IconButton
@@ -279,10 +355,98 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
               min={0}
               max={1000}
               onCommit={(v) => {
-                setStroke({ color: stroke.color, width: v });
-                seal();
+                // 用的是虚线、点线预设时，间隔跟着线宽一起变
+                patchStroke(
+                  kind === 'dashed' || kind === 'dotted' ? { width: v, ...dashPreset(kind, v) } : { width: v },
+                );
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {stroke && (
+        <div className="prop-row">
+          <span className="prop-label">{t('prop.strokeStyle')}</span>
+          <div className="prop-controls">
+            <div className="segmented segmented-small" role="radiogroup" aria-label={t('prop.strokeStyle')}>
+              {DASH_KINDS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === option}
+                  className={kind === option ? 'is-active' : ''}
+                  onClick={() => patchStroke(dashPreset(option, stroke.width))}
+                >
+                  {t(`prop.${option}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stroke && kind !== 'solid' && (
+        <div className="prop-row">
+          <span className="prop-label">{t('prop.dashPattern')}</span>
+          <div className="prop-controls field-grid">
+            <DashField
+              label={t('prop.dashPattern')}
+              value={stroke.dash ?? []}
+              onCommit={(dash) => patchStroke({ dash: dash.length > 0 ? dash : undefined })}
+            />
+            <NumberField
+              label={t('prop.dashOffset')}
+              value={stroke.dashOffset ?? 0}
+              min={-100000}
+              max={100000}
+              onCommit={(v) => patchStroke({ dashOffset: v === 0 ? undefined : v })}
+            />
+          </div>
+        </div>
+      )}
+
+      {stroke && (
+        <div className="prop-row">
+          <span className="prop-label">{t('prop.cap')}</span>
+          <div className="prop-controls">
+            <div className="segmented segmented-small" role="radiogroup" aria-label={t('prop.cap')}>
+              {STROKE_CAPS.map((cap) => (
+                <button
+                  key={cap}
+                  type="button"
+                  role="radio"
+                  aria-checked={(stroke.cap ?? 'butt') === cap}
+                  className={(stroke.cap ?? 'butt') === cap ? 'is-active' : ''}
+                  onClick={() => patchStroke({ cap: cap === 'butt' ? undefined : cap })}
+                >
+                  {t(CAP_LABELS[cap])}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stroke && (
+        <div className="prop-row">
+          <span className="prop-label">{t('prop.join')}</span>
+          <div className="prop-controls">
+            <div className="segmented segmented-small" role="radiogroup" aria-label={t('prop.join')}>
+              {STROKE_JOINS.map((join) => (
+                <button
+                  key={join}
+                  type="button"
+                  role="radio"
+                  aria-checked={(stroke.join ?? 'miter') === join}
+                  className={(stroke.join ?? 'miter') === join ? 'is-active' : ''}
+                  onClick={() => patchStroke({ join: join === 'miter' ? undefined : join })}
+                >
+                  {t(JOIN_LABELS[join])}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

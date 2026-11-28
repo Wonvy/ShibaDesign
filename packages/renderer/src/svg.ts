@@ -1,6 +1,7 @@
 import type { Image } from 'canvaskit-wasm';
 import {
   IDENTITY,
+  dashPattern,
   gradientGeometry,
   hasShapeStyle,
   invert,
@@ -420,14 +421,17 @@ class SvgExporter {
 
   // ───────────── 形状 ─────────────
 
-  /** 节点轮廓的写法：矩形、椭圆用对应的元素，在设计软件里打开还是矩形、椭圆；其余写成路径 */
-  private geometry(node: SceneNode): { tag: string; attrs: Attrs } | null {
+  /**
+   * 节点轮廓的写法：矩形、椭圆用对应的元素，在设计软件里打开还是矩形、椭圆；其余写成路径。
+   * @param asPath 一律写成路径：虚线从路径的起点开始排，<rect>、<ellipse> 的起点和画布上的不一定一样
+   */
+  private geometry(node: SceneNode, asPath = false): { tag: string; attrs: Attrs } | null {
     const [w, h] = node.size;
-    if ((node.type === 'rect' || node.type === 'artboard') && w > 0 && h > 0) {
+    if ((node.type === 'rect' || node.type === 'artboard') && w > 0 && h > 0 && !asPath) {
       const r = node.type === 'rect' ? Math.max(0, Math.min(node.cornerRadius, w / 2, h / 2)) : 0;
       return { tag: 'rect', attrs: { width: w, height: h, rx: r > 0 ? r : null, ry: r > 0 ? r : null } };
     }
-    if (node.type === 'ellipse' && w > 0 && h > 0) {
+    if (node.type === 'ellipse' && w > 0 && h > 0 && !asPath) {
       return { tag: 'ellipse', attrs: { cx: w / 2, cy: h / 2, rx: w / 2, ry: h / 2 } };
     }
     const { ck } = this.context;
@@ -443,13 +447,18 @@ class SvgExporter {
     const { fill } = node;
     const stroke = node.stroke && node.stroke.width > 0 ? node.stroke : null;
     if (!fill && !stroke) return [];
-    const geometry = this.geometry(node);
+    const dash = stroke ? dashPattern(stroke) : null;
+    const geometry = this.geometry(node, dash !== null);
     if (!geometry) return [];
     const strokeAttrs: Attrs = stroke
       ? {
           stroke: svgColor(stroke.color),
           'stroke-opacity': svgOpacity(stroke.color.a),
           'stroke-width': stroke.width,
+          'stroke-linecap': stroke.cap && stroke.cap !== 'butt' ? stroke.cap : null,
+          'stroke-linejoin': stroke.join && stroke.join !== 'miter' ? stroke.join : null,
+          'stroke-dasharray': dash ? dash.map(svgNumber).join(' ') : null,
+          'stroke-dashoffset': dash && stroke.dashOffset ? stroke.dashOffset : null,
         }
       : {};
 

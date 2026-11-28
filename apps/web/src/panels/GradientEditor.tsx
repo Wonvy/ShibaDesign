@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Trash2 } from 'lucide-react';
+import { ArrowLeftRight, Move, Trash2 } from 'lucide-react';
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -26,12 +26,14 @@ const round = (v: number): number => Math.round(v * 1000) / 1000;
  *
  * @param update 对每个选中的节点算出新的渐变。bounds 是那个节点的外框，按画面角度摆渐变时要用
  * @param mergeKey 连续的修改（拖动色标、拖动取色器）合成一步撤销
+ * @param onCanvas 在画布上拖动起点终点的开关；只选了一个对象时才有
  */
 export function GradientEditor(props: {
   fill: GradientFill;
   bounds: Rect;
   update: (next: (fill: GradientFill, bounds: Rect) => GradientFill, mergeKey?: string) => void;
   seal: () => void;
+  onCanvas?: { active: boolean; toggle: () => void };
 }): ReactNode {
   const { t } = useTranslation();
   const { fill, bounds, update, seal } = props;
@@ -144,6 +146,11 @@ export function GradientEditor(props: {
         >
           <ArrowLeftRight size={14} />
         </IconButton>
+        {props.onCanvas && (
+          <IconButton title={t('gradient.onCanvas')} active={props.onCanvas.active} onClick={props.onCanvas.toggle}>
+            <Move size={14} />
+          </IconButton>
+        )}
       </div>
 
       <div className="gradient-bar" ref={bar} onPointerDown={onBarDown} title={t('gradient.addStop')}>

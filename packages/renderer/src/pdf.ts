@@ -1,5 +1,6 @@
 import type { CanvasKit, Image } from 'canvaskit-wasm';
 import {
+  dashPattern,
   gradientGeometry,
   hasShapeStyle,
   normalizeStops,
@@ -19,6 +20,7 @@ import {
   type NodeId,
   type Rect,
   type SceneNode,
+  type Stroke,
   type TextNode,
 } from '@shiba/core';
 import {
@@ -444,7 +446,8 @@ class PdfExporter {
       content.save();
       const state = this.state(fill.color.a, 1, paint.blend);
       if (state) content.graphicsState(state);
-      content.fillColor(fill.color).strokeColor(stroke.color).lineWidth(stroke.width).miterLimit(MITER_LIMIT);
+      content.fillColor(fill.color).strokeColor(stroke.color);
+      strokeStyle(content, stroke);
       content.path(outline.data).raw(outline.evenOdd ? 'B*' : 'B');
       content.restore();
       return;
@@ -457,7 +460,9 @@ class PdfExporter {
       content.save();
       const state = this.state(1, stroke.color.a * paint.opacity, paint.blend);
       if (state) content.graphicsState(state);
-      content.strokeColor(stroke.color).lineWidth(stroke.width).miterLimit(MITER_LIMIT).path(outline.data).stroke();
+      content.strokeColor(stroke.color);
+      strokeStyle(content, stroke);
+      content.path(outline.data).stroke();
       content.restore();
     }
   }
@@ -935,6 +940,15 @@ function stopFunction(stops: readonly GradientStop[], channels: (color: Color) =
     Bounds: pieces.slice(1).map((p) => p.from),
     Encode: pieces.flatMap(() => [0, 1]),
   };
+}
+
+/** 描边的线宽、斜接限制、端点、拐角、虚线。默认值（平头、尖角、实线）不写 */
+function strokeStyle(content: ContentStream, stroke: Stroke): void {
+  content.lineWidth(stroke.width).miterLimit(MITER_LIMIT);
+  if (stroke.cap === 'round' || stroke.cap === 'square') content.lineCap(stroke.cap === 'round' ? 1 : 2);
+  if (stroke.join === 'round' || stroke.join === 'bevel') content.lineJoin(stroke.join === 'round' ? 1 : 2);
+  const dash = dashPattern(stroke);
+  if (dash) content.dash(dash, stroke.dashOffset ?? 0);
 }
 
 function paintCount(node: SceneNode): number {

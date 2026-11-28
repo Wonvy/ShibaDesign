@@ -19,3 +19,4 @@ export * from './commands';
 export * from './tools';
 export * from './resize';
 export * from './ops';
+export * from './fill-handles';

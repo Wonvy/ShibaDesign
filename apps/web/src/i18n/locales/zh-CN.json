@@ -90,6 +90,20 @@
       "fill": "填充",
       "stroke": "描边",
       "strokeWidth": "粗细",
+      "strokeStyle": "线型",
+      "solid": "实线",
+      "dashed": "虚线",
+      "dotted": "点线",
+      "dashPattern": "间隔",
+      "dashOffset": "偏移",
+      "cap": "端点",
+      "capButt": "平头",
+      "capRound": "圆头",
+      "capSquare": "方头",
+      "join": "拐角",
+      "joinMiter": "尖角",
+      "joinRound": "圆角",
+      "joinBevel": "斜角",
       "opacity": "不透明度",
       "blendMode": "混合模式",
       "add": "添加",
@@ -275,7 +289,8 @@
       "zoom": "缩放",
       "panX": "水平位置",
       "panY": "垂直位置",
-      "reset": "全部重置"
+      "reset": "全部重置",
+      "onCanvas": "在画布上调整"
     },
     "kind": {
       "entrance": "进入",
@@ -357,7 +372,6 @@
         "gradients": "渐变 {{count}} 处（已改成纯色）",
         "patterns": "图案填充 {{count}} 处",
         "softMasks": "透明蒙版 {{count}} 处",
-        "dashes": "虚线 {{count}} 处（已改成实线）",
         "fallbackText": "未内嵌字体的文字 {{count}} 段（已换成默认字体）",
         "images": "无法读取的图片 {{count}} 张"
       }
@@ -369,7 +383,8 @@
       "reverse": "反向",
       "stop": "色标",
       "addStop": "点击色条添加色标，拖动色标改位置",
-      "removeStop": "删除色标"
+      "removeStop": "删除色标",
+      "onCanvas": "在画布上拖动起点和终点（双击渐变也可以，Esc 退出）"
     },
     "mask": {
       "create": "创建蒙版",

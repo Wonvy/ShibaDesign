@@ -60,6 +60,10 @@ export function reparentByPosition(editor: Editor, tx: Transaction, ids: Iterabl
   for (const id of ids) {
     const node = tx.get(id);
     if (!node || node.type === 'artboard' || !node.parent) continue;
+    // 只管直接放在画板或页面上的对象。编组（包括蒙版组）、布尔组里的成员挪动以后还留在组里，
+    // 否则在组里拖一下成员，它就被拽出组、蒙版也遮不住它了
+    const parent = tx.get(node.parent);
+    if (parent?.type !== 'artboard' && parent?.type !== 'page') continue;
     const target = editor.containerAt(rectCenter(editor.geometry.worldBounds(node)));
     if (target.id === node.parent) continue;
     const inverse = invert(worldTransform(store, target.id));

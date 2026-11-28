@@ -250,6 +250,30 @@ describe('导出 PDF', () => {
     expect((rounded as { fill: { color: { a: number } } }).fill.color.a).toBeCloseTo(0.5, 2);
   });
 
+  it('虚线、端点、拐角写成 PDF 的线型，读回来还是一样的描边', async () => {
+    const env = setup();
+    env.add(
+      createNode('rect', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 20, 20],
+        size: [100, 60],
+        cornerRadius: 0,
+        fill: null,
+        stroke: { color: rgba(0, 0, 1), width: 3, dash: [9, 3, 1, 3], dashOffset: 2, cap: 'round', join: 'bevel' },
+      }),
+    );
+    const { ops, bytes } = await exportAndOpen(env);
+    const dash = ops.argsArray[ops.fnArray.indexOf(pdfjs.OPS.setDash)] as [number[], number];
+    expect(dash).toEqual([[9, 3, 1, 3], 2]);
+    expect(ops.argsArray[ops.fnArray.indexOf(pdfjs.OPS.setLineCap)]).toEqual([1]);
+    expect(ops.argsArray[ops.fnArray.indexOf(pdfjs.OPS.setLineJoin)]).toEqual([2]);
+    const back = await reimport(bytes);
+    expect(back.result.report.issues).not.toHaveProperty('dashes');
+    expect(back.items[0]).toMatchObject({
+      stroke: { width: 3, dash: [9, 3, 1, 3], dashOffset: 2, cap: 'round', join: 'bevel' },
+    });
+  });
+
   it('编组的不透明度写成透明组：先合成再整体变淡，重叠处不会更深', async () => {
     const env = setup();
     const group = env.add(createNode('group', { ...env.on(), opacity: 0.5 }));

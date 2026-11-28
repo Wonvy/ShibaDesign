@@ -1,6 +1,7 @@
 import { MAX_GRADIENT_STOPS } from './gradient';
 import { DOCUMENT_VERSION, TEXT_ALIGNS, type DocumentData } from './model';
 import { LIST_KINDS, MAX_LIST_LEVEL } from './paragraphs';
+import { MAX_DASH_SEGMENTS, STROKE_CAPS, STROKE_JOINS } from './stroke';
 
 /**
  * 文档数据校验。文档可能来自用户打开的文件，是不可信输入：
@@ -80,6 +81,20 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
   if ('stroke' in node && node.stroke !== null) {
     const stroke = node.stroke;
     if (!isObject(stroke) || !isColor(stroke.color) || !isFiniteNumber(stroke.width)) fail('stroke');
+    const { dash, dashOffset, cap, join } = stroke as Record<string, unknown>;
+    if (
+      (dash !== undefined &&
+        !(
+          Array.isArray(dash) &&
+          dash.length <= MAX_DASH_SEGMENTS &&
+          dash.every((v) => isFiniteNumber(v) && (v as number) >= 0 && (v as number) <= 100_000)
+        )) ||
+      (dashOffset !== undefined && !isFiniteNumber(dashOffset)) ||
+      (cap !== undefined && !(STROKE_CAPS as readonly unknown[]).includes(cap)) ||
+      (join !== undefined && !(STROKE_JOINS as readonly unknown[]).includes(join))
+    ) {
+      fail('stroke');
+    }
   }
 
   switch (node.type) {

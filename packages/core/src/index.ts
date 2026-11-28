@@ -11,4 +11,5 @@ export * from './animation';
 export * from './text-appearance';
 export * from './text-spans';
 export * from './paragraphs';
+export * from './stroke';
 export * from './gradient';

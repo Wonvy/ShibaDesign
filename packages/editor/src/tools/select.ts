@@ -3,9 +3,13 @@ import {
   applyToPoint,
   invert,
   isDescendantOf,
+  rectContainsPoint,
   rectFromPoints,
   rectsIntersect,
   topLevelOnly,
+  worldTransform,
+  type GradientFill,
+  type ImageFill,
   type Matrix,
   type NodeId,
   type Point,
@@ -15,6 +19,7 @@ import {
 } from '@shiba/core';
 import { pruneAnimations } from '../commands/animation';
 import type { Editor } from '../editor';
+import { dragGradientPoint, imageRect, panImage, zoomImage, type GradientPoint } from '../fill-handles';
 import { reparentByPosition, translateFromOriginals } from '../ops';
 import {
   captureOriginals,
@@ -54,7 +59,62 @@ type Drag =
       ids: NodeId[];
       originals: Map<NodeId, SceneNode>;
       key: string;
+    }
+  // 在画布上调整填充：拖渐变的手柄、在形状里拖动或缩放图片。坐标都换算到节点本地
+  | {
+      kind: 'gradient';
+      id: NodeId;
+      point: GradientPoint;
+      original: GradientFill;
+      box: Rect;
+      toLocal: Matrix;
+      key: string;
+    }
+  | {
+      kind: 'image-pan';
+      id: NodeId;
+      original: ImageFill;
+      box: Rect;
+      image: { width: number; height: number };
+      toLocal: Matrix;
+      start: Point;
+      key: string;
+    }
+  | {
+      kind: 'image-zoom';
+      id: NodeId;
+      original: ImageFill;
+      box: Rect;
+      image: { width: number; height: number };
+      toLocal: Matrix;
+      center: Point;
+      distance: number;
+      key: string;
     };
+
+/** 正在画布上调整的那个节点的填充、外框、本地坐标换算；没在调整时返回 null */
+function fillTarget(
+  editor: Editor,
+): { node: SceneNode; fill: GradientFill | ImageFill; box: Rect; toLocal: Matrix } | null {
+  const editing = editor.fillEditing;
+  const node = editing ? editor.store.get(editing.id) : undefined;
+  const fill = node && 'fill' in node ? node.fill : null;
+  if (!node || !fill || (fill.type !== 'gradient' && fill.type !== 'image')) return null;
+  const toLocal = invert(worldTransform(editor.store, node.id));
+  if (!toLocal) return null;
+  return { node, fill, box: editor.geometry.localBounds(node), toLocal };
+}
+
+function toLocalPoint(m: Matrix, p: Point): Point {
+  const [x, y] = applyToPoint(m, p.x, p.y);
+  return { x, y };
+}
+
+/** 图片的像素大小（资源库里记着），读不到时返回 null */
+function imageSize(editor: Editor, fill: ImageFill): { width: number; height: number } | null {
+  const meta = editor.assets.meta(fill.assetId);
+  return meta && meta.width > 0 && meta.height > 0 ? { width: meta.width, height: meta.height } : null;
+}
 
 /** 选择工具：点选、加选、框选、拖动移动、拖控制柄缩放、拖旋转手柄旋转、双击进入编组 */
 export function createSelectTool(): Tool {
@@ -64,11 +124,68 @@ export function createSelectTool(): Tool {
   const textWidth = (editor: Editor) => (node: TextNode) =>
     hasLiveAppearance(node) ? node.size[0] : editor.textLayouts.get(node).width;
 
+  /**
+   * 在画布上调整填充时按下鼠标：按在手柄上就拖手柄；调整图片时按在形状或图片范围里就拖动图片。
+   * 按在别处返回 false，照常处理（点到别处会换选区，自然就退出了调整）
+   */
+  const beginFillEdit = (editor: Editor, world: Point, x: number, y: number): boolean => {
+    const target = fillTarget(editor);
+    if (!target) return false;
+    const { node, fill, box, toLocal } = target;
+    const hit = editor.overlayLayer?.hitHandle(x, y) ?? null;
+    const local = toLocalPoint(toLocal, world);
+    if (hit?.kind === 'gradient' && fill.type === 'gradient') {
+      drag = {
+        kind: 'gradient',
+        id: node.id,
+        point: hit.point,
+        original: fill,
+        box,
+        toLocal,
+        key: editor.newMergeKey('gradient'),
+      };
+      return true;
+    }
+    if (fill.type !== 'image') return false;
+    const image = imageSize(editor, fill);
+    if (!image) return false;
+    const rect = imageRect(fill, box, image);
+    if (hit?.kind === 'image') {
+      const center = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+      drag = {
+        kind: 'image-zoom',
+        id: node.id,
+        original: fill,
+        box,
+        image,
+        toLocal,
+        center,
+        distance: Math.max(1e-6, Math.hypot(local.x - center.x, local.y - center.y)),
+        key: editor.newMergeKey('image-zoom'),
+      };
+      return true;
+    }
+    if (editor.geometry.outlineOf(node).contains(local.x, local.y) || rectContainsPoint(rect, local.x, local.y)) {
+      drag = {
+        kind: 'image-pan',
+        id: node.id,
+        original: fill,
+        box,
+        image,
+        toLocal,
+        start: local,
+        key: editor.newMergeKey('image-pan'),
+      };
+      return true;
+    }
+    return false;
+  };
+
   /** 鼠标按在控制柄或旋转手柄上：开始缩放或旋转 */
   const beginTransform = (editor: Editor, world: Point, x: number, y: number): boolean => {
     const hit = editor.selection.length > 0 ? editor.overlayLayer?.hitHandle(x, y) : null;
     const frame = hit ? editor.selectionFrame() : null;
-    if (!hit || !frame) return false;
+    if (!hit || !frame || (hit.kind !== 'resize' && hit.kind !== 'rotate')) return false;
     const ids = topLevelOnly(editor.store, editor.selection);
     const originals = captureOriginals(editor.store, ids, textWidth(editor));
 
@@ -119,6 +236,7 @@ export function createSelectTool(): Tool {
     },
 
     onPointerDown(e, editor) {
+      if (beginFillEdit(editor, e.world, e.x, e.y)) return;
       if (beginTransform(editor, e.world, e.x, e.y)) return;
 
       const target = editor.overlayLayer?.hitArtboardLabel(e.x, e.y) ?? editor.pick(e.world).node?.id ?? null;
@@ -157,8 +275,16 @@ export function createSelectTool(): Tool {
         const overlay = editor.overlayLayer;
         const hit = editor.selection.length > 0 ? overlay?.hitHandle(e.x, e.y) : null;
         if (hit?.kind === 'rotate') editor.setCursor('grab');
-        else if (hit) editor.setCursor(handleCursor(hit.handle, overlay?.frameAngle() ?? 0));
-        else editor.setCursor('default');
+        else if (hit?.kind === 'resize') editor.setCursor(handleCursor(hit.handle, overlay?.frameAngle() ?? 0));
+        else if (hit) editor.setCursor('pointer');
+        else {
+          // 调整图片时，形状里面可以直接拖动图片
+          const target = fillTarget(editor);
+          const local = target ? toLocalPoint(target.toLocal, e.world) : null;
+          const inside =
+            target?.fill.type === 'image' && local && editor.geometry.outlineOf(target.node).contains(local.x, local.y);
+          editor.setCursor(inside ? 'move' : 'default');
+        }
         return;
       }
 
@@ -211,6 +337,29 @@ export function createSelectTool(): Tool {
         return;
       }
 
+      if (drag.kind === 'gradient') {
+        const { id, original, box, point, key } = drag;
+        const fill = dragGradientPoint(original, box, point, toLocalPoint(drag.toLocal, e.world), e.shift);
+        store.transact('gradient', (tx) => tx.update(id, { fill }), { mergeKey: key });
+        return;
+      }
+
+      if (drag.kind === 'image-pan') {
+        const { id, original, box, image, start, key } = drag;
+        const local = toLocalPoint(drag.toLocal, e.world);
+        const fill = panImage(original, box, image, local.x - start.x, local.y - start.y);
+        store.transact('move image', (tx) => tx.update(id, { fill }), { mergeKey: key });
+        return;
+      }
+
+      if (drag.kind === 'image-zoom') {
+        const { id, original, box, image, center, distance, key } = drag;
+        const local = toLocalPoint(drag.toLocal, e.world);
+        const fill = zoomImage(original, box, image, Math.hypot(local.x - center.x, local.y - center.y) / distance);
+        store.transact('zoom image', (tx) => tx.update(id, { fill }), { mergeKey: key });
+        return;
+      }
+
       if (drag.kind === 'rotate') {
         const { ids, originals, pivot, key } = drag;
         let angle = Math.atan2(e.world.y - pivot.y, e.world.x - pivot.x) - drag.startAngle;
@@ -240,17 +389,36 @@ export function createSelectTool(): Tool {
     },
 
     onDoubleClick(e, editor) {
-      const hit = editor.pick(e.world).node;
-      if (!hit) return;
+      const picked = editor.pick(e.world);
+      const hit = picked.node;
+      if (!hit) {
+        // 双击画板的空白处：画板背景是渐变时，在画布上调整它
+        const board = picked.artboard;
+        if (board?.fill?.type === 'gradient') editor.setFillEditing({ id: board.id, kind: 'gradient' });
+        return;
+      }
       if (hit.type === 'text') {
         editor.commands.run('text.edit', { id: hit.id, world: e.world });
         return;
       }
-      // 双击编组：进入这个组，选中鼠标下面的那个成员。之后单击组里的其他成员也是选成员
+      // 双击编组：进入这个组，选中鼠标下面的那个成员。之后单击组里的其他成员也是选成员。
+      // 蒙版组也一样：蒙版本身点不中，选中的是被遮住的内容，拖动它时蒙版不动
       if (hit.type === 'group') {
         const inner = editor.pickInside(e.world, hit.id);
         if (inner) editor.select([inner.id]);
+        return;
       }
+      // 双击填了渐变或图片的形状：在画布上调整渐变的起点终点，或者图片在形状里的位置和大小
+      const fill = 'fill' in hit ? hit.fill : null;
+      if (fill?.type === 'gradient' || fill?.type === 'image') editor.setFillEditing({ id: hit.id, kind: fill.type });
+    },
+
+    onKeyDown(event, editor) {
+      if (event.key === 'Escape' && editor.fillEditing) {
+        editor.setFillEditing(null);
+        return true;
+      }
+      return false;
     },
 
     drawOverlay(ctx, editor) {

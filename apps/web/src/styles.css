@@ -228,6 +228,19 @@ button {
   white-space: nowrap;
 }
 
+/* 属性面板很窄时，分段按钮一起收窄，放不下的字用省略号，不会伸出面板 */
+.prop-controls > .segmented-small {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.prop-controls > .segmented-small button {
+  flex: 1 1 auto;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .file-name {
   display: inline-flex;
   align-items: center;

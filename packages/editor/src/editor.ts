@@ -46,6 +46,7 @@ import { Overlay } from './overlay';
 import { Registry } from './registry';
 import type { Tool } from './tools/tool';
 import type { CanvasTheme, EditorState, TextEditing, ViewMode } from './types';
+import type { FillEditing } from './fill-handles';
 
 const MIN_ZOOM = 0.02;
 const MAX_ZOOM = 64;
@@ -148,6 +149,7 @@ export class Editor {
       docVersion: this.store.version,
       resourceEpoch: 0,
       textEditing: null,
+      fillEditing: null,
     };
     this.store.subscribe(() => this.onDocumentChange());
   }
@@ -196,7 +198,33 @@ export class Editor {
       canUndo: this.store.canUndo,
       canRedo: this.store.canRedo,
       docVersion: this.store.version,
+      fillEditing: this.validFillEditing(this.state.fillEditing),
     });
+  }
+
+  /** 在画布上调整的填充还在不在（节点删了、撤销到了别的填充，就退出） */
+  private validFillEditing(editing: FillEditing | null): FillEditing | null {
+    if (!editing) return null;
+    const node = this.store.get(editing.id);
+    const fill = node && 'fill' in node ? node.fill : null;
+    return fill && typeof fill === 'object' && fill.type === editing.kind ? editing : null;
+  }
+
+  get fillEditing(): FillEditing | null {
+    return this.state.fillEditing;
+  }
+
+  /**
+   * 进入或退出"在画布上调整填充"。进入时把选区换成这个节点；节点没有这种填充时不进入
+   */
+  setFillEditing(next: FillEditing | null): void {
+    const valid = this.validFillEditing(next);
+    if (valid && !(this.state.selection.length === 1 && this.state.selection[0] === valid.id)) {
+      this.select([valid.id]);
+    }
+    const current = this.state.fillEditing;
+    if (current?.id === valid?.id && current?.kind === valid?.kind) return;
+    this.setState({ fillEditing: valid });
   }
 
   /** 文本工具在编辑文字、选中范围变化时调用。范围没变时不通知，免得界面跟着光标闪烁时也重画 */
@@ -230,14 +258,17 @@ export class Editor {
     const unique = [...new Set(ids)].filter((id) => this.store.has(id));
     const first = unique[0];
     const board = first ? artboardOf(this.store, first) : null;
+    const editing = this.state.fillEditing;
     this.setState({
       selection: unique,
       activeArtboardId: board && this.state.viewMode === 'canvas' ? board.id : this.state.activeArtboardId,
+      // 换了选区就不再调整原来那个节点的填充
+      fillEditing: editing && unique.length === 1 && unique[0] === editing.id ? editing : null,
     });
   }
 
   clearSelection(): void {
-    if (this.state.selection.length > 0) this.setState({ selection: [] });
+    if (this.state.selection.length > 0) this.setState({ selection: [], fillEditing: null });
   }
 
   /**
@@ -314,7 +345,7 @@ export class Editor {
   setTool(id: string): void {
     if (!this.tools.has(id) || id === this.state.tool) return;
     this.tool.onDeactivate?.(this);
-    this.setState({ tool: id });
+    this.setState({ tool: id, fillEditing: null });
     this.tool.onActivate?.(this);
     this.setCursor(this.tool.cursor);
   }

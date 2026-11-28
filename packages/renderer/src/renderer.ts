@@ -1,6 +1,7 @@
-import type { Canvas, CanvasKit, GrDirectContext, Image, Paint, SkPicture, Surface } from 'canvaskit-wasm';
+import type { Canvas, CanvasKit, GrDirectContext, Image, Paint, PathEffect, SkPicture, Surface } from 'canvaskit-wasm';
 import {
   IDENTITY,
+  dashPattern,
   hasShapeStyle,
   invert,
   maskParts,
@@ -9,6 +10,7 @@ import {
   transformRect,
   worldTransform,
   type Color,
+  type Stroke,
   type DocStore,
   type ImageFill,
   type Matrix,
@@ -441,6 +443,29 @@ function drawShape(node: SceneNode, ctx: DrawContext): void {
     paint.setStyle(ck.PaintStyle.Stroke);
     paint.setStrokeWidth(node.stroke.width);
     paint.setColor(toSkColor(ck, node.stroke.color, ctx.opacity));
+    const dash = applyStrokeStyle(ck, paint, node.stroke);
     canvas.drawPath(outline, paint);
+    // 画笔是共用的，画完把虚线、端点、拐角恢复成默认
+    if (dash) {
+      paint.setPathEffect(null);
+      dash.delete();
+    }
+    paint.setStrokeCap(ck.StrokeCap.Butt);
+    paint.setStrokeJoin(ck.StrokeJoin.Miter);
   }
+}
+
+/** 把描边的端点、拐角、虚线设到画笔上。返回虚线效果（调用方画完要 delete），实线时返回 null */
+export function applyStrokeStyle(ck: CanvasKit, paint: Paint, stroke: Stroke): PathEffect | null {
+  paint.setStrokeCap(
+    stroke.cap === 'round' ? ck.StrokeCap.Round : stroke.cap === 'square' ? ck.StrokeCap.Square : ck.StrokeCap.Butt,
+  );
+  paint.setStrokeJoin(
+    stroke.join === 'round' ? ck.StrokeJoin.Round : stroke.join === 'bevel' ? ck.StrokeJoin.Bevel : ck.StrokeJoin.Miter,
+  );
+  const dash = dashPattern(stroke);
+  if (!dash) return null;
+  const effect = ck.PathEffect.MakeDash(dash, stroke.dashOffset ?? 0);
+  paint.setPathEffect(effect);
+  return effect;
 }

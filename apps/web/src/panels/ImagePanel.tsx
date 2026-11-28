@@ -2,6 +2,7 @@ import { useCallback, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NO_ADJUSTMENTS, type ImageAdjustments, type ImageFill, type SceneNode } from '@shiba/core';
 import { NumberField } from '../ui/controls';
+import { useEditorState } from '../editor/context';
 import type { PanelProps } from './registry';
 
 type FrameKey = 'zoom' | 'panX' | 'panY';
@@ -80,6 +81,7 @@ export function ImagePanel({ editor, nodes }: PanelProps): ReactNode {
   const { t } = useTranslation();
   const { store } = editor;
   const seal = useCallback(() => store.sealHistory(), [store]);
+  const fillEditing = useEditorState((s) => s.fillEditing);
   const first = nodes.map(imageFillOf).find((fill) => fill !== null);
   if (!first) return null;
   const adjust = first.adjust ?? NO_ADJUSTMENTS;
@@ -122,6 +124,7 @@ export function ImagePanel({ editor, nodes }: PanelProps): ReactNode {
   };
 
   const changed = first.adjust !== undefined || FRAME.some(({ key }) => first[key] !== undefined);
+  const onCanvas = fillEditing?.kind === 'image' && fillEditing.id === nodes[0]?.id;
 
   return (
     <div className="appearance">
@@ -148,9 +151,20 @@ export function ImagePanel({ editor, nodes }: PanelProps): ReactNode {
           onCommit={seal}
         />
       ))}
-      <button type="button" className="text-btn reset-btn" disabled={!changed} onClick={reset}>
-        {t('adjust.reset')}
-      </button>
+      <div className="button-row">
+        {nodes.length === 1 && (
+          <button
+            type="button"
+            className={`text-btn reset-btn${onCanvas ? ' is-primary' : ''}`}
+            onClick={() => editor.setFillEditing(onCanvas ? null : { id: nodes[0]!.id, kind: 'image' })}
+          >
+            {t('adjust.onCanvas')}
+          </button>
+        )}
+        <button type="button" className="text-btn reset-btn" disabled={!changed} onClick={reset}>
+          {t('adjust.reset')}
+        </button>
+      </div>
     </div>
   );
 }

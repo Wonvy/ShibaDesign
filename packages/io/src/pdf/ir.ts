@@ -55,6 +55,11 @@ export interface PdfClip extends Box {
 export interface PdfStroke {
   color: Color;
   width: number;
+  /** 虚线（页面坐标里的长度）；省略是实线 */
+  dash?: number[];
+  dashOffset?: number;
+  cap?: 'round' | 'square';
+  join?: 'round' | 'bevel';
 }
 
 /**
@@ -217,8 +222,6 @@ export interface PdfIssues {
   patterns: number;
   /** 没法还原的透明蒙版，已忽略 */
   softMasks: number;
-  /** 虚线描边，已改成实线 */
-  dashes: number;
   /** 没有内嵌字体、改用默认字体重排的文字 */
   fallbackText: number;
   /** 解码失败、没能放进来的图片 */
@@ -226,7 +229,7 @@ export interface PdfIssues {
 }
 
 export function emptyIssues(): PdfIssues {
-  return { clips: 0, gradients: 0, patterns: 0, softMasks: 0, dashes: 0, fallbackText: 0, images: 0 };
+  return { clips: 0, gradients: 0, patterns: 0, softMasks: 0, fallbackText: 0, images: 0 };
 }
 
 export interface PdfPage {

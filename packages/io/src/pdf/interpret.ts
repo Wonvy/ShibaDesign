@@ -101,7 +101,12 @@ interface State {
   strokeAlpha: number;
   blendMode: BlendMode;
   lineWidth: number;
-  dashed: boolean;
+  /** 虚线的实线段和空白长度（当时的用户空间里），空数组是实线 */
+  dash: number[];
+  dashPhase: number;
+  /** 端点 0 平头、1 圆头、2 方头；拐角 0 尖角、1 圆角、2 斜角 */
+  lineCap: number;
+  lineJoin: number;
   softMask: boolean;
   /** 软蒙版画出来的内容。只有"一个灰度渐变"这种能还原成渐变透明度的蒙版才用得上 */
   mask: PdfSoftMask | null;
@@ -311,7 +316,17 @@ function dominantStyle(text: string, styles: readonly PdfTextStyleRun[]): { font
 
 function sameStroke(a: PdfStroke | null, b: PdfStroke | null): boolean {
   if (!a || !b) return a === b;
-  return sameColor(a.color, b.color) && Math.abs(a.width - b.width) < 1e-4;
+  const dashA = a.dash ?? [];
+  const dashB = b.dash ?? [];
+  return (
+    sameColor(a.color, b.color) &&
+    Math.abs(a.width - b.width) < 1e-4 &&
+    a.cap === b.cap &&
+    a.join === b.join &&
+    dashA.length === dashB.length &&
+    dashA.every((v, i) => Math.abs(v - dashB[i]!) < 1e-4) &&
+    Math.abs((a.dashOffset ?? 0) - (b.dashOffset ?? 0)) < 1e-4
+  );
 }
 
 function sameClip(a: PdfClip | null, b: PdfClip | null): boolean {
@@ -372,7 +387,10 @@ class Interpreter {
       strokeAlpha: 1,
       blendMode: 'normal',
       lineWidth: 1,
-      dashed: false,
+      dash: [],
+      dashPhase: 0,
+      lineCap: 0,
+      lineJoin: 0,
       softMask: false,
       mask: null,
       clip: null,
@@ -431,7 +449,9 @@ class Interpreter {
     on('restore', () => this.restore());
     on('transform', (a) => this.transform(toMatrix(a)));
     on('setLineWidth', (a) => (this.state.lineWidth = Number(a[0]) || 0));
-    on('setDash', (a) => (this.state.dashed = (a[0]?.length ?? 0) > 0));
+    on('setDash', (a) => this.setDash(a[0], a[1]));
+    on('setLineCap', (a) => (this.state.lineCap = Number(a[0]) || 0));
+    on('setLineJoin', (a) => (this.state.lineJoin = Number(a[0]) || 0));
     on('setGState', (a) => this.setGState(a[0]));
 
     on('setFillRGBColor', (a) => (this.state.fill = colorPaint(a[0])));
@@ -582,6 +602,14 @@ class Interpreter {
     this.state.ctm = saved;
   }
 
+  /** 虚线：数组里的长度都要是有限的非负数，有一项不对整个当作实线 */
+  private setDash(lengths: unknown, phase: unknown): void {
+    const list = Array.isArray(lengths) ? lengths.slice(0, 16).map(Number) : [];
+    const valid = list.every((v) => Number.isFinite(v) && v >= 0) && list.some((v) => v > 0);
+    this.state.dash = valid ? list : [];
+    this.state.dashPhase = valid && Number.isFinite(Number(phase)) ? Number(phase) : 0;
+  }
+
   private setGState(entries: unknown): void {
     if (!Array.isArray(entries)) return;
     const s = this.state;
@@ -596,7 +624,9 @@ class Interpreter {
         s.softMask = Boolean(value);
         // 蒙版的内容在设置它之前已经作为一个蒙版组画过了，见 endGroup
         s.mask = value ? this.lastMask : null;
-      } else if (key === 'D') s.dashed = (value?.[0]?.length ?? 0) > 0;
+      } else if (key === 'D') this.setDash(value?.[0], value?.[1]);
+      else if (key === 'LC') s.lineCap = Number(value) || 0;
+      else if (key === 'LJ') s.lineJoin = Number(value) || 0;
       else if (key === 'Font') this.setFont(value?.[0], value?.[1]);
     }
   }
@@ -706,17 +736,24 @@ class Interpreter {
   }
 
   private strokeStyle(): PdfStroke | null {
-    const { stroke, strokeAlpha, lineWidth, ctm, dashed } = this.state;
+    const { stroke, strokeAlpha, lineWidth, ctm, dash, dashPhase, lineCap, lineJoin } = this.state;
     if (strokeAlpha <= 0 || stroke.kind === 'none') return null;
     if (stroke.kind === 'pattern') {
       this.issues.patterns++;
       return null;
     }
     if (stroke.kind === 'gradient') this.issues.gradients++;
-    if (dashed) this.issues.dashes++;
     // PDF 里线宽为 0 表示"设备能画出的最细的线"，给它一个看得见的细线宽度
-    const width = lineWidth * scaleOf(ctm) || 0.25;
-    return { color: { r: stroke.r, g: stroke.g, b: stroke.b, a: strokeAlpha }, width };
+    const scale = scaleOf(ctm);
+    const width = lineWidth * scale || 0.25;
+    return {
+      color: { r: stroke.r, g: stroke.g, b: stroke.b, a: strokeAlpha },
+      width,
+      // 虚线的长度和线宽一样，跟着坐标变换缩放
+      ...(dash.length > 0 ? { dash: dash.map((v) => v * scale), dashOffset: dashPhase * scale } : {}),
+      ...(lineCap === 1 || lineCap === 2 ? { cap: lineCap === 1 ? ('round' as const) : ('square' as const) } : {}),
+      ...(lineJoin === 1 || lineJoin === 2 ? { join: lineJoin === 1 ? ('round' as const) : ('bevel' as const) } : {}),
+    };
   }
 
   private paintPath(data: PathData, fill: boolean, stroke: boolean, fillRule: 'nonzero' | 'evenodd'): void {

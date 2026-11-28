@@ -105,6 +105,21 @@ export class ContentStream {
     return this.raw(`${n(limit)} M`);
   }
 
+  /** 虚线：实线段和空白交替的长度、起始偏移。空数组是实线 */
+  dash(lengths: readonly number[], phase = 0): this {
+    return this.raw(`[${lengths.map(n).join(' ')}] ${n(phase)} d`);
+  }
+
+  /** 端点：0 平头、1 圆头、2 方头 */
+  lineCap(style: 0 | 1 | 2): this {
+    return this.raw(`${style} J`);
+  }
+
+  /** 拐角：0 尖角、1 圆角、2 斜角 */
+  lineJoin(style: 0 | 1 | 2): this {
+    return this.raw(`${style} j`);
+  }
+
   /** 应用一组图形状态（透明度、混合模式） */
   graphicsState(name: string): this {
     return this.raw(`/${name} gs`);
