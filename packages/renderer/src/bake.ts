@@ -1,10 +1,11 @@
 import type { CanvasKit, Image } from 'canvaskit-wasm';
 import type { ImageFill } from '@shiba/core';
 import { adjustmentMatrix } from './adjust';
+import { lookPlan, makeLookShader, type LookPlan } from './image-look';
 
 /**
- * 把图片填充的调色和模糊"烤"进像素，导出 PDF、SVG 时用：这两种格式里没有和画布完全一样的调色和模糊，
- * 先在像素上做好再放进去，样子和画布上一致。
+ * 把图片填充的调色、锐化、滤镜、曲线和模糊"烤"进像素，导出 PDF、SVG（以及网页、视频，它们用 SVG 图层）时用：
+ * 这些格式里没有和画布完全一样的效果，先在像素上做好再放进去，样子和画布上一致。
  */
 
 export interface BakedImage {
@@ -26,23 +27,26 @@ export function bakePlan(
   fill: ImageFill,
   image: { width(): number; height(): number },
   scale: number,
-): { matrix: number[] | null; sigma: number; pad: number; key: string } {
+): { matrix: number[] | null; look: LookPlan | null; sigma: number; pad: number; key: string } {
   const matrix = adjustmentMatrix(fill.adjust);
+  const look = lookPlan(fill);
   const sigma = Math.max(0, fill.adjust?.blur ?? 0) / 2 / Math.max(scale, 1e-6);
   const blurred = sigma > 0.01;
   const pad = blurred && fill.fit === 'contain' ? Math.ceil(sigma * 3) : 0;
-  const key = `${fill.assetId}|${matrix?.join(',') ?? ''}|${blurred ? `${sigma.toFixed(2)}|${fill.fit}` : ''}`;
-  return { matrix, sigma: blurred ? sigma : 0, pad, key };
+  // 锐化的半径是文档单位，换算成图片像素之后才是烤出来的样子，所以 key 里带上倍率
+  const lookKey = look ? `${look.key}@${look.sharpen > 0 ? scale.toFixed(4) : ''}` : '';
+  const key = `${fill.assetId}|${matrix?.join(',') ?? ''}|${blurred ? `${sigma.toFixed(2)}|${fill.fit}` : ''}|${lookKey}`;
+  return { matrix, look, sigma: blurred ? sigma : 0, pad, key };
 }
 
 /**
  * @param scale 图片的一个像素在本地坐标里有多大，用来把模糊半径换算成像素
  */
 export function bakeImage(ck: CanvasKit, fill: ImageFill, image: Image, scale: number): BakedImage | null {
-  const { matrix, sigma, pad, key } = bakePlan(fill, image, scale);
+  const { matrix, look, sigma, pad, key } = bakePlan(fill, image, scale);
   const width = image.width() + pad * 2;
   const height = image.height() + pad * 2;
-  if (!matrix && sigma === 0) return { image, dispose: () => undefined, width, height, pad, key };
+  if (!matrix && !look && sigma === 0) return { image, dispose: () => undefined, width, height, pad, key };
 
   const surface = ck.MakeSurface(width, height);
   if (!surface) return null;
@@ -64,13 +68,16 @@ export function bakeImage(ck: CanvasKit, fill: ImageFill, image: Image, scale: n
     0,
     1,
   ]);
-  const colorFilter = matrix ? ck.ColorFilter.MakeMatrix(matrix) : null;
+  // 锐化、滤镜、曲线和画布上用同一个着色器，取样间隔从文档单位换算成图片像素；调色也在它里面做
+  const lookShader = look ? makeLookShader(ck, shader, look, look.radius / Math.max(scale, 1e-6)) : null;
+  const colorFilter = matrix && !lookShader ? ck.ColorFilter.MakeMatrix(matrix) : null;
   const blur = sigma > 0 ? ck.ImageFilter.MakeBlur(sigma, sigma, tile, null) : null;
-  paint.setShader(shader);
+  paint.setShader(lookShader ?? shader);
   paint.setColorFilter(colorFilter);
   paint.setImageFilter(blur);
   canvas.drawRect(ck.LTRBRect(0, 0, width, height), paint);
   paint.delete();
+  lookShader?.delete();
   shader.delete();
   colorFilter?.delete();
   blur?.delete();

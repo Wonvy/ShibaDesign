@@ -12,3 +12,4 @@ export * from './text/fonts';
 export * from './text/layout';
 export * from './text/appearance';
 export * from './path-ops';
+export * from './image-look';

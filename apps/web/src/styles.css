@@ -1091,6 +1091,137 @@ button {
   align-self: flex-start;
 }
 
+/* ───────── 图片面板 ───────── */
+
+.image-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.image-subtitle {
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.image-subtitle:first-child {
+  margin-top: 0;
+}
+
+.image-actions .reset-btn {
+  margin-top: 0;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 8px 6px;
+}
+
+.preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.preset-thumb {
+  width: 100%;
+  max-width: 52px;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: var(--panel-2);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.preset.is-active {
+  color: var(--text);
+}
+
+.preset.is-active .preset-thumb {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.preset-name {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.curve-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.curve-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.curve-toolbar .segmented-small button {
+  padding: 0 8px;
+}
+
+.curve-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.curve-area {
+  fill: var(--panel-2);
+  rx: 4px;
+}
+
+.curve-grid line,
+.curve-diagonal {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.curve-diagonal {
+  stroke-dasharray: 3 3;
+}
+
+.curve-line,
+.curve-other {
+  fill: none;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.curve-other {
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+.curve-point {
+  fill: var(--panel);
+  stroke: var(--text);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.curve-editor .menu-hint {
+  margin: 0;
+  line-height: 1.5;
+}
+
 /* ───────── 路径面板 ───────── */
 
 .path-panel {

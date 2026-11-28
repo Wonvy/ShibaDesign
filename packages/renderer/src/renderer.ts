@@ -19,6 +19,7 @@ import {
   type SceneNode,
 } from '@shiba/core';
 import { adjustmentMatrix } from './adjust';
+import { lookPlan, makeLookShader } from './image-look';
 import type { GeometryCache } from './geometry';
 import { drawGradient } from './gradient';
 import { makeImageShader, type ImageCache } from './images';
@@ -379,16 +380,19 @@ function paintCount(node: SceneNode): number {
   return (node.fill ? 1 : 0) + (node.stroke && node.stroke.width > 0 ? 1 : 0);
 }
 
-/** 用图片填充节点的轮廓，带上调色、模糊和画面内的缩放平移 */
+/** 用图片填充节点的轮廓，带上调色、锐化、滤镜、曲线、模糊和画面内的缩放平移 */
 function drawImageFill(fill: ImageFill, image: Image, ctx: DrawContext): void {
   const { ck, canvas, outline, paint } = ctx;
   const bounds = ctx.bounds();
   // 着色器决定每个点的颜色，画笔的颜色只贡献不透明度
   const shader = makeImageShader(ck, image, bounds, fill);
-  const matrix = adjustmentMatrix(fill.adjust);
+  // 有锐化、滤镜、曲线时用着色器包一层，调色也在里面做；否则调色走颜色矩阵
+  const plan = lookPlan(fill);
+  const look = plan ? makeLookShader(ck, shader, plan, plan.radius) : null;
+  const matrix = look ? null : adjustmentMatrix(fill.adjust);
   const colorFilter = matrix ? ck.ColorFilter.MakeMatrix(matrix) : null;
   paint.setColor(ck.Color4f(1, 1, 1, ctx.opacity));
-  paint.setShader(shader);
+  paint.setShader(look ?? shader);
   paint.setColorFilter(colorFilter);
 
   const sigma = Math.max(0, fill.adjust?.blur ?? 0) / 2;
@@ -413,6 +417,7 @@ function drawImageFill(fill: ImageFill, image: Image, ctx: DrawContext): void {
 
   paint.setShader(null);
   paint.setColorFilter(null);
+  look?.delete();
   shader.delete();
   colorFilter?.delete();
 }

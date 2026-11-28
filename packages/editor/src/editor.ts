@@ -14,6 +14,7 @@ import {
   worldTransform,
   type ArtboardNode,
   type AssetMeta,
+  type ImageFill,
   type Matrix,
   type NodeId,
   type NodePatch,
@@ -34,6 +35,7 @@ import {
   TextAppearances,
   ensureTextFonts,
   registerBuiltinNodeTypes,
+  renderImagePreview,
   type Bitmap,
   type Camera,
   type FrameStats,
@@ -765,6 +767,17 @@ export class Editor {
     const limited = Math.min(scale, 4096 / Math.max(box.w, box.h, 1));
     const png = this.renderer.renderToPng(id, limited, padding);
     return png ? { png, box } : null;
+  }
+
+  /**
+   * 按一个图片填充的调整（不含模糊）把图片画成 width × height 的小图，铺满、居中裁切。
+   * 图片面板里滤镜预设的缩略图用它，编辑器没挂载也能画。图片还没解码好时返回 null
+   */
+  imagePreview(fill: ImageFill, width: number, height: number): Bitmap | null {
+    const image = this.images.get(fill.assetId);
+    if (!image) return null;
+    const data = renderImagePreview(this.ck, image, fill, width, height);
+    return data ? { width, height, data } : null;
   }
 
   /** 把一个节点画成缩略图；编辑器未挂载时返回 null */

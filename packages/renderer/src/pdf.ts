@@ -580,7 +580,7 @@ class PdfExporter {
     if (cached) return { name: cached, width, height, pad: plan.pad };
 
     let ref: PdfRef | null = null;
-    if (!plan.matrix && plan.sigma === 0 && this.c.assets.meta(fill.assetId)?.mime === 'image/jpeg') {
+    if (!plan.matrix && !plan.look && plan.sigma === 0 && this.c.assets.meta(fill.assetId)?.mime === 'image/jpeg') {
       const bytes = this.c.assets.get(fill.assetId);
       if (bytes) ref = writeJpeg(this.writer, bytes);
     }

@@ -1,3 +1,4 @@
+import { CURVE_CHANNELS, MAX_CURVE_POINTS } from './curves';
 import { MAX_GRADIENT_STOPS } from './gradient';
 import { DOCUMENT_VERSION, TEXT_ALIGNS, type DocumentData } from './model';
 import { LIST_KINDS, MAX_LIST_LEVEL } from './paragraphs';
@@ -150,6 +151,21 @@ function isNumberArray(value: unknown, length: number): boolean {
   return Array.isArray(value) && value.length === length && value.every(isFiniteNumber);
 }
 
+/** 曲线：每个通道（可省略）是 2 到 MAX_CURVE_POINTS 个坐标为数的点。超出 0–1、顺序乱的渲染时会整理，这里不拒绝 */
+function isCurves(value: unknown): boolean {
+  if (!isObject(value)) return false;
+  return CURVE_CHANNELS.every((channel) => {
+    const points = value[channel];
+    if (points === undefined) return true;
+    return (
+      Array.isArray(points) &&
+      points.length >= 2 &&
+      points.length <= MAX_CURVE_POINTS &&
+      points.every((point) => isObject(point) && isFiniteNumber(point.x) && isFiniteNumber(point.y))
+    );
+  });
+}
+
 function isColor(value: unknown): boolean {
   return isObject(value) && [value.r, value.g, value.b, value.a].every(isFiniteNumber);
 }
@@ -162,8 +178,16 @@ function isFill(value: unknown): boolean {
     for (const key of ['zoom', 'panX', 'panY']) {
       if (value[key] !== undefined && !isFiniteNumber(value[key])) return false;
     }
-    if (value.adjust === undefined) return true;
-    return isObject(value.adjust) && Object.values(value.adjust).every(isFiniteNumber);
+    if (value.adjust !== undefined && !(isObject(value.adjust) && Object.values(value.adjust).every(isFiniteNumber))) {
+      return false;
+    }
+    if (value.curves !== undefined && !isCurves(value.curves)) return false;
+    if (value.filter !== undefined) {
+      const filter = value.filter;
+      if (!isObject(filter) || typeof filter.preset !== 'string' || filter.preset.length > 64) return false;
+      if (!isFiniteNumber(filter.amount)) return false;
+    }
+    return true;
   }
   if (value.type === 'gradient') {
     if (typeof value.kind !== 'string' || !isPoint(value.start) || !isPoint(value.end)) return false;

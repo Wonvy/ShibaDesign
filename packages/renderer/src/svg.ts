@@ -625,7 +625,7 @@ class SvgExporter {
     const plan = bakePlan(fill, image, scale);
     if (this.imageData.has(plan.key)) return this.imageData.get(plan.key)!;
     let data: ImageData | null = null;
-    if (!plan.matrix && plan.sigma === 0) {
+    if (!plan.matrix && !plan.look && plan.sigma === 0) {
       const mime = this.context.assets.meta(fill.assetId)?.mime;
       const bytes = this.context.assets.get(fill.assetId);
       const info = mime === 'image/jpeg' && bytes ? jpegInfo(bytes) : null;

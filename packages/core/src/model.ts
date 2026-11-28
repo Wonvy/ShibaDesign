@@ -64,8 +64,12 @@ export interface ImageFill {
   /** 资源库里的图片 id，见 AssetStore */
   assetId: string;
   fit: ImageFit;
-  /** 调色与模糊。省略表示不做任何调整 */
+  /** 调色、模糊、锐化。省略表示不做任何调整 */
   adjust?: ImageAdjustments;
+  /** 曲线，见 curves.ts。省略表示不调 */
+  curves?: ImageCurves;
+  /** 滤镜预设和它的强度，见 image-presets.ts。省略表示没有滤镜 */
+  filter?: PresetFilter;
   /** 在形状里把图片再放大多少倍，最小为 1。省略表示 1 */
   zoom?: number;
   /** 图片在形状里的水平位置，-1 到 1：0 居中，1 表示把图片推到最右。省略表示 0 */
@@ -94,6 +98,34 @@ export interface ImageAdjustments {
   hue: number;
   /** 模糊半径，0 到 100，单位与文档坐标相同 */
   blur: number;
+  /** 锐化强度，0 到 200（百分比）：100 表示把细节的反差加一倍。省略表示不锐化 */
+  sharpen?: number;
+  /** 锐化的半径，单位与文档坐标相同，0.1 到 10。省略表示 1 */
+  sharpenRadius?: number;
+}
+
+/** 曲线上的一个控制点：输入、输出都在 0 到 1 */
+export interface CurvePoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * 曲线：总曲线作用于红绿蓝三个通道，另外每个通道可以有自己的曲线（先过通道自己的，再过总曲线）。
+ * 每条曲线是按 x 从小到大的控制点，至少两个；省略的那条是不变的直线。见 curves.ts
+ */
+export interface ImageCurves {
+  rgb?: readonly CurvePoint[];
+  red?: readonly CurvePoint[];
+  green?: readonly CurvePoint[];
+  blue?: readonly CurvePoint[];
+}
+
+/** 滤镜预设：用哪一个、强度多少。预设的定义在 image-presets.ts，发布之后不再改，不认识的预设当作没有 */
+export interface PresetFilter {
+  preset: string;
+  /** 强度，0 到 100 */
+  amount: number;
 }
 
 export const NO_ADJUSTMENTS: ImageAdjustments = {
