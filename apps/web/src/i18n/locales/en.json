@@ -330,7 +330,8 @@
     "kind": {
       "entrance": "Entrance",
       "emphasis": "Emphasis",
-      "exit": "Exit"
+      "exit": "Exit",
+      "motion": "Motion path"
     },
     "start": {
       "onClick": "On click",
@@ -365,6 +366,12 @@
         "spin": "Spin",
         "shake": "Shake",
         "flash": "Flash"
+      },
+      "motion": {
+        "line": "Line",
+        "arc": "Arc",
+        "circle": "Circle",
+        "custom": "Custom path"
       }
     },
     "animation": {
@@ -377,7 +384,11 @@
       "moveUp": "Move up",
       "moveDown": "Move down",
       "remove": "Remove this animation",
-      "missing": "Object is no longer on this slide"
+      "missing": "Object is no longer on this slide",
+      "reversePath": "Reverse path direction",
+      "pathHint": "While this object is selected, its motion path is shown on the canvas (green is the start, red the end); drag anchors and handles to change it. The object stays at the end, and later animations continue from there.",
+      "drawPathHint": "Draw the path from where the object is now (the end of its last motion path, if any): click to add points, drag to pull out curves, press Return or click the last point to finish, Esc to cancel",
+      "drawPathNeedsOne": "Select a single object to draw a custom path"
     },
     "transition": {
       "label": "Transition",

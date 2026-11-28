@@ -16,3 +16,4 @@ export * from './gradient';
 export * from './path-data';
 export * from './curves';
 export * from './image-presets';
+export * from './motion';

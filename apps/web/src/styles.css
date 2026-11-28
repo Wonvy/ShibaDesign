@@ -907,7 +907,7 @@ button {
   color: var(--text-dim);
 }
 
-/* 三类动画用形状而不只是颜色来区分：进入是实心圆，强调是菱形，退出是空心圆 */
+/* 四类动画用形状而不只是颜色来区分：进入是实心圆，强调是菱形，退出是空心圆，动作路径是一段横线 */
 .anim-dot {
   flex: none;
   width: 8px;
@@ -924,6 +924,18 @@ button {
 .anim-dot.kind-exit {
   background: transparent;
   box-shadow: inset 0 0 0 2px var(--text-dim);
+}
+
+.anim-dot.kind-motion {
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.anim-hint {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  line-height: 1.5;
 }
 
 .anim-name {

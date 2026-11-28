@@ -1,9 +1,10 @@
-import { ArrowDown, ArrowUp, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Repeat, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ANIMATION_KINDS,
   ANIMATION_STARTS,
+  CUSTOM_MOTION_EFFECT,
   DEFAULT_TRANSITION,
   DIRECTIONS,
   TRANSITION_EFFECTS,
@@ -20,21 +21,33 @@ import {
 import { slideLayerOf, type Editor } from '@shiba/editor';
 import { displayName } from '../names';
 import { IconButton, NumberField, Section } from '../ui/controls';
+import { toast } from '../ui/toast';
 import type { PanelProps } from './registry';
 
 const seconds = (ms: number): number => Math.round(ms / 10) / 100;
 const millis = (s: number): number => Math.round(Math.max(0, s) * 1000);
 
-/** 下拉框：选一个效果，给选中的对象加一条动画。效果列表直接来自效果注册表 */
+/**
+ * 下拉框：选一个效果，给选中的对象加一条动画。效果列表直接来自效果注册表。
+ * "自定义路径"不是马上加，而是换成画路径的工具，在画布上从对象中心画出来
+ */
 function AddAnimation({ editor }: { editor: Editor }): ReactNode {
   const { t } = useTranslation();
+  const choose = (effect: string): void => {
+    if (effect !== CUSTOM_MOTION_EFFECT) {
+      editor.commands.run('animation.add', { effect });
+      return;
+    }
+    if (editor.commands.run('animation.drawPath')) toast(t('animation.drawPathHint'));
+    else toast(t('animation.drawPathNeedsOne'), 'error');
+  };
   return (
     <select
       className="select add-animation"
       aria-label={t('animation.add')}
       value=""
       onChange={(e) => {
-        if (e.target.value) editor.commands.run('animation.add', { effect: e.target.value });
+        if (e.target.value) choose(e.target.value);
       }}
     >
       <option value="">{t('animation.add')}</option>
@@ -42,7 +55,9 @@ function AddAnimation({ editor }: { editor: Editor }): ReactNode {
         <optgroup key={kind} label={t(`kind.${kind}`)}>
           {listEffects(kind).map((def) => (
             <option key={def.id} value={def.id}>
+              {/* 自定义路径选了之后还要在画布上画，名字后面加省略号 */}
               {t(`effect.${def.id}`)}
+              {def.id === CUSTOM_MOTION_EFFECT ? '…' : ''}
             </option>
           ))}
         </optgroup>
@@ -161,6 +176,7 @@ export function AnimationList(props: {
                     </div>
                   </div>
                 )}
+                {def?.kind === 'motion' && <p className="menu-hint anim-hint">{t('animation.pathHint')}</p>}
                 <div className="button-row anim-actions">
                   <IconButton
                     title={t('animation.moveUp')}
@@ -180,6 +196,16 @@ export function AnimationList(props: {
                   >
                     <ArrowDown size={15} />
                   </IconButton>
+                  {def?.kind === 'motion' && animation.path && (
+                    <IconButton
+                      title={t('animation.reversePath')}
+                      onClick={() =>
+                        editor.commands.run('animation.reversePath', { slideId: slide.id, id: animation.id })
+                      }
+                    >
+                      <Repeat size={15} />
+                    </IconButton>
+                  )}
                   <IconButton
                     title={t('animation.remove')}
                     onClick={() => editor.commands.run('animation.remove', { slideId: slide.id, id: animation.id })}

@@ -4,14 +4,17 @@ import {
   artboards,
   createId,
   getEffect,
+  reverseMotionPath,
   type ArtboardNode,
   type DocStore,
   type NodeId,
   type SceneNode,
   type SlideAnimation,
   type SlideTransition,
+  type Subpath,
   type Transaction,
 } from '@shiba/core';
+import type { Editor } from '../editor';
 import type { Command } from './command';
 
 /**
@@ -43,15 +46,22 @@ function slideById(store: DocStore, id: NodeId): ArtboardNode | null {
   return node?.type === 'artboard' && node.deck ? node : null;
 }
 
-/** 给选中的对象各加一条动画，排在所在幻灯片动画列表的末尾 */
-export const addAnimation: Command<{ effect: string }> = {
+/**
+ * 给选中的对象各加一条动画，排在所在幻灯片动画列表的末尾。
+ * 动作路径效果带上路径：给了 path 就用它（自定义路径画完时），否则用效果的预设路径；两样都没有的（自定义路径）不加
+ */
+export const addAnimation: Command<{ effect: string; path?: Subpath }> = {
   id: 'animation.add',
-  enabled: (editor, args) =>
-    getEffect(args.effect) !== undefined && editor.selection.some((id) => slideLayerOf(editor.store, id) !== null),
-  run(editor, { effect }) {
+  enabled: (editor, args) => {
+    const def = getEffect(args.effect);
+    if (!def || (def.kind === 'motion' && !args.path && !def.defaultPath)) return false;
+    return editor.selection.some((id) => slideLayerOf(editor.store, id) !== null);
+  },
+  run(editor, { effect, path }) {
     const { store } = editor;
     const def = getEffect(effect);
     if (!def) return;
+    if (def.kind === 'motion' && !path && !def.defaultPath) return;
     const targets = new Map<NodeId, NodeId[]>();
     for (const id of editor.selection) {
       const found = slideLayerOf(store, id);
@@ -74,6 +84,9 @@ export const addAnimation: Command<{ effect: string }> = {
           delay: 0,
           // 进入默认从左边来，退出默认往右边去，连起来是一个从左到右的动线
           ...(def.directional ? { direction: def.kind === 'exit' ? ('right' as const) : ('left' as const) } : {}),
+          ...(def.kind === 'motion'
+            ? { path: path ?? def.defaultPath!({ width: slide.size[0], height: slide.size[1] }) }
+            : {}),
         }));
         setAnimations(tx, slide, [...(slide.deck!.animations ?? []), ...added]);
       }
@@ -128,6 +141,47 @@ export const moveAnimation: Command<{ slideId: NodeId; id: string; delta: -1 | 1
     [list[from], list[to]] = [list[to]!, list[from]!];
     editor.store.transact('move animation', (tx) => setAnimations(tx, slide, list));
     editor.store.sealHistory();
+  },
+};
+
+/**
+ * 改一条动画的动作路径。在画布上拖路径的手柄时连续调用，同一次拖动传同一个 mergeKey，松手时调用方 sealHistory
+ */
+export function setAnimationPath(editor: Editor, slideId: NodeId, id: string, path: Subpath, mergeKey?: string): void {
+  const slide = slideById(editor.store, slideId);
+  if (!slide) return;
+  editor.store.transact(
+    'motion path',
+    (tx) =>
+      setAnimations(
+        tx,
+        slide,
+        (slide.deck!.animations ?? []).map((a) => (a.id === id ? { ...a, path } : a)),
+      ),
+    { mergeKey },
+  );
+}
+
+/** 让动作路径反过来走 */
+export const reverseAnimationPath: Command<{ slideId: NodeId; id: string }> = {
+  id: 'animation.reversePath',
+  run(editor, { slideId, id }) {
+    const animation = slideById(editor.store, slideId)?.deck?.animations?.find((a) => a.id === id);
+    if (!animation?.path) return;
+    setAnimationPath(editor, slideId, id, reverseMotionPath(animation.path));
+    editor.store.sealHistory();
+  },
+};
+
+/** 开始在画布上画自定义的动作路径：只选了一个幻灯片上的对象时可用，换成画路径的工具（见 tools/motion-path.ts） */
+export const drawAnimationPath: Command = {
+  id: 'animation.drawPath',
+  enabled: (editor) =>
+    editor.selection.length === 1 &&
+    slideLayerOf(editor.store, editor.selection[0]!) !== null &&
+    editor.tools.has('motion-path'),
+  run(editor) {
+    editor.setTool('motion-path');
   },
 };
 

@@ -25,6 +25,8 @@ export class DocumentError extends Error {
 
 const MAX_NODES = 200_000;
 const MAX_TEXT_LENGTH = 1_000_000;
+/** 一条动作路径最多几个锚点 */
+const MAX_MOTION_ANCHORS = 1000;
 
 export function validateDocument(data: unknown): DocumentData {
   if (!isObject(data) || !isObject(data.nodes)) throw new DocumentError('notObject');
@@ -227,7 +229,9 @@ function isDeck(value: unknown): boolean {
         typeof a.effect === 'string' &&
         typeof a.start === 'string' &&
         isFiniteNumber(a.duration) &&
-        isFiniteNumber(a.delay),
+        isFiniteNumber(a.delay) &&
+        (a.path === undefined ||
+          (isSubpath(a.path) && (a.path as { anchors: unknown[] }).anchors.length <= MAX_MOTION_ANCHORS)),
     )
   );
 }

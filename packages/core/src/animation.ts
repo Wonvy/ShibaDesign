@@ -1,17 +1,18 @@
-import type { NodeId } from './model';
-import type { Rect } from './rect';
+import type { NodeId, Subpath } from './model';
+import { MOTION_PRESETS, motionPathEnds, sampleMotionPath } from './motion';
+import type { Point, Rect } from './rect';
 
 /**
  * 幻灯片动画：数据模型、效果库、时间安排。
  *
  * 模型和 PPT 的"动画窗格"是一回事：每页幻灯片有一个切换效果，和一张按顺序排列的动画列表。
- * 每条动画作用于这一页上的一个对象，属于"进入、强调、退出"三类之一。
+ * 每条动画作用于这一页上的一个对象，属于"进入、强调、退出、动作路径"四类之一。
  *
  * 这个模块全是纯数据和纯函数，不碰 DOM。它把动画列表算成一组"什么时候、对谁、播哪些关键帧"，
  * 关键帧用的是 Web Animations API 的格式，播放器拿到后直接交给浏览器执行。
  */
 
-export const ANIMATION_KINDS = ['entrance', 'emphasis', 'exit'] as const;
+export const ANIMATION_KINDS = ['entrance', 'emphasis', 'exit', 'motion'] as const;
 export type AnimationKind = (typeof ANIMATION_KINDS)[number];
 
 export const ANIMATION_STARTS = ['onClick', 'withPrevious', 'afterPrevious'] as const;
@@ -34,6 +35,11 @@ export interface SlideAnimation {
   /** 开始前的等待，毫秒 */
   delay: number;
   direction?: Direction;
+  /**
+   * 动作路径：对象沿着走的线，锚点模型同钢笔路径。坐标是幻灯片坐标里相对对象中心的位移，起点通常是 (0, 0)。
+   * 同一个对象有好几条动作路径时，后一条从前一条的终点接着走（见 scheduleAnimations）。只有动作路径效果用它
+   */
+  path?: Subpath;
 }
 
 export const TRANSITION_EFFECTS = ['none', 'fade', 'push', 'zoom', 'smooth'] as const;
@@ -57,10 +63,12 @@ export const DEFAULT_TRANSITION: SlideTransition = { effect: 'none', duration: 6
 export type Keyframe = Record<string, string | number>;
 
 export interface EffectContext {
-  /** 对象在幻灯片坐标里的外接矩形 */
+  /** 对象在幻灯片坐标里的外接矩形（前面的动作路径把它挪过的话，是挪过之后的位置） */
   box: Rect;
   slide: { width: number; height: number };
   direction: Direction;
+  /** 这条动画的动作路径 */
+  path?: Subpath;
 }
 
 export interface EffectFrames {
@@ -85,6 +93,8 @@ export interface EffectDef {
   directional?: boolean;
   /** 没有过程、瞬间完成的效果（出现、消失） */
   instant?: boolean;
+  /** 动作路径效果：新加这条动画时给它的路径。自定义路径没有，要在画布上画 */
+  defaultPath?(slide: { width: number; height: number }): Subpath;
   build(ctx: EffectContext): EffectFrames;
 }
 
@@ -237,6 +247,40 @@ registerEffect({
   }),
 });
 
+// ───────────── 动作路径 ─────────────
+
+/** 坐标保留两位小数，导出的网页里关键帧不会是一长串数字 */
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
+/** 沿路径按弧长等分取点，排成 translate 关键帧。路径没有长度时停在起点 */
+function motionFrames(ctx: EffectContext): EffectFrames {
+  const points = ctx.path ? sampleMotionPath(ctx.path) : [];
+  if (points.length === 0) return { easing: EASE_IN_OUT };
+  if (points.length === 1) points.push(points[0]!);
+  const n = points.length - 1;
+  return {
+    move: points.map((p, i) => ({ translate: px(round2(p.x), round2(p.y)), offset: i / n })),
+    easing: EASE_IN_OUT,
+  };
+}
+
+for (const id of ['line', 'arc', 'circle'] as const) {
+  registerEffect({ id: `motion.${id}`, kind: 'motion', defaultPath: MOTION_PRESETS[id], build: motionFrames });
+}
+/** 自定义路径：在画布上从对象中心开始画 */
+export const CUSTOM_MOTION_EFFECT = 'motion.custom';
+registerEffect({ id: CUSTOM_MOTION_EFFECT, kind: 'motion', build: motionFrames });
+
+/** 把关键帧里的 translate 整体挪一段（前面的动作路径把对象挪走了，后面的平移从那里算起） */
+function shiftMove(frames: Keyframe[] | undefined, by: Point): Keyframe[] | undefined {
+  if (!frames || (by.x === 0 && by.y === 0)) return frames;
+  return frames.map((frame) => {
+    const match = typeof frame.translate === 'string' ? /^(\S+)px (\S+)px$/.exec(frame.translate) : null;
+    if (!match) return frame;
+    return { ...frame, translate: px(round2(Number(match[1]) + by.x), round2(Number(match[2]) + by.y)) };
+  });
+}
+
 // ───────────── 时间安排 ─────────────
 
 /** 排好时间的一条动画，播放器直接执行 */
@@ -276,12 +320,15 @@ export interface ScheduleInput {
  * - "单击时"开启新的一步；
  * - "与上一动画同时"和上一条动画同一时刻开始；
  * - "上一动画之后"等上一条动画播完再开始；
- * - 每条动画自己的延迟再往后加。
+ * - 每条动画自己的延迟再往后加；
+ * - 动作路径播完对象停在终点。同一个对象后面的动画（下一条路径、飞出等平移）按列表顺序从这个位置接着算。
  */
 export function scheduleAnimations(animations: readonly SlideAnimation[], input: ScheduleInput): SlideSchedule {
   const steps: ScheduledAnimation[][] = [[]];
   const hiddenAtStart: NodeId[] = [];
   const seen = new Set<NodeId>();
+  /** 每个对象被前面的动作路径挪了多远 */
+  const moved = new Map<NodeId, Point>();
   let previous: { start: number; end: number } | null = null;
 
   for (const animation of animations) {
@@ -296,7 +343,17 @@ export function scheduleAnimations(animations: readonly SlideAnimation[], input:
     const base: number = !previous ? 0 : animation.start === 'afterPrevious' ? previous.end : previous.start;
     const start: number = base + Math.max(0, animation.delay);
     const duration = def.instant ? 0 : Math.max(0, animation.duration);
-    const frames = def.build({ box, slide: input.slide, direction: animation.direction ?? 'left' });
+    const offset = moved.get(animation.target) ?? { x: 0, y: 0 };
+    const frames = def.build({
+      box: { ...box, x: box.x + offset.x, y: box.y + offset.y },
+      slide: input.slide,
+      direction: animation.direction ?? 'left',
+      path: animation.path,
+    });
+    if (def.kind === 'motion' && animation.path) {
+      const { end } = motionPathEnds(animation.path);
+      moved.set(animation.target, { x: offset.x + end.x, y: offset.y + end.y });
+    }
 
     steps[steps.length - 1]!.push({
       target: animation.target,
@@ -304,7 +361,7 @@ export function scheduleAnimations(animations: readonly SlideAnimation[], input:
       duration,
       easing: frames.easing,
       fx: frames.fx,
-      move: frames.move,
+      move: shiftMove(frames.move, offset),
       show: def.kind === 'entrance',
       hide: def.kind === 'exit',
     });

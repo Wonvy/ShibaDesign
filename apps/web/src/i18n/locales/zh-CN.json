@@ -330,7 +330,8 @@
     "kind": {
       "entrance": "进入",
       "emphasis": "强调",
-      "exit": "退出"
+      "exit": "退出",
+      "motion": "动作路径"
     },
     "start": {
       "onClick": "单击时",
@@ -365,6 +366,12 @@
         "spin": "旋转",
         "shake": "摇晃",
         "flash": "闪烁"
+      },
+      "motion": {
+        "line": "直线",
+        "arc": "弧线",
+        "circle": "圆形",
+        "custom": "自定义路径"
       }
     },
     "animation": {
@@ -377,7 +384,11 @@
       "moveUp": "上移",
       "moveDown": "下移",
       "remove": "删除这条动画",
-      "missing": "对象已不在这一页"
+      "missing": "对象已不在这一页",
+      "reversePath": "反转路径方向",
+      "pathHint": "选中这个对象时，画布上会显示它的动作路径（绿色是起点，红色是终点），拖动锚点和控制柄修改。播完停在终点，后面的动画从那里接着走。",
+      "drawPathHint": "从对象现在的位置开始画路径（已经有动作路径时从最后一条的终点开始）：单击加点，按住拖动拉出曲线，回车或点最后一个点结束，Esc 取消",
+      "drawPathNeedsOne": "画自定义路径时只能选中一个对象"
     },
     "transition": {
       "label": "切换效果",

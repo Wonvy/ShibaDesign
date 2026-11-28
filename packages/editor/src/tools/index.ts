@@ -1,5 +1,6 @@
 import type { Editor } from '../editor';
 import { createHandTool } from './hand';
+import { createMotionPathTool } from './motion-path';
 import { createPenTool } from './pen';
 import { createSelectTool } from './select';
 import { createShapeTool } from './shape';
@@ -12,7 +13,8 @@ export function registerBuiltinTools(editor: Editor): void {
     .register(createHandTool())
     .register(createShapeTool('rect'))
     .register(createShapeTool('ellipse'))
-    .register(createPenTool());
+    .register(createPenTool())
+    .register(createMotionPathTool());
   registerTextTool(editor);
 }
 

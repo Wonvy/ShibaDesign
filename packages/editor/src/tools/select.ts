@@ -11,15 +11,17 @@ import {
   type GradientFill,
   type ImageFill,
   type Matrix,
+  type Subpath,
   type NodeId,
   type Point,
   type Rect,
   type SceneNode,
   type TextNode,
 } from '@shiba/core';
-import { pruneAnimations } from '../commands/animation';
+import { pruneAnimations, setAnimationPath } from '../commands/animation';
 import type { Editor } from '../editor';
 import { dragGradientPoint, imageRect, panImage, zoomImage, type GradientPoint } from '../fill-handles';
+import { dragMotionPoint, hitMotionHandle, toPathPoint, type MotionPart, type MotionPathView } from '../motion-handles';
 import { reparentByPosition, translateFromOriginals } from '../ops';
 import {
   captureOriginals,
@@ -89,6 +91,15 @@ type Drag =
       toLocal: Matrix;
       center: Point;
       distance: number;
+      key: string;
+    }
+  // 拖动作路径上的锚点或控制柄
+  | {
+      kind: 'motion';
+      view: MotionPathView;
+      index: number;
+      part: MotionPart;
+      original: Subpath;
       key: string;
     };
 
@@ -237,6 +248,19 @@ export function createSelectTool(): Tool {
 
     onPointerDown(e, editor) {
       if (beginFillEdit(editor, e.world, e.x, e.y)) return;
+      // 动作路径的手柄优先：路径的起点在对象中心，终点常常落在别的控制柄附近
+      const motion = hitMotionHandle(editor, e.x, e.y);
+      if (motion) {
+        drag = {
+          kind: 'motion',
+          view: motion.view,
+          index: motion.index,
+          part: motion.part,
+          original: motion.view.path,
+          key: editor.newMergeKey('motion-path'),
+        };
+        return;
+      }
       if (beginTransform(editor, e.world, e.x, e.y)) return;
 
       const target = editor.overlayLayer?.hitArtboardLabel(e.x, e.y) ?? editor.pick(e.world).node?.id ?? null;
@@ -273,6 +297,10 @@ export function createSelectTool(): Tool {
       const { store } = editor;
       if (!e.down || !drag) {
         const overlay = editor.overlayLayer;
+        if (hitMotionHandle(editor, e.x, e.y)) {
+          editor.setCursor('move');
+          return;
+        }
         const hit = editor.selection.length > 0 ? overlay?.hitHandle(e.x, e.y) : null;
         if (hit?.kind === 'rotate') editor.setCursor('grab');
         else if (hit?.kind === 'resize') editor.setCursor(handleCursor(hit.handle, overlay?.frameAngle() ?? 0));
@@ -357,6 +385,14 @@ export function createSelectTool(): Tool {
         const local = toLocalPoint(drag.toLocal, e.world);
         const fill = zoomImage(original, box, image, Math.hypot(local.x - center.x, local.y - center.y) / distance);
         store.transact('zoom image', (tx) => tx.update(id, { fill }), { mergeKey: key });
+        return;
+      }
+
+      if (drag.kind === 'motion') {
+        const { view, index, part, original, key } = drag;
+        const to = toPathPoint(view, e.world);
+        if (!to) return;
+        setAnimationPath(editor, view.slideId, view.animationId, dragMotionPoint(original, index, part, to), key);
         return;
       }
 

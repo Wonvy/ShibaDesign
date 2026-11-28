@@ -14,6 +14,7 @@ import {
 } from '@shiba/core';
 import type { Editor } from './editor';
 import { gradientHandlePoints, imageRect, type GradientPoint } from './fill-handles';
+import { drawMotionPaths } from './motion-handles';
 import { HANDLES, handleAnchor, type Handle } from './resize';
 
 const HANDLE_SIZE = 8;
@@ -92,6 +93,8 @@ export class Overlay {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.drawArtboardLabels();
     this.drawSelection();
+    // 选中对象的动作路径画在选区框上面，见 motion-handles.ts
+    drawMotionPaths(ctx, editor);
     editor.tool.drawOverlay?.(ctx, editor);
   }
 

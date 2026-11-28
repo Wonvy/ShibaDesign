@@ -1,5 +1,13 @@
 import type { Editor } from '../editor';
-import { addAnimation, moveAnimation, removeAnimation, setTransition, updateAnimation } from './animation';
+import {
+  addAnimation,
+  drawAnimationPath,
+  moveAnimation,
+  removeAnimation,
+  reverseAnimationPath,
+  setTransition,
+  updateAnimation,
+} from './animation';
 import { alignSelection, distributeSelection, orderSelection } from './arrange';
 import { addArtboard, deleteArtboard, duplicateActiveArtboard } from './artboard';
 import { createBoolean, releaseBoolean, setBooleanOp } from './boolean';
@@ -50,6 +58,8 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(removeAnimation)
     .register(moveAnimation)
     .register(setTransition)
+    .register(reverseAnimationPath)
+    .register(drawAnimationPath)
     .register(outlineStroke)
     .register(offsetPath)
     .register(outlineText);
@@ -59,5 +69,5 @@ export type { Command } from './command';
 export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
 export type { OffsetPathArgs } from './path';
-export { pruneAnimations, slideLayerOf } from './animation';
+export { pruneAnimations, setAnimationPath, slideLayerOf } from './animation';
 export { isMaskNode } from './mask';
