@@ -108,6 +108,8 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: 'mod+g', command: 'group.create' },
   { key: 'mod+shift+g', command: 'group.release' },
   { key: 'mod+alt+g', command: 'frame.wrap' },
+  { key: 'shift+a', command: 'frame.autoLayout' },
+  { key: 'alt+shift+a', command: 'frame.removeAutoLayout' },
   { key: 'shift+h', command: 'arrange.flip', args: 'horizontal' },
   { key: 'shift+v', command: 'arrange.flip', args: 'vertical' },
   { key: 'mod+a', command: 'edit.selectAll' },

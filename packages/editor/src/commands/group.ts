@@ -1,6 +1,7 @@
 import {
   breaksComponentRules,
   createNode,
+  inferLayout,
   transformRect,
   translation,
   unionRects,
@@ -14,6 +15,7 @@ import {
   sortByZOrder,
   topLevelOnly,
   worldTransform,
+  type FrameNode,
   type GroupNode,
   type NodeId,
   type SceneNode,
@@ -76,9 +78,10 @@ export function groupNodes(editor: Editor, nodes: readonly SceneNode[], extra: P
 
 /**
  * 用画框把一些对象包起来，返回新画框的 id。画框正好框住它们（几何范围，不含描边），放在最上面那个对象原来的层位；
- * 画框没有填充、不裁剪，所以包起来之后画布上的样子不变（描边伸出画框也不会被切掉）
+ * 画框没有填充、不裁剪，所以包起来之后画布上的样子不变（描边伸出画框也不会被切掉）。
+ * autoLayout 时顺便加上自动布局：按现在的摆放猜方向和间距，里面的东西按位置重新排好层序，画框包住内容
  */
-export function frameNodes(editor: Editor, nodes: readonly SceneNode[]): NodeId | null {
+export function frameNodes(editor: Editor, nodes: readonly SceneNode[], autoLayout = false): NodeId | null {
   const { store } = editor;
   const bottom = nodes[0];
   if (!bottom?.parent) return null;
@@ -90,6 +93,12 @@ export function frameNodes(editor: Editor, nodes: readonly SceneNode[]): NodeId 
   const box = unionRects(nodes.map((node, i) => transformRect(inParent[i]!, editor.geometry.localBounds(node))));
   if (!box) return null;
   const anchor = [...nodes].reverse().find((n) => n.parent === parentId) ?? bottom;
+  // 每个对象在新画框坐标里的外框
+  const inner = nodes.map((node, i) => {
+    const b = transformRect(inParent[i]!, editor.geometry.localBounds(node));
+    return { x: b.x - box.x, y: b.y - box.y, w: b.w, h: b.h };
+  });
+  const layout = autoLayout ? inferLayout([box.w, box.h], inner) : undefined;
   const frame = createNode('frame', {
     parent: parentId,
     index: anchor.index,
@@ -100,13 +109,20 @@ export function frameNodes(editor: Editor, nodes: readonly SceneNode[]): NodeId 
     stroke: null,
     cornerRadius: 0,
     clip: false,
+    ...(layout ? { layout } : {}),
   });
+  // 自动布局按位置排先后（从左到右或从上到下），不然按原来的层序
+  const order = nodes.map((_, i) => i);
+  if (layout) {
+    const start = (i: number) => (layout.direction === 'horizontal' ? inner[i]!.x : inner[i]!.y);
+    order.sort((a, b) => start(a) - start(b));
+  }
   const indices = keysBetween(null, null, nodes.length);
-  store.transact('frame', (tx) => {
+  store.transact(autoLayout ? 'auto layout' : 'frame', (tx) => {
     tx.create(frame);
-    nodes.forEach((node, i) => {
-      const t = inParent[i]!;
-      tx.update(node.id, {
+    order.forEach((n, i) => {
+      const t = inParent[n]!;
+      tx.update(nodes[n]!.id, {
         parent: frame.id,
         index: indices[i]!,
         transform: [t[0], t[1], t[2], t[3], t[4] - box.x, t[5] - box.y],
@@ -124,6 +140,57 @@ export const wrapInFrame: Command = {
   run(editor) {
     const id = frameNodes(editor, groupMembers(editor));
     if (id) editor.select([id]);
+  },
+};
+
+/** 选中的是一个或几个还没有自动布局的画框 */
+function plainFrames(editor: Editor): FrameNode[] | null {
+  const nodes = editor.selectedNodes();
+  const frames = nodes.filter((n): n is FrameNode => n.type === 'frame' && !n.layout && !isInstanceCopy(n));
+  return frames.length > 0 && frames.length === nodes.length ? frames : null;
+}
+
+/**
+ * 加自动布局（⇧A）：选中的是画框时直接加（按里面的东西现在的摆放猜方向、间距、内边距，大小保持固定，
+ * 里面的东西按位置重新排好层序）；选中的是别的对象时先用画框包起来再加，画框包住内容。整个是一步撤销
+ */
+export const addAutoLayout: Command = {
+  id: 'frame.autoLayout',
+  enabled: (editor) =>
+    plainFrames(editor) !== null || groupMembers(editor).some((n) => n.type !== 'frame' || !!n.layout),
+  run(editor) {
+    const { store } = editor;
+    const frames = plainFrames(editor);
+    if (!frames) {
+      const id = frameNodes(editor, groupMembers(editor), true);
+      if (id) editor.select([id]);
+      return;
+    }
+    store.transact('auto layout', (tx) => {
+      for (const frame of frames) {
+        const kids = store.children(frame.id).filter((c) => c.visible);
+        const boxes = kids.map((c) => transformRect(c.transform, editor.geometry.localBounds(c)));
+        const layout = { ...inferLayout(frame.size, boxes), sizing: { h: 'fixed', v: 'fixed' } as const };
+        const start = (i: number) => (layout.direction === 'horizontal' ? boxes[i]!.x : boxes[i]!.y);
+        const order = kids.map((_, i) => i).sort((a, b) => start(a) - start(b));
+        const indices = keysBetween(null, null, kids.length);
+        order.forEach((k, i) => tx.update(kids[k]!.id, { index: indices[i]! }));
+        tx.update(frame.id, { layout });
+      }
+    });
+    store.sealHistory();
+  },
+};
+
+/** 去掉自动布局（⌥⇧A）：里面的东西留在现在的位置 */
+export const removeAutoLayout: Command = {
+  id: 'frame.removeAutoLayout',
+  enabled: (editor) => editor.selectedNodes().some((n) => n.type === 'frame' && !!n.layout && !isInstanceCopy(n)),
+  run(editor) {
+    editor.updateSelection('remove auto layout', (node) =>
+      node.type === 'frame' && node.layout && !isInstanceCopy(node) ? { layout: undefined } : null,
+    );
+    editor.store.sealHistory();
   },
 };
 

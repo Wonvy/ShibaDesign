@@ -3040,3 +3040,79 @@ button.template-card:hover,
   line-height: 1.5;
   color: var(--text-dim);
 }
+
+/* ───────── 自动布局 ───────── */
+
+.frame-panel,
+.layout-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.layout-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-row > .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.layout-row > .corner-grid {
+  flex: 1;
+}
+
+.layout-sizing .select {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+}
+
+.layout-align {
+  display: grid;
+  grid-template-columns: repeat(3, 16px);
+  grid-template-rows: repeat(3, 16px);
+  gap: 2px;
+  padding: 4px;
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+
+.layout-cell {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.layout-cell::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  opacity: 0.5;
+}
+
+.layout-cell:hover::after {
+  opacity: 1;
+}
+
+.layout-cell.is-on::after {
+  inset: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 1;
+}
+
+.layout-toggle {
+  justify-content: space-between;
+}

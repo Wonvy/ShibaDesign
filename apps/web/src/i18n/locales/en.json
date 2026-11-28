@@ -712,13 +712,43 @@
     "layout": {
       "heading": "Choose a layout",
       "blank": "Blank",
-      "title": "Title",
+      "title": "Auto layout",
       "titleContent": "Title and content",
       "twoColumns": "Two columns",
       "imageText": "Image and text",
       "section": "Section",
       "titleOnly": "Title only",
-      "quote": "Quote"
+      "quote": "Quote",
+      "direction": "Direction",
+      "horizontal": "Horizontal",
+      "vertical": "Vertical",
+      "gap": "Gap",
+      "padding": "Padding",
+      "paddingH": "Horizontal",
+      "paddingV": "Vertical",
+      "paddingSeparate": "Separate sides",
+      "paddingTop": "Top",
+      "paddingRight": "Right",
+      "paddingBottom": "Bottom",
+      "paddingLeft": "Left",
+      "align": "Alignment",
+      "spaceBetween": "Space between",
+      "width": "W",
+      "height": "H",
+      "fixed": "Fixed",
+      "hug": "Hug",
+      "fill": "Fill",
+      "ignore": "Ignore auto layout",
+      "alignCell": "Align {{pos}}",
+      "pos_start_start": "top left",
+      "pos_center_start": "top center",
+      "pos_end_start": "top right",
+      "pos_start_center": "middle left",
+      "pos_center_center": "center",
+      "pos_end_center": "middle right",
+      "pos_start_end": "bottom left",
+      "pos_center_end": "bottom center",
+      "pos_end_end": "bottom right"
     },
     "layoutText": {
       "title": "Title",
@@ -895,7 +925,9 @@
       "lockHint": "Double-click to keep it on"
     },
     "frame": {
-      "wrap": "Wrap in frame"
+      "wrap": "Wrap in frame",
+      "autoLayout": "Add auto layout",
+      "removeAutoLayout": "Remove auto layout"
     },
     "effects": {
       "dropShadow": "Drop shadow",

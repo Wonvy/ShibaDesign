@@ -18,6 +18,7 @@ import {
   type SceneNode,
   type Transaction,
 } from '@shiba/core';
+import { flowChildren, layoutInsertion } from './auto-layout';
 import type { Editor } from './editor';
 
 /** 工具和命令共用的文档操作。都在调用方的事务里执行 */
@@ -68,16 +69,35 @@ export function reparentByPosition(editor: Editor, tx: Transaction, ids: Iterabl
     // 否则在组里拖一下成员，它就被拽出组、蒙版也遮不住它了
     const parent = tx.get(node.parent);
     if (parent?.type !== 'artboard' && parent?.type !== 'page' && parent?.type !== 'frame') continue;
-    const target = editor.containerAt(rectCenter(editor.geometry.worldBounds(node)), moving);
-    if (target.id === node.parent || breaksComponentRules(store, [id], target.id)) continue;
+    const center = rectCenter(editor.geometry.worldBounds(node));
+    const target = editor.containerAt(center, moving);
+    // 放进自动布局画框：按位置排在两个子对象之间（在同一个画框里拖就是调整顺序）
+    const slot = !node.layoutIgnore ? layoutInsertion(editor, target.id, center, moving) : null;
+    if (target.id === node.parent) {
+      if (slot && !sameSlot(store, node, slot, moving)) tx.update(id, { index: slot.index });
+      continue;
+    }
+    if (breaksComponentRules(store, [id], target.id)) continue;
     const inverse = invert(worldTransform(store, target.id));
     if (!inverse) continue;
     tx.update(id, {
       parent: target.id,
-      index: store.indexOnTop(target.id),
+      index: slot?.index ?? store.indexOnTop(target.id),
       transform: multiply(inverse, worldTransform(store, id)),
     });
   }
+}
+
+/** 拖完还在原来那两个子对象之间：顺序没变，不用改索引 */
+function sameSlot(
+  store: DocStore,
+  node: SceneNode,
+  slot: { before: NodeId | null; after: NodeId | null },
+  moving: ReadonlySet<NodeId>,
+): boolean {
+  const siblings = flowChildren(store, node.parent!).filter((c) => c.id === node.id || !moving.has(c.id));
+  const i = siblings.findIndex((c) => c.id === node.id);
+  return (siblings[i - 1]?.id ?? null) === slot.before && (siblings[i + 1]?.id ?? null) === slot.after;
 }
 
 /** 世界坐标里的一个矩形，换算成某个容器本地坐标下的左上角 */

@@ -73,6 +73,8 @@ export const COMMAND_LABELS: Record<string, string> = {
   'group.create': 'group.create',
   'group.release': 'group.release',
   'frame.wrap': 'frame.wrap',
+  'frame.autoLayout': 'frame.autoLayout',
+  'frame.removeAutoLayout': 'frame.removeAutoLayout',
   'mask.toggle': 'menu.maskToggle',
   'mask.create': 'mask.create',
   'mask.release': 'mask.release',

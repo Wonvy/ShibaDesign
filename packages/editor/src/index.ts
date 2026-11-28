@@ -18,6 +18,7 @@ export * from './keymap';
 export * from './commands';
 export * from './tools';
 export * from './resize';
+export { flowChildren, layoutFrame, layoutFrames, relayoutAll } from './auto-layout';
 export * from './ops';
 export * from './fill-handles';
 export * from './motion-handles';

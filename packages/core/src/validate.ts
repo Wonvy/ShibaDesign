@@ -1,3 +1,4 @@
+import { isAutoLayout, isItemSizing } from './auto-layout';
 import { isConstraints } from './constraints';
 import { isEffectList } from './effects';
 import { CORNER_STYLES } from './corners';
@@ -171,6 +172,8 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
   if (node.overrides !== undefined && !isStringList(node.overrides, 100)) fail('overrides');
   if (node.constraints !== undefined && !isConstraints(node.constraints)) fail('constraints');
   if (node.effects !== undefined && !isEffectList(node.effects)) fail('effects');
+  if (node.layoutSizing !== undefined && !isItemSizing(node.layoutSizing)) fail('layoutSizing');
+  if (node.layoutIgnore !== undefined && typeof node.layoutIgnore !== 'boolean') fail('layoutIgnore');
 
   if ('fill' in node && node.fill !== null && !isFill(node.fill)) fail('fill');
   if ('stroke' in node && node.stroke !== null) {
@@ -216,6 +219,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       }
       if (!isCornerLook(node)) fail('cornerStyle');
       if (typeof node.clip !== 'boolean') fail('clip');
+      if (node.layout !== undefined && !isAutoLayout(node.layout)) fail('layout');
       break;
     case 'polygon':
       if (!isFiniteNumber(node.sides) || node.sides < 3 || node.sides > 60) fail('sides');

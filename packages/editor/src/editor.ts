@@ -49,6 +49,7 @@ import {
 import type { PdfExportContext, PdfExportOptions } from '@shiba/renderer/pdf';
 import type { SvgExportOptions, SvgLayers } from '@shiba/renderer/svg';
 import type { TextOutlinePart } from '@shiba/renderer/text-outline';
+import { autoLayoutNormalizer, relayoutAll } from './auto-layout';
 import { replaceTextWithOutlines } from './commands/path';
 import { CommandRegistry } from './commands/command';
 import { InputController } from './input';
@@ -120,6 +121,8 @@ export class Editor {
   private hoverId: NodeId | null = null;
   /** 标尺和辅助线的操作，见 guides.ts */
   readonly guides: GuideController = new GuideController(this);
+  /** 暂时不排的自动布局画框：在里面拖子对象调整顺序时，拖动中不让整理器把它拽回去 */
+  readonly layoutPaused = new Set<NodeId>();
   /** 界面层设置：双击辅助线时调用（弹出输入位置的对话框） */
   guideEditHandler: ((guide: { container: NodeId; id: string }) => void) | null = null;
   private snapFeedbackValue: { lines: readonly GuideLine[]; spacing: readonly SpacingMark[] } | null = null;
@@ -158,6 +161,7 @@ export class Editor {
     this.nodeTypes.register(createTextNodeType(this.textLayouts, this.textAppearances));
     this.geometry = new GeometryCache(this.ck, this.store, this.nodeTypes);
     this.fonts.onChange(() => this.onFontsChange());
+    this.store.addNormalizer(autoLayoutNormalizer(this));
     this.images = new ImageCache(this.ck, this.assets);
     this.assets.subscribe(() => this.onAssetsChange());
     this.commands = new CommandRegistry(this);
@@ -183,6 +187,8 @@ export class Editor {
   private onFontsChange(): void {
     this.textLayouts.clear();
     this.geometry.invalidate((node) => node.type === 'text');
+    // 文字的大小变了：自动布局重新排，不进撤销历史
+    relayoutAll(this);
     this.onResourcesReady();
   }
 

@@ -21,6 +21,7 @@ import {
   type SceneNode,
   type TextNode,
 } from '@shiba/core';
+import { hasAutoLayout, layoutFrames, layoutInsertion } from '../auto-layout';
 import { pruneAnimations, setAnimationPath } from '../commands/animation';
 import { cloneNodes } from '../commands/edit';
 import {
@@ -69,6 +70,8 @@ type Drag =
       /** 吸附用：开始时选区的外框和候选 */
       bounds: Rect | null;
       targets: SnapTargets | null;
+      /** 拖的是自动布局画框里的东西：这些画框拖动中暂停排列，松手后按位置调整顺序再排 */
+      paused: NodeId[];
     }
   // base 是框选开始时保留的选区（按着 Shift 时），before 是按下鼠标之前的选区，取消时换回去；
   // deep：按着 ⌘ 框选，选的是编组里面的成员
@@ -433,6 +436,16 @@ export function createSelectTool(): Tool {
       if (drag.kind === 'pending') {
         if (Math.hypot(e.x - drag.x, e.y - drag.y) < DRAG_THRESHOLD) return;
         const ids = topLevelOnly(store, editor.selection);
+        const paused = [
+          ...new Set(
+            ids.flatMap((id) => {
+              const node = store.get(id);
+              const parent = node?.parent ? store.get(node.parent) : undefined;
+              return node && !node.layoutIgnore && hasAutoLayout(parent) ? [parent!.id] : [];
+            }),
+          ),
+        ];
+        paused.forEach((id) => editor.layoutPaused.add(id));
         drag = {
           kind: 'move',
           world: drag.world,
@@ -443,6 +456,7 @@ export function createSelectTool(): Tool {
           copies: null,
           bounds: editor.selectionBounds(),
           targets: editor.snapTargets(ids),
+          paused,
         };
       }
 
@@ -601,6 +615,7 @@ export function createSelectTool(): Tool {
       drag = null;
       editor.setSnapFeedback(null);
       if (!cancelled) return;
+      if (cancelled.kind === 'move') cancelled.paused.forEach((id) => editor.layoutPaused.delete(id));
       if (cancelled.kind === 'marquee') editor.select(cancelled.before);
       else if ('key' in cancelled) editor.store.abandon(cancelled.key);
       if (cancelled.kind === 'move' && cancelled.copies) editor.select([...cancelled.originals.keys()]);
@@ -622,10 +637,13 @@ export function createSelectTool(): Tool {
       }
       if (finished.kind === 'move') {
         const moved = finished.copies ? [...finished.copies.values()] : [...finished.originals.keys()];
+        finished.paused.forEach((id) => editor.layoutPaused.delete(id));
         editor.store.transact(
           'move',
           (tx) => {
             reparentByPosition(editor, tx, moved);
+            // 暂停过的自动布局画框按新的顺序排回去（东西拖出去了的也要把空位收起来）
+            layoutFrames(editor, tx, finished.paused);
             // 对象被拖到别的幻灯片上之后，它在原来那一页的动画就没有意义了
             pruneAnimations(tx, editor.store);
           },
@@ -680,6 +698,10 @@ export function createSelectTool(): Tool {
     },
 
     drawOverlay(ctx, editor) {
+      if (drag?.kind === 'move') {
+        drawInsertionBar(ctx, editor, drag.copies ? [...drag.copies.values()] : [...drag.originals.keys()]);
+        return;
+      }
       if (drag?.kind === 'corner' && drag.moved) {
         drawPill(ctx, `R ${formatNumber(drag.radius)}`, drag.at.x + 22, drag.at.y + 18, editor.theme.accent);
         return;
@@ -705,6 +727,31 @@ export function createSelectTool(): Tool {
       ctx.restore();
     },
   };
+}
+
+/** 拖进自动布局画框时，在要插进去的空隙里画一条插入条 */
+function drawInsertionBar(ctx: CanvasRenderingContext2D, editor: Editor, ids: readonly NodeId[]): void {
+  const bounds = editor.selectionBounds();
+  if (!bounds || ids.length === 0) return;
+  const moving = new Set(ids);
+  const center = { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h / 2 };
+  const target = editor.containerAt(center, moving);
+  const slot = layoutInsertion(editor, target.id, center, moving);
+  if (!slot) return;
+  const world = worldTransform(editor.store, target.id);
+  const [a, b] = slot.bar.map((p) => {
+    const [x, y] = applyToPoint(world, p.x, p.y);
+    return editor.worldToScreen(x, y);
+  });
+  ctx.save();
+  ctx.strokeStyle = editor.theme.accent;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(a!.x, a!.y);
+  ctx.lineTo(b!.x, b!.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /** 缩放时吸附拖动的那条边：拖右边的控制柄只吸 x，拖角吸两个方向；按着 ⌘ 时不吸 */

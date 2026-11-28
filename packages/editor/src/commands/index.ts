@@ -12,7 +12,7 @@ import { alignSelection, distributeSelection, orderSelection } from './arrange';
 import { addArtboard, deleteArtboard, duplicateActiveArtboard } from './artboard';
 import { createBoolean, releaseBoolean, setBooleanOp } from './boolean';
 import { createComponent, detachInstances, goToMainComponent, placeInstance, resetInstances } from './component';
-import { createGroup, releaseGroup, wrapInFrame } from './group';
+import { addAutoLayout, createGroup, releaseGroup, removeAutoLayout, wrapInFrame } from './group';
 import { placeImage, setImageFill } from './image';
 import { createMask, releaseMask, setMaskMode, toggleMask } from './mask';
 import {
@@ -111,6 +111,8 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(createGroup)
     .register(releaseGroup)
     .register(wrapInFrame)
+    .register(addAutoLayout)
+    .register(removeAutoLayout)
     .register(createMask)
     .register(releaseMask)
     .register(setMaskMode)

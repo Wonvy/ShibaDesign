@@ -25,3 +25,4 @@ export * from './polygon';
 export * from './arrows';
 export * from './constraints';
 export * from './effects';
+export * from './auto-layout';

@@ -1,3 +1,4 @@
+import type { AutoLayout, ItemLayoutSizing } from './auto-layout';
 import type { Constraints } from './constraints';
 import type { CornerStyle } from './corners';
 import type { Effect } from './effects';
@@ -226,6 +227,10 @@ export interface BaseNode {
   constraints?: Constraints;
   /** 投影、内阴影、模糊，按列表的顺序叠。省略表示没有。画板和页面不画。见 effects.ts */
   effects?: readonly Effect[];
+  /** 在自动布局的画框里时：宽高固定还是填满剩下的空间。省略是都固定。见 auto-layout.ts */
+  layoutSizing?: ItemLayoutSizing;
+  /** 在自动布局的画框里时不参与排列，照常按自己的位置放。省略表示参与 */
+  layoutIgnore?: boolean;
 }
 
 export interface ShapeStyle {
@@ -307,6 +312,8 @@ export interface FrameNode extends BaseNode, ShapeStyle {
   cornerSmoothing?: number;
   /** 裁掉超出画框的内容 */
   clip: boolean;
+  /** 自动布局：里面的东西按方向自动排列。省略表示没有。见 auto-layout.ts */
+  layout?: AutoLayout;
 }
 
 /** 多边形（sides 条边）或星形（有 innerRatio 时，sides 个角）。画在外框里，见 polygon.ts */

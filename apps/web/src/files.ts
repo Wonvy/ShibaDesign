@@ -90,7 +90,7 @@ export function useFileState(): FileState {
 /** 文档一有修改就标记为"未保存" */
 export function trackChanges(store: DocStore): void {
   store.subscribe((change) => {
-    if (change.source !== 'load' && !state.dirty) setState({ dirty: true });
+    if (change.source !== 'load' && change.source !== 'silent' && !state.dirty) setState({ dirty: true });
   });
 }
 

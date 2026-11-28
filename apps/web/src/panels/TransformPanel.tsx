@@ -5,6 +5,7 @@ import { artboardOf, rotationOf, topLevelOnly } from '@shiba/core';
 import { captureOriginals, resizeInWorld, resizeLocal, translateNode } from '@shiba/editor';
 import { IconButton, NumberField } from '../ui/controls';
 import { ConstraintFields, constrainable } from './ConstraintFields';
+import { ItemLayoutFields, inAutoLayout } from './LayoutFields';
 import { CornerFields, roundable } from './CornerFields';
 import type { PanelProps } from './registry';
 
@@ -115,7 +116,11 @@ export function TransformPanel({ editor, nodes }: PanelProps): ReactNode {
         )}
       </div>
       {corners && <CornerFields editor={editor} nodes={corners} />}
-      {constrainable(editor, nodes) && <ConstraintFields editor={editor} nodes={nodes} />}
+      {inAutoLayout(editor, nodes) && <ItemLayoutFields editor={editor} nodes={nodes} />}
+      {/* 自动布局里的东西不按约束放（不参与排列的除外） */}
+      {constrainable(editor, nodes) && (!inAutoLayout(editor, nodes) || nodes.every((n) => n.layoutIgnore)) && (
+        <ConstraintFields editor={editor} nodes={nodes} />
+      )}
       {frame.rotatable && (
         <div className="button-row transform-actions">
           <IconButton title={t('transform.rotate90')} onClick={() => editor.commands.run('arrange.rotate', 90)}>

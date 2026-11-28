@@ -13,12 +13,18 @@ export interface Patch {
 
 export interface StoreChange {
   patches: readonly Patch[];
-  source: 'transact' | 'undo' | 'redo' | 'load' | 'abandon';
+  /** silent 是不进撤销历史的修改（见 TransactOptions.history），不算用户改了文档 */
+  source: 'transact' | 'undo' | 'redo' | 'load' | 'abandon' | 'silent';
 }
 
 export interface TransactOptions {
   /** 相同 mergeKey 的连续事务合并成一步撤销，用于拖动、滑块等连续操作 */
   mergeKey?: string;
+  /**
+   * false：不进撤销历史，也不打断正在合并的连续操作。用于不是用户做的、派生出来的修改，
+   * 比如字体晚到以后文字变宽，自动布局重新排一次
+   */
+  history?: boolean;
 }
 
 interface HistoryEntry {
@@ -217,6 +223,10 @@ export class DocStore {
     }
     const patches = [...tx.patches.values()].filter((p) => p.before !== p.after);
     if (patches.length === 0) return result;
+    if (options.history === false) {
+      this.emit({ patches, source: 'silent' });
+      return result;
+    }
 
     const mergeKey = options.mergeKey ?? null;
     const top = this.undoStack.at(-1);

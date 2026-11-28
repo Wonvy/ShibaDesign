@@ -146,6 +146,8 @@ function structureItems(ctx: MenuContext): MenuEntry[] {
     cmd('group.create'),
     cmd('group.release'),
     cmd('frame.wrap'),
+    cmd('frame.autoLayout'),
+    cmd('frame.removeAutoLayout'),
     cmd('mask.toggle', undefined, { labelKey: isMask ? 'mask.release' : 'mask.create' }),
     ...(shapes >= 1
       ? [

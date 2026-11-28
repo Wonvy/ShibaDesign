@@ -712,13 +712,43 @@
     "layout": {
       "heading": "选择版式",
       "blank": "空白",
-      "title": "标题页",
+      "title": "自动布局",
       "titleContent": "标题和正文",
       "twoColumns": "两栏",
       "imageText": "图文",
       "section": "节标题",
       "titleOnly": "只有标题",
-      "quote": "引用"
+      "quote": "引用",
+      "direction": "方向",
+      "horizontal": "横排",
+      "vertical": "竖排",
+      "gap": "间距",
+      "padding": "内边距",
+      "paddingH": "左右",
+      "paddingV": "上下",
+      "paddingSeparate": "四边分开",
+      "paddingTop": "上",
+      "paddingRight": "右",
+      "paddingBottom": "下",
+      "paddingLeft": "左",
+      "align": "对齐",
+      "spaceBetween": "两端对齐",
+      "width": "宽",
+      "height": "高",
+      "fixed": "固定",
+      "hug": "包住内容",
+      "fill": "填满",
+      "ignore": "不参与自动布局",
+      "alignCell": "对齐到{{pos}}",
+      "pos_start_start": "左上",
+      "pos_center_start": "上中",
+      "pos_end_start": "右上",
+      "pos_start_center": "左中",
+      "pos_center_center": "正中",
+      "pos_end_center": "右中",
+      "pos_start_end": "左下",
+      "pos_center_end": "下中",
+      "pos_end_end": "右下"
     },
     "layoutText": {
       "title": "标题",
@@ -895,7 +925,9 @@
       "lockHint": "双击锁住，可以连续画"
     },
     "frame": {
-      "wrap": "用画框包起来"
+      "wrap": "用画框包起来",
+      "autoLayout": "添加自动布局",
+      "removeAutoLayout": "去掉自动布局"
     },
     "effects": {
       "dropShadow": "投影",
