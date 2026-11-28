@@ -65,7 +65,8 @@
       "effects": "Effects",
       "layoutGrids": "Layout grids",
       "inspect": "Inspect",
-      "export": "Export"
+      "export": "Export",
+      "prototype": "Prototype"
     },
     "slide": {
       "add": "New slide",
@@ -993,6 +994,17 @@
       "suffixHint": "Leave empty to add one from the scale, like @2x",
       "run": "Export",
       "pdfOnlyBoards": "PDF works for artboards only"
+    },
+    "prototype": {
+      "onClick": "On click",
+      "none": "None",
+      "back": "Back to previous",
+      "goTo": "Go to",
+      "transition": "Transition",
+      "targetTransition": "Use the target slide's transition",
+      "duration": "Duration",
+      "direction": "Direction",
+      "hint": "Click this object while presenting to jump there; it also works in exported HTML."
     }
   }
 }

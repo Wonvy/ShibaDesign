@@ -65,7 +65,8 @@
       "effects": "效果",
       "layoutGrids": "版面网格",
       "inspect": "检查",
-      "export": "导出"
+      "export": "导出",
+      "prototype": "原型"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -993,6 +994,17 @@
       "suffixHint": "空着时按倍率自动加，比如 @2x",
       "run": "导出",
       "pdfOnlyBoards": "PDF 只能导出画板"
+    },
+    "prototype": {
+      "onClick": "点击时",
+      "none": "无",
+      "back": "回到上一页",
+      "goTo": "跳到",
+      "transition": "过渡",
+      "targetTransition": "用目标页的切换效果",
+      "duration": "时长",
+      "direction": "方向",
+      "hint": "演示时点这个对象跳过去，导出的网页里也能点。"
     }
   }
 }

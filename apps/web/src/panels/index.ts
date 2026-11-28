@@ -11,6 +11,7 @@ import { ImagePanel } from './ImagePanel';
 import { LayoutGridPanel } from './LayoutGridPanel';
 import { PathPanel } from './PathPanel';
 import { PolygonPanel } from './PolygonPanel';
+import { PrototypePanel } from './PrototypePanel';
 import { TextPanel } from './TextPanel';
 import { TransformPanel } from './TransformPanel';
 import { registerPanel } from './registry';
@@ -100,6 +101,13 @@ export function registerBuiltinPanels(): void {
     component: ImagePanel,
   });
   registerPanel({ id: 'export', titleKey: 'panel.export', order: 65, component: ExportPanel });
+  registerPanel({
+    id: 'prototype',
+    titleKey: 'panel.prototype',
+    order: 68,
+    when: ({ nodes }) => nodes.every((n) => n.type !== 'artboard'),
+    component: PrototypePanel,
+  });
   registerPanel({
     id: 'animation',
     titleKey: 'panel.animation',

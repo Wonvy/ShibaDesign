@@ -3219,3 +3219,18 @@ button.template-card:hover,
   align-items: center;
   gap: 4px;
 }
+
+/* ───────── 原型 ───────── */
+
+.prototype-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prototype-field .select {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+}

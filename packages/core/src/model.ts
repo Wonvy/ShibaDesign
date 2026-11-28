@@ -3,6 +3,7 @@ import type { Constraints } from './constraints';
 import type { CornerStyle } from './corners';
 import type { Effect } from './effects';
 import type { ExportSetting } from './export-settings';
+import type { Interaction } from './interactions';
 import type { LayoutGrid } from './layout-grid';
 import type { ArrowHead } from './stroke';
 /**
@@ -235,6 +236,8 @@ export interface BaseNode {
   layoutIgnore?: boolean;
   /** 导出设置（倍率、格式、后缀），"导出全部"时按它导出。省略表示没有。见 export-settings.ts */
   exports?: readonly ExportSetting[];
+  /** 原型的交互：演示时点它跳到别的页。省略表示没有。见 interactions.ts */
+  interactions?: readonly Interaction[];
 }
 
 export interface ShapeStyle {

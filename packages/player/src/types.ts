@@ -52,6 +52,19 @@ export interface PlayerTransition {
   direction?: 'left' | 'right' | 'top' | 'bottom';
 }
 
+/** 原型的热区：点它跳到另一页 */
+export interface PlayerLink {
+  /** 热区在幻灯片坐标里的外框 */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 跳到第几页（从 0 数）；-1 表示回到上一个看过的页 */
+  target: number;
+  /** 过渡效果；省略时用目标页自己的切换效果 */
+  transition?: PlayerTransition;
+}
+
 export interface PlayerSlide {
   width: number;
   height: number;
@@ -59,6 +72,8 @@ export interface PlayerSlide {
   background: string;
   /** 从下到上 */
   layers: PlayerLayer[];
+  /** 原型的热区，从下到上。省略表示没有 */
+  links?: PlayerLink[];
   /** 第 0 步进入页面后自动播放，之后每前进一次播放一步 */
   steps: PlayerAnimation[][];
   /** 进入这一页时的切换效果 */

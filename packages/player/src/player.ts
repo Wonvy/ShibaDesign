@@ -5,6 +5,7 @@ import type {
   PlayerOptions,
   PlayerSlide,
   PlayerState,
+  PlayerTransition,
   PresentationData,
 } from './types';
 
@@ -70,6 +71,8 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
 
   let slideIndex = -1;
   let stepIndex = 0;
+  /** 原型里点热区跳过的页，"返回"时回到最近的一个 */
+  const visited: number[] = [];
   let current: SlideView | null = null;
   let running: Running[] = [];
   let transition: { finish(): void } | null = null;
@@ -196,6 +199,13 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
       el.appendChild(mover);
       layers.set(layerData.id, { data: layerData, mover, layer, fx, image });
     }
+    // 原型的热区：透明的方块盖在图层上面，鼠标移上去变成手形，点它跳到别的页（不带 data-shiba，录视频时不读它）
+    (slide.links || []).forEach((link, index) => {
+      const hot = doc.createElement('div');
+      hot.style.cssText = `position:absolute;left:${link.x}px;top:${link.y}px;width:${link.width}px;height:${link.height}px;cursor:pointer;`;
+      hot.dataset.link = String(index);
+      el.appendChild(hot);
+    });
     return { data: slide, frame, el, layers };
   }
 
@@ -283,8 +293,7 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
 
   // ───────────── 页面切换 ─────────────
 
-  function runTransition(previous: SlideView, next: SlideView, done: () => void): void {
-    const spec = next.data.transition;
+  function runTransition(previous: SlideView, next: SlideView, spec: PlayerTransition, done: () => void): void {
     const duration = Math.max(0, spec.duration);
     const active: Animation[] = [];
     const cleanup: (() => void)[] = [];
@@ -386,7 +395,8 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
     else Promise.all(active.map((a) => a.finished)).then(finish, () => undefined);
   }
 
-  function showSlide(index: number, animated: boolean): void {
+  /** override：这次用的过渡效果（原型的热区可以指定），省略时用目标页自己的 */
+  function showSlide(index: number, animated: boolean, override?: PlayerTransition): void {
     if (destroyed || index < 0 || index >= data.slides.length) return;
     if (transition) transition.finish();
     finishStep();
@@ -406,8 +416,9 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
       playStep(next, 0);
       notify();
     };
-    if (previous && animated && next.data.transition.effect !== 'none') {
-      runTransition(previous, next, enter);
+    const spec = override || next.data.transition;
+    if (previous && animated && spec.effect !== 'none') {
+      runTransition(previous, next, spec, enter);
       notify();
     } else {
       if (previous) previous.frame.remove();
@@ -453,11 +464,28 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
     event.stopPropagation();
   }
 
-  function onClick(): void {
+  function onClick(event: MouseEvent): void {
     // 刚拖动鼠标选中了文字：这一下是选字，不是翻页
     const selection = doc.getSelection();
     if (selection && !selection.isCollapsed && selection.anchorNode && stage.contains(selection.anchorNode)) return;
     stage.focus();
+    // 点中了原型的热区：跳到它指的页，或者回到上一个看过的页
+    const hot = event.target instanceof Element ? event.target.closest('[data-link]') : null;
+    const link =
+      hot && current && current.el.contains(hot)
+        ? (current.data.links || [])[Number(hot.getAttribute('data-link'))]
+        : null;
+    if (link) {
+      if (transition) transition.finish();
+      if (link.target < 0) {
+        const back = visited.pop();
+        if (back !== undefined) showSlide(back, true, link.transition);
+      } else {
+        visited.push(slideIndex);
+        showSlide(link.target, true, link.transition);
+      }
+      return;
+    }
     next();
   }
 

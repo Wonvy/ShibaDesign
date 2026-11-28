@@ -1,4 +1,5 @@
 import {
+  clickInteraction,
   multiply,
   scheduleAnimations,
   slides,
@@ -8,9 +9,10 @@ import {
   translation,
   type NodeId,
   type Rect,
+  type SceneNode,
 } from '@shiba/core';
 import { playableSlides, type Editor } from '@shiba/editor';
-import type { PlayerLayer, PlayerSlide, PresentationData } from '@shiba/player';
+import type { PlayerLayer, PlayerLink, PlayerSlide, PresentationData } from '@shiba/player';
 
 /**
  * 把文档里的幻灯片"编译"成播放器能直接播的数据：
@@ -50,6 +52,39 @@ function toDataUrl(bytes: Uint8Array): string {
 /**
  * @param mode preview：图片用临时地址，快，用完要 dispose；export：图片内嵌成 data: 地址，可以写进文件
  */
+/**
+ * 一页上的原型热区：这一页里（含编组、画框里面）看得见的、设了点击交互的对象，按层叠顺序从下到上。
+ * 热区是对象在这一页上的外框；目标页隐藏了、被删了的跳过
+ */
+export function prototypeLinks(editor: Editor, slideId: NodeId, slideIndex: ReadonlyMap<NodeId, number>): PlayerLink[] {
+  const { store } = editor;
+  const slide = store.get(slideId);
+  if (!slide) return [];
+  const origin = editor.geometry.worldBounds(slide);
+  const links: PlayerLink[] = [];
+  const visit = (node: SceneNode): void => {
+    if (!node.visible) return;
+    const interaction = clickInteraction(node);
+    if (interaction) {
+      const target = interaction.action.type === 'back' ? -1 : (slideIndex.get(interaction.action.target) ?? null);
+      if (target !== null) {
+        const box = editor.geometry.worldBounds(node);
+        links.push({
+          x: box.x - origin.x,
+          y: box.y - origin.y,
+          width: box.w,
+          height: box.h,
+          target,
+          ...(interaction.transition ? { transition: interaction.transition } : {}),
+        });
+      }
+    }
+    store.children(node.id).forEach(visit);
+  };
+  store.children(slideId).forEach(visit);
+  return links;
+}
+
 export async function compilePresentation(
   editor: Editor,
   mode: 'preview' | 'export',
@@ -82,6 +117,8 @@ export async function compilePresentation(
 
   const compiled: PlayerSlide[] = [];
   const slideIds: NodeId[] = [];
+  // 原型的热区指向第几页：按实际播放的页数
+  const slideIndex = new Map(visibleSlides.map((slide, i) => [slide.id, i]));
   let fonts = '';
   try {
     for (const slide of visibleSlides) {
@@ -123,9 +160,11 @@ export async function compilePresentation(
       for (const layer of layers) layer.hidden = hidden.has(layer.id);
 
       slideIds.push(slide.id);
+      const links = prototypeLinks(editor, slide.id, slideIndex);
       compiled.push({
         width,
         height,
+        ...(links.length > 0 ? { links } : {}),
         background: !slide.fill
           ? 'transparent'
           : slide.fill.type === 'gradient'

@@ -20,6 +20,7 @@ import { drawMotionPaths } from './motion-handles';
 import {
   drawGuides,
   drawLayoutGrids,
+  drawPrototypeLinks,
   drawMeasure,
   drawPill,
   drawPixelGrid,
@@ -111,6 +112,7 @@ export class Overlay {
     this.drawArtboardLabels();
     this.drawHover();
     this.drawSelection();
+    drawPrototypeLinks(ctx, editor);
     // 选中对象的动作路径画在选区框上面，见 motion-handles.ts
     drawMotionPaths(ctx, editor);
     drawSnapFeedback(ctx, editor);

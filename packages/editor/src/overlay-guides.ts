@@ -1,4 +1,4 @@
-import { stripeBands, toCssColor, type Rect } from '@shiba/core';
+import { clickInteraction, stripeBands, toCssColor, type Rect } from '@shiba/core';
 import type { Editor } from './editor';
 import { RULER_SIZE, rulerStep } from './guides';
 import { measureBetween, type SpacingMark } from './snap';
@@ -112,6 +112,43 @@ export function drawLayoutGrids(ctx: CanvasRenderingContext2D, editor: Editor): 
         else ctx.fillRect(0, band.start, w, band.size);
       }
     }
+    ctx.restore();
+  }
+}
+
+/**
+ * 原型的连线：选中的对象点击时跳到另一页、而那一页在画布上看得见时，从对象右边画一条弯曲的箭头连到那一页的左边
+ */
+export function drawPrototypeLinks(ctx: CanvasRenderingContext2D, editor: Editor): void {
+  if (editor.viewMode !== 'canvas') return;
+  for (const node of editor.selectedNodes()) {
+    const interaction = clickInteraction(node);
+    if (interaction?.action.type !== 'navigate') continue;
+    const target = editor.store.get(interaction.action.target);
+    if (!target || !target.visible) continue;
+    const from = editor.geometry.worldBounds(node);
+    const to = editor.geometry.worldBounds(target);
+    const a = editor.worldToScreen(from.x + from.w, from.y + from.h / 2);
+    const b = editor.worldToScreen(to.x, to.y + Math.min(to.h / 2, 60 * (1 / editor.camera.zoom)));
+    const bend = Math.max(40, Math.abs(b.x - a.x) / 2);
+    ctx.save();
+    ctx.strokeStyle = editor.theme.accent;
+    ctx.fillStyle = editor.theme.accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.bezierCurveTo(a.x + bend, a.y, b.x - bend, b.y, b.x - 6, b.y);
+    ctx.stroke();
+    // 箭头
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - 9, b.y - 5);
+    ctx.lineTo(b.x - 9, b.y + 5);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
   }
 }
