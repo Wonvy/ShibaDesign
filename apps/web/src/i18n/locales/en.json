@@ -43,7 +43,8 @@
       "appearance": "Appearance",
       "text": "Text",
       "image": "Image adjustments",
-      "animation": "Animation"
+      "animation": "Animation",
+      "mask": "Mask"
     },
     "slide": {
       "add": "New slide",
@@ -125,7 +126,8 @@
       "boolean": "Boolean",
       "text": "Text",
       "image": "Image",
-      "group": "Group"
+      "group": "Group",
+      "maskGroup": "Mask group"
     },
     "inspector": {
       "empty": "Nothing selected",
@@ -344,6 +346,17 @@
       "stop": "Color stop",
       "addStop": "Click the bar to add a stop; drag a stop to move it",
       "removeStop": "Remove stop"
+    },
+    "mask": {
+      "create": "Create mask",
+      "createHint": "Select two or more objects; the topmost one masks the ones below it.",
+      "release": "Release mask",
+      "shape": "Shape",
+      "alpha": "Alpha",
+      "luminance": "Luminance",
+      "shapeHint": "Clips to the outline of the mask, ignoring its colors. Text and group masks use alpha instead.",
+      "alphaHint": "Shows content where the mask is opaque and hides it where the mask is transparent; partial transparency and gradients count.",
+      "luminanceHint": "Uses the brightness of the mask: white shows, black hides, gray is partly transparent."
     }
   }
 }

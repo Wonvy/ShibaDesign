@@ -17,6 +17,11 @@ export function displayName(node: SceneNode, t: (key: string) => string): string
       ?.trim();
     if (line) return line.length > TEXT_NAME_LENGTH ? `${line.slice(0, TEXT_NAME_LENGTH)}…` : line;
   }
-  const kind = 'fill' in node && node.fill?.type === 'image' ? 'image' : node.type;
+  const kind =
+    'fill' in node && node.fill?.type === 'image'
+      ? 'image'
+      : node.type === 'group' && node.mask
+        ? 'maskGroup'
+        : node.type;
   return `${t(`node.${kind}`)} ${node.seq}`;
 }

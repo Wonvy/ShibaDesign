@@ -325,12 +325,24 @@ export interface TextAppearance {
   baseline: number;
 }
 
+export const MASK_MODES = ['shape', 'alpha', 'luminance'] as const;
+/**
+ * 蒙版怎么遮：
+ * shape 按蒙版的轮廓裁剪（只看形状，不看颜色）；
+ * alpha 按蒙版画出来的不透明程度遮（半透明、渐变、文字都可以当蒙版）；
+ * luminance 按蒙版画出来的亮度遮，越亮越不透明
+ */
+export type MaskMode = (typeof MASK_MODES)[number];
+
 /**
  * 编组：把几个对象当成一个整体来选择、移动、旋转和缩放。
- * 组自己没有外观，也不裁剪子节点；给组设置不透明度或混合模式时，子节点先合成再整体应用。
+ * 组自己没有外观；给组设置不透明度或混合模式时，子节点先合成再整体应用。
+ * 设了 mask 就是蒙版组：组里最上面的对象当蒙版，按 mask 指定的方式遮住其余的对象，蒙版自己不画出来。
  */
 export interface GroupNode extends BaseNode {
   type: 'group';
+  /** 省略表示普通编组 */
+  mask?: MaskMode;
 }
 
 /** 节点类型表。其他模块可以通过声明合并扩展它 */

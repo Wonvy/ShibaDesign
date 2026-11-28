@@ -7,50 +7,57 @@ import {
   sortByZOrder,
   topLevelOnly,
   worldTransform,
+  type GroupNode,
   type NodeId,
   type SceneNode,
 } from '@shiba/core';
 import type { Editor } from '../editor';
 import type { Command } from './command';
 
-/** 可以编进组里的对象：除了画板和页面之外的一切 */
-function members(editor: Editor): SceneNode[] {
+/** 可以编进组里的对象：除了画板和页面之外的一切，从下到上排好 */
+export function groupMembers(editor: Editor): SceneNode[] {
   const ids = topLevelOnly(editor.store, editor.selection);
   return sortByZOrder(editor.store, ids).filter((n) => n.type !== 'artboard' && n.type !== 'page');
 }
 
 /**
- * 把选中的对象编成一组。对象在画布上的位置和样子都不变，
+ * 把一些对象编成一组，返回新组的 id。对象在画布上的位置和样子都不变，
  * 组放在最上面那个成员原来的层位，成员之间的上下顺序保持不变。
+ * @param extra 新组的其他属性（比如蒙版）
  */
+export function groupNodes(editor: Editor, nodes: readonly SceneNode[], extra: Partial<GroupNode> = {}): NodeId | null {
+  const { store } = editor;
+  const bottom = nodes[0];
+  if (!bottom?.parent) return null;
+  const parentId = bottom.parent;
+  const parentInverse = invert(worldTransform(store, parentId));
+  if (!parentInverse) return null;
+
+  const anchor = [...nodes].reverse().find((n) => n.parent === parentId) ?? bottom;
+  const group = createNode('group', { parent: parentId, index: anchor.index, seq: nextSeq(store, 'group'), ...extra });
+  const indices = keysBetween(null, null, nodes.length);
+
+  store.transact('group', (tx) => {
+    // 先算好每个成员相对新父节点的变换，再统一改父节点，避免中途读到半成品
+    const moves = nodes.map((node, i) => ({
+      id: node.id,
+      transform: multiply(parentInverse, worldTransform(store, node.id)),
+      index: indices[i]!,
+    }));
+    tx.create(group);
+    for (const move of moves) tx.update(move.id, { parent: group.id, index: move.index, transform: move.transform });
+  });
+  store.sealHistory();
+  return group.id;
+}
+
+/** 把选中的对象编成一组 */
 export const createGroup: Command = {
   id: 'group.create',
-  enabled: (editor) => members(editor).length >= 1,
+  enabled: (editor) => groupMembers(editor).length >= 1,
   run(editor) {
-    const { store } = editor;
-    const nodes = members(editor);
-    const bottom = nodes[0];
-    if (!bottom?.parent) return;
-    const parentId = bottom.parent;
-    const parentInverse = invert(worldTransform(store, parentId));
-    if (!parentInverse) return;
-
-    const anchor = [...nodes].reverse().find((n) => n.parent === parentId) ?? bottom;
-    const group = createNode('group', { parent: parentId, index: anchor.index, seq: nextSeq(store, 'group') });
-    const indices = keysBetween(null, null, nodes.length);
-
-    store.transact('group', (tx) => {
-      // 先算好每个成员相对新父节点的变换，再统一改父节点，避免中途读到半成品
-      const moves = nodes.map((node, i) => ({
-        id: node.id,
-        transform: multiply(parentInverse, worldTransform(store, node.id)),
-        index: indices[i]!,
-      }));
-      tx.create(group);
-      for (const move of moves) tx.update(move.id, { parent: group.id, index: move.index, transform: move.transform });
-    });
-    store.sealHistory();
-    editor.select([group.id]);
+    const id = groupNodes(editor, groupMembers(editor));
+    if (id) editor.select([id]);
   },
 };
 

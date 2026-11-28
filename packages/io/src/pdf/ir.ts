@@ -45,6 +45,11 @@ export interface PdfClip extends Box {
    * 有了这条路径就能把它还原成"一个填了图片的形状"。
    */
   shape?: { data: PathData; fillRule: 'nonzero' | 'evenodd' };
+  /**
+   * 裁剪是几个形状叠出来的（先后设了好几次裁剪，取它们的交集）时，每一个形状。
+   * 这时裁剪区域是包围盒和这些形状的交集；生成节点时一个形状套一层蒙版组，精确还原
+   */
+  shapes?: { data: PathData; fillRule: 'nonzero' | 'evenodd' }[];
 }
 
 export interface PdfStroke {
@@ -52,9 +57,20 @@ export interface PdfStroke {
   width: number;
 }
 
+/**
+ * 软蒙版（PDF 的透明蒙版）：items 是蒙版里画的东西，按亮度（luminosity）或透明度（alpha）遮住它所作用的对象。
+ * 同一个蒙版作用于好几个对象时，这些对象共用同一个对象，生成节点时据此把它们放进同一个蒙版组
+ */
+export interface PdfSoftMask {
+  subtype: 'luminosity' | 'alpha';
+  items: PdfItem[];
+}
+
 interface PdfItemBase {
   blendMode: BlendMode;
   clip: PdfClip | null;
+  /** 画这个对象时生效的软蒙版 */
+  softMask?: PdfSoftMask;
 }
 
 /**
@@ -193,13 +209,13 @@ export type PdfItem = PdfPathItem | PdfTextItem | PdfImageItem | PdfGroupItem;
  * 这里只有数字，怎么说给用户听由界面层决定。
  */
 export interface PdfIssues {
-  /** 被裁剪、但裁剪没有还原的对象 */
+  /** 被裁剪、但裁剪没法精确还原的对象（裁剪范围是几个形状叠出来的，只能按外框近似） */
   clips: number;
   /** 没法还原的渐变（网格渐变、函数渐变，以及描边和文字上的渐变），已改成它的平均色 */
   gradients: number;
   /** 图案填充，已去掉填充 */
   patterns: number;
-  /** 透明蒙版，已忽略 */
+  /** 没法还原的透明蒙版，已忽略 */
   softMasks: number;
   /** 虚线描边，已改成实线 */
   dashes: number;

@@ -149,6 +149,18 @@ const OBJECTS: Record<string, string | Uint8Array> = {
     '<< /ShadingType 3 /ColorSpace /DeviceRGB /Coords [0 0 0 0 0 30] ' +
     '/Function << /FunctionType 2 /Domain [0 1] /C0 [1 1 0] /C1 [0 0.5 0] /N 1 >> /Extend [true true] >>',
   glow: '<< /PatternType 2 /Shading {radial} /Matrix [1 0 0 1 60 50] >>',
+  // 亮度蒙版：一个白色的圆，圆里面显示、外面隐藏
+  soft: '<< /Type /ExtGState /SMask << /Type /Mask /S /Luminosity /G {circleMask} >> >>',
+  circleMask: stream(
+    '/Type /XObject /Subtype /Form /BBox [0 0 200 100] /Group << /S /Transparency /CS /DeviceRGB >>',
+    '1 g 100 50 m 100 77.6 77.6 100 50 100 c 22.4 100 0 77.6 0 50 c 0 22.4 22.4 0 50 0 c 77.6 0 100 22.4 100 50 c h f',
+  ),
+  // 透明度蒙版：左半边不透明
+  alphaSoft: '<< /Type /ExtGState /SMask << /Type /Mask /S /Alpha /G {halfMask} >> >>',
+  halfMask: stream(
+    '/Type /XObject /Subtype /Form /BBox [0 0 200 100] /Group << /S /Transparency >>',
+    '0 0 100 100 re f',
+  ),
   // 从白到黑、半径 20 的径向渐变
   whiteBlack:
     '<< /ShadingType 3 /ColorSpace /DeviceRGB /Coords [0 0 0 0 0 20] ' +
@@ -183,7 +195,7 @@ const OBJECTS: Record<string, string | Uint8Array> = {
 const RESOURCES =
   '/Font << /F1 {helvetica} /HB {helveticaBold} /TR {times} /T3 {type3} /Song {song} >> ' +
   '/XObject << /Im {image} /Wide {wide} /Mask {mask} /Pair {pair} /Single {single} >> ' +
-  '/ExtGState << /Half {half} /Multiply {multiply} >> /Shading << /Sh {shading} /Radial {whiteBlack} >> /Pattern << /Glow {glow} >> ' +
+  '/ExtGState << /Half {half} /Multiply {multiply} /Soft {soft} /Alpha {alphaSoft} >> /Shading << /Sh {shading} /Radial {whiteBlack} >> /Pattern << /Glow {glow} >> ' +
   '/Properties << /Layer {layer} >>';
 
 // ───────────── 页面和画板 ─────────────
@@ -364,6 +376,22 @@ describe('PDF 导入：形状', () => {
     expect(faded!.fill.stops.every((stop) => Math.abs(stop.color.a - 0.5) < 1e-6)).toBe(true);
   });
 
+  it('软蒙版还原成按亮度遮的蒙版组，蒙版里画的东西在最上面', async () => {
+    // 亮度蒙版里画一个白色的圆：圆里面显示，外面隐藏
+    const result = await convert('q /Soft gs 1 0 0 rg 0 0 200 100 re f 0 0 1 rg 20 20 40 40 re f Q');
+    const [group] = result.on();
+    expect(group).toMatchObject({ type: 'group', mask: 'luminance' });
+    const children = result.childrenOf(group!.id);
+    expect(children.map((n) => n.type)).toEqual(['rect', 'rect', 'ellipse']);
+    expect(children[2]).toMatchObject({ fill: { color: { r: 1, g: 1, b: 1 } } });
+    expect(result.report.issues.softMasks).toBe(0);
+  });
+
+  it('透明度蒙版还原成按透明度遮的蒙版组', async () => {
+    const result = await convert('q /Alpha gs 0 0 200 100 re f Q');
+    expect(result.on()[0]).toMatchObject({ type: 'group', mask: 'alpha' });
+  });
+
   it('铺满整页的渐变变成画板的渐变背景', async () => {
     const result = await convert('/Sh sh 0 0 1 rg 10 10 20 20 re f');
     expect(result.boards[0]).toMatchObject({ fill: { type: 'gradient', kind: 'linear' } });
@@ -387,11 +415,26 @@ describe('PDF 导入：裁剪', () => {
     expect(result.on().map(position)).toEqual([[150, 30]]);
   });
 
-  it('还原不了的裁剪会原样保留对象，并记进报告', async () => {
-    const result = await convert('q 10 10 m 60 10 l 35 50 l h W n 0 0 30 100 re f Q');
-    expect(result.on()).toHaveLength(1);
-    expect(result.on()[0]).toMatchObject({ type: 'rect', size: [30, 100] });
-    expect(result.report.issues.clips).toBe(1);
+  it('别的裁剪还原成蒙版组：裁剪的形状在最上面当蒙版，被裁的对象在下面', async () => {
+    const result = await convert('q 10 10 m 60 10 l 35 50 l h W n 0 0 30 100 re f 0 0 1 rg 40 0 30 100 re f Q');
+    const [group] = result.on();
+    // 同一个裁剪下的两个矩形在同一个组里
+    expect(group).toMatchObject({ type: 'group', mask: 'shape' });
+    const children = result.childrenOf(group!.id);
+    expect(children.map((n) => n.type)).toEqual(['rect', 'rect', 'path']);
+    expect(children[0]).toMatchObject({ size: [30, 100] });
+    expect(result.report.issues.clips).toBe(0);
+  });
+
+  it('几个形状叠出来的裁剪：一个形状套一层蒙版组，套起来就是它们的交集', async () => {
+    const result = await convert('q 0 0 m 100 0 l 50 80 l h W n 0 0 m 100 80 l 0 80 l h W n 0 0 100 100 re f Q');
+    const [outer] = result.on();
+    expect(outer).toMatchObject({ type: 'group', mask: 'shape' });
+    const [inner, second] = result.childrenOf(outer!.id);
+    expect(inner).toMatchObject({ type: 'group', mask: 'shape' });
+    expect(second).toMatchObject({ type: 'path' });
+    expect(result.childrenOf(inner!.id).map((n) => n.type)).toEqual(['rect', 'path']);
+    expect(result.report.issues.clips).toBe(0);
   });
 
   it('被矩形裁掉一部分的图片：框是裁剪范围，图片在框里放大并移到原位', async () => {

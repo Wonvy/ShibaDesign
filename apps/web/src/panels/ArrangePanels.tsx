@@ -10,6 +10,7 @@ import {
   ArrowDown,
   ArrowUp,
   BringToFront,
+  Crop,
   Group,
   SendToBack,
   SquaresExclude,
@@ -21,7 +22,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AlignMode, BooleanOp, DistributeMode } from '@shiba/core';
+import { MASK_MODES, type AlignMode, type BooleanOp, type DistributeMode } from '@shiba/core';
 import type { OrderMode } from '@shiba/editor';
 import { IconButton } from '../ui/controls';
 import type { PanelProps } from './registry';
@@ -160,6 +161,57 @@ export function BooleanPanel({ editor, nodes }: PanelProps): ReactNode {
       >
         <Ungroup size={16} />
       </IconButton>
+    </div>
+  );
+}
+
+/**
+ * 蒙版：选了两个以上的对象时可以创建（最上面的那个当蒙版）；选中蒙版组时可以换模式或者释放
+ */
+export function MaskPanel({ editor, nodes }: PanelProps): ReactNode {
+  const { t } = useTranslation();
+  const only = nodes.length === 1 ? nodes[0] : undefined;
+  const group = only?.type === 'group' && only.mask ? only : null;
+  if (!group) {
+    return (
+      <div className="mask-panel">
+        <button
+          type="button"
+          className="text-btn mask-create"
+          disabled={!editor.commands.canRun('mask.create')}
+          onClick={() => editor.commands.run('mask.create')}
+        >
+          <Crop size={14} />
+          {t('mask.create')}
+        </button>
+        <p className="menu-hint">{t('mask.createHint')}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mask-panel">
+      <div className="button-row">
+        <div className="segmented segmented-small" role="radiogroup" aria-label={t('panel.mask')}>
+          {MASK_MODES.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              role="radio"
+              aria-checked={group.mask === mode}
+              className={group.mask === mode ? 'is-active' : ''}
+              title={t(`mask.${mode}Hint`)}
+              onClick={() => editor.commands.run('mask.setMode', mode)}
+            >
+              {t(`mask.${mode}`)}
+            </button>
+          ))}
+        </div>
+        <span className="row-divider" />
+        <IconButton title={t('mask.release')} onClick={() => editor.commands.run('mask.release')}>
+          <Ungroup size={16} />
+        </IconButton>
+      </div>
+      <p className="menu-hint">{t(`mask.${group.mask}Hint`)}</p>
     </div>
   );
 }

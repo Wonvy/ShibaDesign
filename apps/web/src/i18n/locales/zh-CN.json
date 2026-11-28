@@ -43,7 +43,8 @@
       "appearance": "外观",
       "text": "文本",
       "image": "图片调整",
-      "animation": "动画"
+      "animation": "动画",
+      "mask": "蒙版"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -125,7 +126,8 @@
       "boolean": "布尔组",
       "text": "文本",
       "image": "图片",
-      "group": "编组"
+      "group": "编组",
+      "maskGroup": "蒙版组"
     },
     "inspector": {
       "empty": "未选中对象",
@@ -344,6 +346,17 @@
       "stop": "色标",
       "addStop": "点击色条添加色标，拖动色标改位置",
       "removeStop": "删除色标"
+    },
+    "mask": {
+      "create": "创建蒙版",
+      "createHint": "选中两个以上的对象，最上面的那个用作蒙版，遮住下面的。",
+      "release": "释放蒙版",
+      "shape": "形状",
+      "alpha": "透明度",
+      "luminance": "亮度",
+      "shapeHint": "按蒙版的轮廓裁剪，不看它的颜色。蒙版是文字或编组时按透明度遮。",
+      "alphaHint": "按蒙版画出来的样子遮：不透明的地方显示，透明的地方隐藏，半透明和渐变都会起作用。",
+      "luminanceHint": "按蒙版的明暗遮：白色显示，黑色隐藏，灰色半透明。"
     }
   }
 }

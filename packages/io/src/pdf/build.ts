@@ -66,6 +66,7 @@ import {
   type PdfItem,
   type PdfPage,
   type PdfPathItem,
+  type PdfSoftMask,
   type PdfTextItem,
   type PdfTextStyleRun,
 } from './ir';
@@ -166,6 +167,24 @@ function gradientFill(gradient: PdfGradient, transform: Matrix, size: readonly [
   if (!values.every((v) => Number.isFinite(v) && Math.abs(v) < MAX_COORDINATE)) return null;
   const fill: GradientFill = { type: 'gradient', kind: gradient.kind, start, end, stops: normalizeStops(stops) };
   return aspect === undefined ? fill : { ...fill, aspect };
+}
+
+/** 转换好的一个节点，以及它还没还原的裁剪和软蒙版 */
+interface Entry {
+  draft: Draft;
+  cut: PdfClip | null;
+  softMask: PdfSoftMask | null;
+}
+
+/** 按某个键把连续相同的元素分成一段段 */
+function runsBy<T, K>(items: readonly T[], key: (item: T) => K): T[][] {
+  const runs: T[][] = [];
+  for (const item of items) {
+    const last = runs[runs.length - 1];
+    if (last && key(last[0]!) === key(item)) last.push(item);
+    else runs.push([item]);
+  }
+  return runs;
 }
 
 function isFiniteData(data: ArrayLike<number>): boolean {
@@ -320,6 +339,9 @@ export class PdfDocumentBuilder {
   private pages = 0;
   /** 画板之外的节点数 */
   objects = 0;
+  /** 刚转换完的那个对象有没有还没还原的裁剪；addItems 读走后清空 */
+  private cut: PdfClip | null = null;
+  private lastPlaced: Draft[] = [];
   /** 画布上要画的点数：路径的锚点，加上文字里每个字形的点。一页密排的正文就有好几万个 */
   anchors = 0;
   readonly issues: PdfIssues = emptyIssues();
@@ -368,7 +390,7 @@ export class PdfDocumentBuilder {
 
   /** 不透明、没有描边、正常混合、铺满整页的矩形 */
   private isBackground(item: PdfPathItem, width: number, height: number): boolean {
-    if (!item.fill || item.fill.a < 1 || item.stroke || item.blendMode !== 'normal') return false;
+    if (!item.fill || item.fill.a < 1 || item.stroke || item.blendMode !== 'normal' || item.softMask) return false;
     if (item.gradient && item.gradient.stops.some((s) => s.color.a < 1)) return false;
     const covers = (box: Box): boolean =>
       box.x0 <= PAGE_SLACK && box.y0 <= PAGE_SLACK && box.x1 >= width - PAGE_SLACK && box.y1 >= height - PAGE_SLACK;
@@ -404,13 +426,18 @@ export class PdfDocumentBuilder {
 
   /** 把一组对象放进 parent，返回实际生成了几个节点 */
   private async addItems(items: readonly PdfItem[], parent: NodeId): Promise<number> {
-    const drafts: Draft[] = [];
+    const entries: Entry[] = [];
+    const take = (draft: Draft | null, softMask: PdfSoftMask | undefined): void => {
+      const cut = this.cut;
+      this.cut = null;
+      if (draft) entries.push({ draft, cut, softMask: softMask ?? null });
+    };
     // 连续的几行文字先攒起来，一起拼成段落
     let lines: PdfTextItem[] = [];
     const flush = (): void => {
       for (const block of groupLines(lines, this.styleOf)) {
-        const draft = this.textNode(block, parent);
-        if (draft) drafts.push(draft);
+        this.cut = null;
+        take(this.textNode(block, parent), block.lines[0]!.softMask);
       }
       lines = [];
     };
@@ -420,16 +447,115 @@ export class PdfDocumentBuilder {
         continue;
       }
       flush();
-      const draft = await this.convert(item, parent);
-      if (draft) drafts.push(draft);
+      this.cut = null;
+      take(await this.convert(item, parent), item.softMask);
     }
     flush();
-    const indices = keysBetween(null, null, drafts.length);
-    drafts.forEach((draft, i) => {
-      this.nodes[draft.id] = { ...draft, index: indices[i]! };
-      this.objects++;
-    });
+
+    const drafts = await this.wrapMasks(entries, parent);
+    this.place(drafts, parent);
     return drafts.length;
+  }
+
+  /** 把一串节点按顺序放到父节点下面。最后放的这一批记在 lastPlaced 里 */
+  private place(drafts: readonly Draft[], parent: NodeId): void {
+    const indices = keysBetween(null, null, drafts.length);
+    this.lastPlaced = drafts.map((draft, i) => {
+      const node = { ...draft, parent, index: indices[i]! } as Draft;
+      this.nodes[draft.id] = node;
+      this.objects++;
+      return node;
+    });
+  }
+
+  /**
+   * 裁剪和软蒙版还原成蒙版组：同一个软蒙版下连续的对象放进一个按亮度（或透明度）遮的蒙版组，
+   * 里面同一个裁剪下连续的对象再放进一个按裁剪形状遮的蒙版组。
+   * PDF 里常见"先设裁剪，再画一串东西"（比如 Illustrator 的剪切组），这样还原出来的结构也一样
+   */
+  private async wrapMasks(entries: readonly Entry[], parent: NodeId): Promise<Draft[]> {
+    const out: Draft[] = [];
+    for (const run of runsBy(entries, (e) => e.softMask)) {
+      const softMask = run[0]!.softMask;
+      if (!softMask) {
+        out.push(...this.clipGroups(run, parent));
+        continue;
+      }
+      const group = createNode('group', {
+        parent,
+        index: '',
+        seq: this.nextSeq('group'),
+        mask: softMask.subtype === 'alpha' ? 'alpha' : 'luminance',
+      });
+      const contents = this.clipGroups(run, group.id);
+      // 蒙版里画的东西转成节点，装进一个组放在最上面当蒙版；只有一个对象时直接用它
+      const holder = createNode('group', { parent: group.id, index: '', seq: this.nextSeq('group') });
+      const count = await this.addItems(softMask.items, holder.id);
+      if (count === 0) {
+        // 蒙版是空的：读不出它遮了什么，内容照原样放
+        this.issues.softMasks += run.length;
+        out.push(...contents);
+        continue;
+      }
+      // addItems 最后一次 place 放的就是蒙版组里的直接成员
+      const inner = this.lastPlaced;
+      let mask: Draft = holder;
+      if (inner.length === 1) {
+        mask = inner[0]!;
+        delete this.nodes[mask.id];
+        this.objects--;
+      }
+      this.place([...contents, mask], group.id);
+      out.push(group);
+    }
+    return out;
+  }
+
+  /** 同一个裁剪下连续的对象放进按裁剪形状遮的蒙版组 */
+  private clipGroups(entries: readonly Entry[], parent: NodeId): Draft[] {
+    const out: Draft[] = [];
+    for (const run of runsBy(entries, (e) => e.cut)) {
+      const clip = run[0]!.cut;
+      const drafts = run.map((e) => e.draft);
+      const group = clip ? this.clipGroup(clip, drafts, parent) : null;
+      if (group) out.push(group);
+      else out.push(...drafts.map((d) => ({ ...d, parent })));
+    }
+    return out;
+  }
+
+  /**
+   * 裁剪还原成蒙版组：一个裁剪形状一层，几个形状叠出来的裁剪就一层套一层（交集）。
+   * 设过的矩形裁剪比这些形状的范围还小时，最外面再套一层矩形
+   */
+  private clipGroup(clip: PdfClip, drafts: readonly Draft[], parent: NodeId): Draft | null {
+    const shapes = (clip.shapes ?? (clip.shape ? [clip.shape] : [])).filter((s) => isFiniteData(s.data));
+    const layers: { data: PathData; fillRule: 'nonzero' | 'evenodd' }[] = [...shapes];
+    let reach: Box | null = null;
+    for (const shape of shapes) {
+      const b = controlBounds(shape.data);
+      if (b) reach = reach ? intersectBoxes(reach, b) : b;
+    }
+    if (!reach || !boxContains(clip, reach, 0.01)) layers.push({ data: boxPath(clip), fillRule: 'nonzero' });
+
+    let contents: Draft[] = [...drafts];
+    let group: Draft | null = null;
+    for (const layer of layers) {
+      const next = createNode('group', { parent, index: '', seq: this.nextSeq('group'), mask: 'shape' });
+      const mask = this.shapeNode(layer.data, layer.fillRule, true, {
+        parent: next.id,
+        index: '',
+        blendMode: 'normal',
+        fill: solid(rgba(0, 0, 0)),
+        stroke: null,
+      });
+      if (!mask) continue;
+      this.place([...contents, mask], next.id);
+      contents = [next];
+      group = next;
+    }
+    if (!group) this.issues.clips += drafts.length;
+    return group;
   }
 
   private nextSeq(type: string): number {
@@ -490,7 +616,8 @@ export class PdfDocumentBuilder {
         data = clip.shape.data;
         fillRule = clip.shape.fillRule;
       } else {
-        this.issues.clips++;
+        // 别的情况交给 addItems：放进一个按裁剪形状遮的蒙版组
+        this.cut = clip;
       }
     }
 
@@ -631,7 +758,7 @@ export class PdfDocumentBuilder {
     };
     const verdict = this.clipVerdict(first.clip, bounds);
     if (verdict === 'outside') return null;
-    if (verdict === 'cut') this.issues.clips++;
+    if (verdict === 'cut') this.cut = first.clip;
 
     const font = first.font;
     const fill = first.fill ?? rgba(0, 0, 0);
@@ -818,7 +945,7 @@ export class PdfDocumentBuilder {
           return { ...shape, opacity: common.opacity, fill: { ...whole, ...placeInBox(bounds, box) } };
         }
       }
-      this.issues.clips++;
+      this.cut = clip;
     }
 
     return createNode('rect', {

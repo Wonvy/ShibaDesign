@@ -138,6 +138,7 @@ function accept(
     item.blendMode === first.item.blendMode &&
     sameColor(item.fill, first.item.fill) &&
     item.clip === first.item.clip &&
+    item.softMask === first.item.softMask &&
     styleOf(item) === styleOf(first.item);
   if (!compatible) return null;
 

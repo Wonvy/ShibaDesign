@@ -5,6 +5,7 @@ import { addArtboard, deleteArtboard, duplicateActiveArtboard } from './artboard
 import { createBoolean, releaseBoolean, setBooleanOp } from './boolean';
 import { createGroup, releaseGroup } from './group';
 import { placeImage, setImageFill } from './image';
+import { createMask, releaseMask, setMaskMode } from './mask';
 import { flipSelection, rotateSelection } from './transform';
 import { deleteSelection, deselect, duplicate, nudge, redo, selectAll, setTool, undo } from './edit';
 import { setViewMode, zoom100, zoomIn, zoomOut, zoomToFit } from './view';
@@ -38,6 +39,9 @@ export function registerBuiltinCommands(editor: Editor): void {
     .register(setImageFill)
     .register(createGroup)
     .register(releaseGroup)
+    .register(createMask)
+    .register(releaseMask)
+    .register(setMaskMode)
     .register(rotateSelection)
     .register(flipSelection)
     .register(addAnimation)
@@ -51,3 +55,4 @@ export type { Command } from './command';
 export { CommandRegistry } from './command';
 export type { OrderMode } from './arrange';
 export { pruneAnimations, slideLayerOf } from './animation';
+export { isMaskNode } from './mask';

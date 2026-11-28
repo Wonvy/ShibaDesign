@@ -23,6 +23,7 @@ import {
   type PdfImageSource,
   type PdfItem,
   type PdfPage,
+  type PdfSoftMask,
   type PdfStroke,
   type PdfTextFont,
   type PdfTextItem,
@@ -103,7 +104,7 @@ interface State {
   dashed: boolean;
   softMask: boolean;
   /** 软蒙版画出来的内容。只有"一个灰度渐变"这种能还原成渐变透明度的蒙版才用得上 */
-  mask: PdfItem[] | null;
+  mask: PdfSoftMask | null;
   clip: PdfClip | null;
   font: PdfFont | null;
   fontSize: number;
@@ -122,8 +123,8 @@ interface State {
 }
 
 interface GroupFrame {
-  /** 这个组的内容是一张透明蒙版，不是要画出来的东西 */
-  mask: boolean;
+  /** 这个组的内容是一张透明蒙版，不是要画出来的东西；是的话记下蒙版的种类 */
+  mask: PdfSoftMask['subtype'] | null;
   opacity: number;
   blendMode: BlendMode;
 }
@@ -351,7 +352,7 @@ class Interpreter {
   /** Type3 字形的轮廓，按字体和字形缓存；null 表示这个字形不能当普通字形处理 */
   private readonly type3Outlines = new Map<string, PathData | null>();
   /** 最近一个软蒙版组画出来的内容，见 endGroup */
-  private lastMask: PdfItem[] | null = null;
+  private lastMask: PdfSoftMask | null = null;
 
   constructor(
     private readonly resources: PdfResources,
@@ -631,7 +632,14 @@ class Interpreter {
     } else if (rect && boxContains(rect, current, 0.01)) {
       // 新的矩形把现有的范围整个包住了：不起作用
     } else {
-      this.state.clip = { ...intersectBoxes(current, bounds), exact: current.exact && rect !== null };
+      // 和现有的裁剪取交集：包围盒取交集，不是矩形的形状都记下来，生成节点时一层层套上
+      const shapes = [...(current.shapes ?? (current.shape ? [current.shape] : []))];
+      if (!rect) shapes.push({ data: path, fillRule });
+      this.state.clip = {
+        ...intersectBoxes(current, bounds),
+        exact: current.exact && rect !== null,
+        ...(shapes.length > 0 ? { shapes } : {}),
+      };
     }
   }
 
@@ -645,7 +653,12 @@ class Interpreter {
 
   /** @param masked 软蒙版已经在这个对象上还原了（渐变的透明度），不算没还原 */
   private emit(item: PdfItem, masked = false): void {
-    if (this.state.softMask && !masked) this.issues.softMasks++;
+    const { softMask, mask } = this.state;
+    if (softMask && !masked) {
+      // 软蒙版画了些什么已经记下了：生成节点时变成蒙版组。没记下（读不到蒙版的内容）才算没还原
+      if (mask) item.softMask ??= mask;
+      else this.issues.softMasks++;
+    }
     this.current.push(item);
   }
 
@@ -655,7 +668,8 @@ class Interpreter {
    */
   private maskedGradient(gradient: PdfGradient): PdfGradient | null {
     const mask = this.state.mask;
-    const only = mask?.length === 1 ? mask[0] : null;
+    // 只有亮度蒙版能这样折算：灰度渐变的透明度处处是 1，当透明度蒙版用的话什么也不遮
+    const only = mask?.subtype === 'luminosity' && mask.items.length === 1 ? mask.items[0] : null;
     const m = only?.kind === 'path' ? only.gradient : undefined;
     if (!m || m.kind !== gradient.kind) return null;
     const close = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-4 * Math.max(1, Math.abs(a), Math.abs(b));
@@ -811,7 +825,12 @@ class Interpreter {
   }): void {
     this.save();
     const s = this.state;
-    this.groups.push({ mask: Boolean(group.smask), opacity: s.fillAlpha, blendMode: s.blendMode });
+    const subtype = (group.smask as { subtype?: unknown } | null | undefined)?.subtype;
+    this.groups.push({
+      mask: group.smask ? (subtype === 'Alpha' ? 'alpha' : 'luminosity') : null,
+      opacity: s.fillAlpha,
+      blendMode: s.blendMode,
+    });
     this.containers.push([]);
     if (group.bbox) {
       const saved = s.ctm;
@@ -833,15 +852,14 @@ class Interpreter {
     this.restore();
     if (frame.mask) {
       // 软蒙版的内容不画出来，留给接下来设置蒙版的那一步
-      this.lastMask = items;
+      this.lastMask = { subtype: frame.mask, items };
       return;
     }
     if (items.length === 0 || frame.opacity <= 0) return;
 
     const plain = frame.opacity >= 0.999 && frame.blendMode === 'normal';
     if (plain) {
-      for (const item of items) this.current.push(item);
-      if (this.state.softMask) this.issues.softMasks += items.length;
+      for (const item of items) this.emit(item);
       return;
     }
     // 只有一个对象的组不需要真的建组：把透明度直接乘到这个对象上，效果完全一样

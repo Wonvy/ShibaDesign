@@ -2,7 +2,7 @@ import { hasShapeStyle } from '@shiba/core';
 import { slideLayerOf } from '@shiba/editor';
 import { AnimationPanel } from './AnimationPanel';
 import { AppearancePanel } from './AppearancePanel';
-import { AlignPanel, BooleanPanel, OrderPanel } from './ArrangePanels';
+import { AlignPanel, BooleanPanel, MaskPanel, OrderPanel } from './ArrangePanels';
 import { ImagePanel } from './ImagePanel';
 import { TextPanel } from './TextPanel';
 import { TransformPanel } from './TransformPanel';
@@ -24,6 +24,15 @@ export function registerBuiltinPanels(): void {
     order: 30,
     when: ({ nodes }) => nodes.some((n) => n.type === 'boolean') || nodes.filter(hasShapeStyle).length >= 2,
     component: BooleanPanel,
+  });
+  registerPanel({
+    id: 'mask',
+    titleKey: 'panel.mask',
+    order: 35,
+    when: ({ nodes }) =>
+      nodes.filter((n) => n.type !== 'artboard').length >= 2 ||
+      (nodes.length === 1 && nodes[0]!.type === 'group' && !!nodes[0]!.mask),
+    component: MaskPanel,
   });
   registerPanel({ id: 'transform', titleKey: 'panel.transform', order: 40, component: TransformPanel });
   registerPanel({

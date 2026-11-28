@@ -94,6 +94,9 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
     case 'artboard':
       if (node.deck !== null && !isDeck(node.deck)) fail('deck');
       break;
+    case 'group':
+      if (node.mask !== undefined && typeof node.mask !== 'string') fail('mask');
+      break;
     case 'text': {
       if (typeof node.text !== 'string' || node.text.length > MAX_TEXT_LENGTH) fail('text');
       const style = node.style;

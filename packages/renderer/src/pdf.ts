@@ -8,6 +8,7 @@ import {
   styleOfChar,
   type CharacterStyle,
   invert,
+  maskParts,
   multiply,
   type ArtboardNode,
   type AssetStore,
@@ -41,7 +42,7 @@ import {
 import { adjustmentMatrix } from './adjust';
 import type { GeometryCache } from './geometry';
 import { placeImage, type ImageCache } from './images';
-import type { NodeTypeDef, NodeTypeRegistry } from './node-types';
+import { isPlainShape, type NodeTypeDef, type NodeTypeRegistry } from './node-types';
 import type { TextAppearances } from './text/appearance';
 import type { FontManager, LoadedFace } from './text/fonts';
 import type { TextLayouts } from './text/layout';
@@ -269,7 +270,11 @@ class PdfExporter {
     const isContainer = def.children === 'draw' || def.children === 'clip';
     const special = node.opacity < 1 || node.blendMode !== 'normal';
     // 和渲染器的离屏层条件一致：要先合成再整体透明或混合的，写成透明组
-    const layered = special && (isContainer || def.draw !== undefined || paintCount(node) > 1);
+    const { mask } = maskParts(this.c.store, node);
+    const masked = mask?.visible ? mask : null;
+    // 和渲染器一样：按透明度或亮度遮的蒙版组要先合成成一个整体
+    const maskLayer = masked !== null && !this.clipsByOutline(node, masked);
+    const layered = (special && (isContainer || def.draw !== undefined || paintCount(node) > 1)) || maskLayer;
 
     content.save();
     content.transform(own);
@@ -321,12 +326,25 @@ class PdfExporter {
       for (const child of this.c.store.children(node.id)) this.drawNode(content, child, child.transform, page, toPage);
       content.restore();
     } else if (def.children === 'draw') {
-      for (const child of this.c.store.children(node.id)) this.drawNode(content, child, child.transform, page, toPage);
+      const { mask, contents } = maskParts(this.c.store, node);
+      if (mask?.visible) this.drawMasked(content, node, mask, contents, page, toPage);
+      else
+        for (const child of this.c.store.children(node.id))
+          this.drawNode(content, child, child.transform, page, toPage);
     }
   }
 
   /** 一段内容写成透明组，返回它的资源名 */
   private form(form: ContentStream, toPage: Matrix, page: readonly [number, number, number, number]): string {
+    const ref = this.formRef(form, toPage, page);
+    const name = `X${++this.counter}`;
+    this.xobjects[name] = ref;
+    this.transparent = true;
+    return name;
+  }
+
+  /** 一段内容写成透明组（表单），返回它的引用 */
+  private formRef(form: ContentStream, toPage: Matrix, page: readonly [number, number, number, number]): PdfRef {
     // 范围取页面在节点本地坐标里的外框：页面外的东西反正看不见
     const inverse = invert(toPage);
     let bbox = [-1e6, -1e6, 1e6, 1e6];
@@ -356,10 +374,48 @@ class PdfExporter {
       },
       form.toBytes(),
     );
-    const name = `X${++this.counter}`;
-    this.xobjects[name] = ref;
-    this.transparent = true;
-    return name;
+    return ref;
+  }
+
+  /** 蒙版组能不能直接按蒙版的轮廓裁剪，和渲染器的判断一样 */
+  private clipsByOutline(group: SceneNode, mask: SceneNode): boolean {
+    return group.type === 'group' && group.mask === 'shape' && isPlainShape(this.c.registry, mask);
+  }
+
+  /**
+   * 蒙版组。按轮廓裁剪时写成裁剪路径，纯矢量；按透明度或亮度遮时，蒙版画进一个表单当软蒙版，
+   * 内容先合成成一个透明组再整体套上蒙版（软蒙版作用于每一次绘制，不先合成的话重叠处会和画布上不一样）
+   */
+  private drawMasked(
+    content: ContentStream,
+    group: SceneNode,
+    mask: SceneNode,
+    contents: readonly SceneNode[],
+    page: readonly [number, number, number, number],
+    toPage: Matrix,
+  ): void {
+    if (this.clipsByOutline(group, mask)) {
+      content.save();
+      content.transform(mask.transform);
+      this.clipTo(content, this.outline(mask));
+      const inverse = invert(mask.transform);
+      if (inverse) content.transform(inverse);
+      for (const child of contents) this.drawNode(content, child, child.transform, page, toPage);
+      content.restore();
+      return;
+    }
+    const inner = new ContentStream();
+    for (const child of contents) this.drawNode(inner, child, child.transform, page, toPage);
+    if (inner.empty) return;
+    const maskForm = new ContentStream();
+    this.drawNode(maskForm, mask, mask.transform, page, toPage);
+    const subtype = group.type === 'group' && group.mask === 'luminance' ? 'Luminosity' : 'Alpha';
+    const state = this.state(1, 1, 'normal', false, { ref: this.formRef(maskForm, toPage, page), subtype });
+    const name = this.form(inner, toPage, page);
+    content.save();
+    if (state) content.graphicsState(state);
+    content.xobject(name);
+    content.restore();
   }
 
   /**
@@ -371,14 +427,14 @@ class PdfExporter {
     strokeAlpha: number,
     blend: BlendMode,
     always = false,
-    mask?: PdfRef,
+    mask?: { ref: PdfRef; subtype: 'Luminosity' | 'Alpha' },
   ): string | null {
     const ca = Math.round(Math.max(0, Math.min(1, fillAlpha)) * 1000) / 1000;
     const CA = Math.round(Math.max(0, Math.min(1, strokeAlpha)) * 1000) / 1000;
     const plain = ca === 1 && CA === 1 && blend === 'normal' && !mask;
     if (plain && !always) return null;
     if (!plain) this.transparent = true;
-    const key = `${ca}|${CA}|${blend}|${mask?.id ?? ''}`;
+    const key = `${ca}|${CA}|${blend}|${mask ? `${mask.ref.id}${mask.subtype}` : ''}`;
     let name = this.stateNames.get(key);
     if (!name) {
       name = `G${this.stateNames.size + 1}`;
@@ -388,7 +444,7 @@ class PdfExporter {
         ca,
         CA,
         BM: pdfName(BLEND_NAMES[blend]),
-        SMask: mask ? { Type: pdfName('Mask'), S: pdfName('Luminosity'), G: mask } : undefined,
+        SMask: mask ? { Type: pdfName('Mask'), S: pdfName(mask.subtype), G: mask.ref } : undefined,
       });
     }
     return name;
@@ -499,7 +555,7 @@ class PdfExporter {
 
     content.save();
     this.clipTo(content, outline);
-    const state = this.state(paint.opacity, 1, paint.blend, false, mask);
+    const state = this.state(paint.opacity, 1, paint.blend, false, mask && { ref: mask, subtype: 'Luminosity' });
     if (state) content.graphicsState(state);
     // 椭圆的径向渐变：先裁好形状，再把坐标压扁，正圆的渐变画出来就是椭圆
     const ellipse = radialEllipseMatrix(fill, bounds);

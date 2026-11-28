@@ -73,3 +73,9 @@ export class NodeTypeRegistry {
     return this.defs.has(type);
   }
 }
+
+/** 节点是不是只有轮廓、按填充和描边画的形状（矩形、椭圆、钢笔路径、布尔组）。蒙版按轮廓裁剪只对这种节点有意义 */
+export function isPlainShape(registry: NodeTypeRegistry, node: SceneNode): boolean {
+  const def = registry.get(node.type);
+  return !!def && !def.draw && (def.children === 'none' || def.children === 'consume');
+}

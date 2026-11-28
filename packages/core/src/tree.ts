@@ -122,3 +122,17 @@ export function cloneSubtree(store: DocStore, id: NodeId, options: CloneOptions)
     parent: i === 0 ? node.parent : idMap.get(node.parent!)!,
   }));
 }
+
+const NO_NODES: SceneNode[] = [];
+
+/**
+ * 蒙版组的两部分：蒙版（最上面那个子节点）和被遮住的内容（其余的子节点，从下到上）。
+ * 不是蒙版组、或者组是空的时 mask 为 null（这时 contents 为空，调用方按普通容器处理）
+ */
+export function maskParts(store: DocStore, node: SceneNode): { mask: SceneNode | null; contents: SceneNode[] } {
+  // 绝大多数节点不是蒙版组：先判断，免得每画一个节点都去取一遍子节点
+  if (node.type !== 'group' || !node.mask) return { mask: null, contents: NO_NODES };
+  const children = store.children(node.id);
+  if (children.length === 0) return { mask: null, contents: NO_NODES };
+  return { mask: children[children.length - 1]!, contents: children.slice(0, -1) };
+}

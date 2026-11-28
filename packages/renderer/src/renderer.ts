@@ -3,6 +3,7 @@ import {
   IDENTITY,
   hasShapeStyle,
   invert,
+  maskParts,
   multiply,
   rectsIntersect,
   transformRect,
@@ -19,7 +20,7 @@ import { adjustmentMatrix } from './adjust';
 import type { GeometryCache } from './geometry';
 import { drawGradient } from './gradient';
 import { makeImageShader, type ImageCache } from './images';
-import type { DrawContext, NodeTypeDef, NodeTypeRegistry } from './node-types';
+import { isPlainShape, type DrawContext, type NodeTypeDef, type NodeTypeRegistry } from './node-types';
 import { toSkBlendMode, toSkColor, toSkMatrix } from './skia';
 
 /** 屏幕坐标 = 世界坐标 × zoom + (x, y)，单位是 CSS 像素 */
@@ -267,6 +268,46 @@ export class Renderer {
     return ck.MakeSWCanvasSurface(this.element);
   }
 
+  /** 蒙版组能不能直接按蒙版的轮廓裁剪：形状模式，并且蒙版是普通的形状（文字、编组没有可用的轮廓，按透明度遮） */
+  private clipsByOutline(group: SceneNode, mask: SceneNode): boolean {
+    return group.type === 'group' && group.mask === 'shape' && isPlainShape(this.registry, mask);
+  }
+
+  /**
+   * 画蒙版组的内容。按轮廓裁剪时直接裁；按透明度或亮度遮时，内容已经在单独的层里，
+   * 再把蒙版画到一个"只保留重叠部分"（DstIn）的层里盖上去：内容的透明度乘上蒙版的透明度（或亮度）
+   */
+  private drawMasked(
+    canvas: Canvas,
+    group: SceneNode,
+    mask: SceneNode,
+    contents: readonly SceneNode[],
+    world: Matrix,
+    viewport: Rect | null,
+  ): void {
+    const { ck } = this;
+    if (this.clipsByOutline(group, mask)) {
+      canvas.save();
+      canvas.concat(toSkMatrix(mask.transform));
+      canvas.clipPath(this.geometry.outlineOf(mask), ck.ClipOp.Intersect, true);
+      const inverse = invert(mask.transform);
+      if (inverse) canvas.concat(toSkMatrix(inverse));
+      for (const child of contents) this.drawNode(canvas, child, world, viewport);
+      canvas.restore();
+      return;
+    }
+    for (const child of contents) this.drawNode(canvas, child, world, viewport);
+    const paint = new ck.Paint();
+    paint.setBlendMode(ck.BlendMode.DstIn);
+    const luma = group.type === 'group' && group.mask === 'luminance' ? ck.ColorFilter.MakeLuma() : null;
+    paint.setColorFilter(luma);
+    canvas.saveLayer(paint);
+    this.drawNode(canvas, mask, world, null);
+    canvas.restore();
+    paint.delete();
+    luma?.delete();
+  }
+
   /**
    * @param parentWorld 父节点的世界变换，只用来做视口裁剪
    * @param viewport 世界坐标下的可见区域；为 null 时不裁剪
@@ -290,7 +331,11 @@ export class Renderer {
     canvas.concat(toSkMatrix(node.transform));
 
     const special = node.opacity < 1 || node.blendMode !== 'normal';
-    const layered = special && (isContainer || def.draw !== undefined || paintCount(node) > 1);
+    const { mask, contents } = maskParts(this.store, node);
+    const masked = mask?.visible ? mask : null;
+    // 按透明度或亮度遮的蒙版要在一个单独的层里做，免得把下面的东西也遮掉
+    const maskLayer = masked !== null && !this.clipsByOutline(node, masked);
+    const layered = (special && (isContainer || def.draw !== undefined || paintCount(node) > 1)) || maskLayer;
     if (layered) {
       this.layerPaint.setAlphaf(node.opacity);
       this.layerPaint.setBlendMode(toSkBlendMode(ck, node.blendMode));
@@ -314,7 +359,8 @@ export class Renderer {
 
     if (isContainer) {
       if (def.children === 'clip') canvas.clipPath(outline, ck.ClipOp.Intersect, true);
-      for (const child of this.store.children(node.id)) this.drawNode(canvas, child, world, viewport);
+      if (masked) this.drawMasked(canvas, node, masked, contents, world, viewport);
+      else for (const child of this.store.children(node.id)) this.drawNode(canvas, child, world, viewport);
     }
 
     if (layered) canvas.restore();

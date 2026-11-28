@@ -1,5 +1,6 @@
 import {
   Circle,
+  Crop,
   Eye,
   EyeOff,
   Frame,
@@ -7,6 +8,7 @@ import {
   Image,
   Spline,
   Square,
+  SquareDashed,
   SquaresUnite,
   Type,
   type LucideIcon,
@@ -14,6 +16,7 @@ import {
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DocStore, NodeId, SceneNode } from '@shiba/core';
+import { isMaskNode } from '@shiba/editor';
 import { useEditor, useEditorState } from '../editor/context';
 import { displayName } from '../names';
 
@@ -81,7 +84,15 @@ export function LayersPanel(): ReactNode {
         {rows.length === 0 && <p className="empty-note">{t('layers.empty')}</p>}
         {rows.map(({ node, depth }) => {
           const isImage = 'fill' in node && node.fill?.type === 'image';
-          const Icon = isImage ? Image : (ICONS[node.type] ?? Square);
+          // 蒙版组和组里当蒙版的那个对象用自己的图标，一眼看出谁遮住谁
+          const isMask = isMaskNode(editor, node);
+          const Icon = isMask
+            ? SquareDashed
+            : node.type === 'group' && node.mask
+              ? Crop
+              : isImage
+                ? Image
+                : (ICONS[node.type] ?? Square);
           const name = displayName(node, t);
           return (
             <div

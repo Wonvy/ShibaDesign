@@ -520,6 +520,57 @@ describe('导出 PDF', () => {
     expect(gradientColorAt(ellipse!.fill.stops, 1).a).toBeCloseTo(1, 1);
   });
 
+  it('蒙版组：形状写成裁剪路径，透明度和亮度写成软蒙版，读回来还是同样的蒙版组', async () => {
+    const env = setup();
+    const maskGroup = (mode: 'shape' | 'alpha' | 'luminance', x: number, mask: SceneNode) => {
+      const group = env.add(createNode('group', { ...env.on(), mask: mode }));
+      env.add(
+        createNode('rect', {
+          ...env.on(group.id),
+          transform: [1, 0, 0, 1, x, 20],
+          size: [100, 100],
+          cornerRadius: 0,
+          fill: solid(rgba(1, 0, 0)),
+          stroke: null,
+        }),
+      );
+      env.add({ ...mask, ...env.on(group.id) } as SceneNode);
+    };
+    const circle = (x: number, color: ReturnType<typeof rgba>) =>
+      createNode('ellipse', {
+        parent: null,
+        index: '',
+        seq: 1,
+        transform: [1, 0, 0, 1, x + 20, 40],
+        size: [60, 60],
+        fill: solid(color),
+        stroke: null,
+      });
+    maskGroup('shape', 20, circle(20, rgba(0, 0, 1)));
+    maskGroup('alpha', 140, circle(140, rgba(0, 0, 0, 0.5)));
+    maskGroup('luminance', 260, circle(260, rgba(1, 1, 1)));
+
+    const { bytes } = await exportAndOpen(env);
+    const back = await reimport(bytes);
+    expect(back.result.report.issues).toMatchObject({ clips: 0, softMasks: 0 });
+    // 纯色方块被圆形裁剪：导入时直接变成一个红色的圆，看起来一样、编辑起来更简单
+    expect(back.items.map((n) => [n.type, (n as { mask?: string }).mask])).toEqual([
+      ['ellipse', undefined],
+      ['group', 'alpha'],
+      ['group', 'luminance'],
+    ]);
+    expect(back.items[0]).toMatchObject({ size: [60, 60], fill: solid(rgba(1, 0, 0)) });
+    for (const group of back.items.slice(1)) {
+      const children = back.childrenOf(group.id);
+      // 被遮的方块在下面，蒙版（圆）在最上面
+      expect(children[0]).toMatchObject({ type: 'rect', size: [100, 100] });
+      expect(children.at(-1)).toMatchObject({ type: 'ellipse', size: [60, 60] });
+    }
+    // 透明度蒙版的半透明读回来还在
+    const alphaMask = back.childrenOf(back.items[1]!.id).at(-1) as SceneNode & { fill: { color: { a: number } } };
+    expect(alphaMask.fill.color.a * alphaMask.opacity).toBeCloseTo(0.5, 2);
+  });
+
   it('不知道怎么写成矢量的节点画成图片放进去', async () => {
     const env = setup();
     env.context.registry.register({

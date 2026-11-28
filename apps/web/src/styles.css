@@ -1036,3 +1036,23 @@ button {
     0 0 0 3px var(--accent);
   z-index: 1;
 }
+
+/* ───────── 蒙版面板 ───────── */
+
+.mask-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mask-panel .menu-hint {
+  margin: 2px 0 0;
+  line-height: 1.5;
+}
+
+.mask-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+}

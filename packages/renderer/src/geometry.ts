@@ -3,6 +3,7 @@ import {
   applyToPoint,
   hasShapeStyle,
   invert,
+  maskParts,
   transformRect,
   unionRects,
   worldTransform,
@@ -57,6 +58,9 @@ export class GeometryCache {
   localBounds(node: SceneNode): Rect {
     const def = this.registry.get(node.type);
     if (def?.children === 'draw') {
+      // 蒙版组的范围就是蒙版的范围
+      const { mask } = maskParts(this.store, node);
+      if (mask?.visible) return transformRect(mask.transform, this.localBounds(mask));
       const rects = this.store
         .children(node.id)
         .filter((c) => c.visible)
@@ -137,6 +141,19 @@ export class GeometryCache {
     this.entries.delete(id);
   }
 
+  /** 蒙版组坐标里的一点在不在蒙版里：形状看轮廓，文字、编组这类看范围 */
+  private insideMask(mask: SceneNode, x: number, y: number): boolean {
+    const inverse = invert(mask.transform);
+    if (!inverse) return false;
+    const [mx, my] = applyToPoint(inverse, x, y);
+    const def = this.registry.get(mask.type);
+    if (def && !def.draw && (def.children === 'none' || def.children === 'consume')) {
+      return this.outlineOf(mask).contains(mx, my);
+    }
+    const b = this.localBounds(mask);
+    return mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h;
+  }
+
   /** (px, py) 是父节点坐标系里的点 */
   private hitNode(node: SceneNode, px: number, py: number, tolerance: number): SceneNode | null {
     if (!node.visible || node.locked) return null;
@@ -148,6 +165,16 @@ export class GeometryCache {
 
     if (def.children === 'draw' || def.children === 'clip') {
       if (def.children === 'clip' && !this.outlineOf(node).contains(x, y)) return null;
+      // 蒙版组：只有蒙版范围里的内容点得中，蒙版本身点不中（在图层列表里选）
+      const { mask, contents } = maskParts(this.store, node);
+      if (mask?.visible) {
+        if (!this.insideMask(mask, x, y)) return null;
+        for (let i = contents.length - 1; i >= 0; i--) {
+          const hit = this.hitNode(contents[i]!, x, y, tolerance);
+          if (hit) return hit;
+        }
+        return null;
+      }
       const kids = this.store.children(node.id);
       for (let i = kids.length - 1; i >= 0; i--) {
         const hit = this.hitNode(kids[i]!, x, y, tolerance);
