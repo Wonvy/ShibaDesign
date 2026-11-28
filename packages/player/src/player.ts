@@ -206,7 +206,14 @@ export function runPlayer(root: HTMLElement, data: PresentationData, options: Pl
     } else if (spec.effect === 'smooth') {
       // 平滑：两页上标识相同的图层视为同一个对象，从旧的位置补间到新的位置
       previous.frame.style.visibility = 'hidden';
-      play(next.el, [{ backgroundColor: previous.data.background }, { backgroundColor: next.data.background }], 'ease');
+      // 背景色跟着过渡；渐变背景没法逐帧过渡，直接换
+      if (!/gradient/.test(previous.data.background + next.data.background)) {
+        play(
+          next.el,
+          [{ backgroundColor: previous.data.background }, { backgroundColor: next.data.background }],
+          'ease',
+        );
+      }
 
       const unmatched: LayerView[] = [];
       const pool = new Map<string, LayerView[]>();

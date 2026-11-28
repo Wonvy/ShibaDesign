@@ -1,7 +1,10 @@
 import type { CanvasKit, GlyphRun as SkGlyphRun, Image, Path, Typeface } from 'canvaskit-wasm';
 import {
+  gradientGeometry,
   hasLiveAppearance,
   hasShapeStyle,
+  normalizeStops,
+  radialEllipseMatrix,
   styleOfChar,
   type CharacterStyle,
   invert,
@@ -11,6 +14,8 @@ import {
   type BlendMode,
   type Color,
   type DocStore,
+  type GradientFill,
+  type GradientStop,
   type ImageFill,
   type Matrix,
   type NodeId,
@@ -30,6 +35,7 @@ import {
   pdfText,
   writeJpeg,
   writeRgbaImage,
+  type PdfDict,
   type PdfRef,
 } from '@shiba/io';
 import { adjustmentMatrix } from './adjust';
@@ -167,6 +173,7 @@ class PdfExporter {
   private readonly fontResources: Record<string, PdfRef> = {};
   private readonly xobjects: Record<string, PdfRef> = {};
   private readonly states: Record<string, PdfRef> = {};
+  private readonly shadings: Record<string, PdfRef> = {};
   private readonly stateNames = new Map<string, string>();
   private readonly imageNames = new Map<string, string>();
   /** 字体文件 → 嵌入的字体 */
@@ -199,6 +206,7 @@ class PdfExporter {
     for (const fonts of this.outlineFonts.values()) for (const { ref, font } of fonts) font.write(writer, ref);
     writer.set(this.resourcesRef, {
       Font: this.fontResources,
+      Shading: this.shadings,
       XObject: this.xobjects,
       ExtGState: this.states,
     });
@@ -293,7 +301,11 @@ class PdfExporter {
       case 'group':
         break;
       case 'artboard':
-        if (node.fill) this.fillPath(content, this.outline(node), node.fill.color, paint);
+        if (node.fill?.type === 'gradient') {
+          this.fillGradient(content, this.outline(node), node.fill, this.c.geometry.localBounds(node), paint);
+        } else if (node.fill) {
+          this.fillPath(content, this.outline(node), node.fill.color, paint);
+        }
         break;
       case 'text':
         this.drawText(content, node, paint);
@@ -354,13 +366,19 @@ class PdfExporter {
    * 一组透明度和混合模式的资源名；都是默认值时返回 null。
    * @param always 默认值也要一个名字：同一段文字里前面设过半透明，后面要换回不透明时用
    */
-  private state(fillAlpha: number, strokeAlpha: number, blend: BlendMode, always = false): string | null {
+  private state(
+    fillAlpha: number,
+    strokeAlpha: number,
+    blend: BlendMode,
+    always = false,
+    mask?: PdfRef,
+  ): string | null {
     const ca = Math.round(Math.max(0, Math.min(1, fillAlpha)) * 1000) / 1000;
     const CA = Math.round(Math.max(0, Math.min(1, strokeAlpha)) * 1000) / 1000;
-    const plain = ca === 1 && CA === 1 && blend === 'normal';
+    const plain = ca === 1 && CA === 1 && blend === 'normal' && !mask;
     if (plain && !always) return null;
     if (!plain) this.transparent = true;
-    const key = `${ca}|${CA}|${blend}`;
+    const key = `${ca}|${CA}|${blend}|${mask?.id ?? ''}`;
     let name = this.stateNames.get(key);
     if (!name) {
       name = `G${this.stateNames.size + 1}`;
@@ -370,6 +388,7 @@ class PdfExporter {
         ca,
         CA,
         BM: pdfName(BLEND_NAMES[blend]),
+        SMask: mask ? { Type: pdfName('Mask'), S: pdfName('Luminosity'), G: mask } : undefined,
       });
     }
     return name;
@@ -414,7 +433,9 @@ class PdfExporter {
       return;
     }
     if (fill?.type === 'solid') this.fillPath(content, outline, fill.color, paint);
-    else if (fill?.type === 'image') this.drawImageFill(content, node, fill, outline, paint);
+    else if (fill?.type === 'gradient') {
+      this.fillGradient(content, outline, fill, this.c.geometry.localBounds(node), paint);
+    } else if (fill?.type === 'image') this.drawImageFill(content, node, fill, outline, paint);
     if (stroke) {
       content.save();
       const state = this.state(1, stroke.color.a * paint.opacity, paint.blend);
@@ -422,6 +443,69 @@ class PdfExporter {
       content.strokeColor(stroke.color).lineWidth(stroke.width).miterLimit(MITER_LIMIT).path(outline.data).stroke();
       content.restore();
     }
+  }
+
+  // ───────────── 渐变 ─────────────
+
+  /**
+   * 用渐变填充轮廓：裁成轮廓的形状，再用 PDF 的渐变（axial / radial shading）铺满。
+   * 渐变的几何直接写在节点的本地坐标里，和画布上一样。色标有透明度时，透明度另做一个同样的灰度渐变当软蒙版
+   */
+  private fillGradient(
+    content: ContentStream,
+    outline: { data: number[]; evenOdd: boolean },
+    fill: GradientFill,
+    bounds: Rect,
+    paint: Paint,
+  ): void {
+    if (outline.data.length === 0) return;
+    const stops = normalizeStops(fill.stops);
+    if (stops.length < 2) return;
+    const g = gradientGeometry(fill, bounds);
+    const coords =
+      fill.kind === 'radial' ? [g.x0, g.y0, 0, g.x0, g.y0, Math.max(g.radius, 1e-4)] : [g.x0, g.y0, g.x1, g.y1];
+    const degenerate = fill.kind === 'radial' ? g.radius < 1e-6 : Math.hypot(g.x1 - g.x0, g.y1 - g.y0) < 1e-6;
+    if (degenerate) {
+      this.fillPath(content, outline, stops[stops.length - 1]!.color, paint);
+      return;
+    }
+    const shading = (gray: boolean): PdfRef =>
+      this.writer.add({
+        ShadingType: fill.kind === 'radial' ? 3 : 2,
+        ColorSpace: pdfName(gray ? 'DeviceGray' : 'DeviceRGB'),
+        Coords: coords,
+        Function: stopFunction(stops, gray ? (c) => [c.a] : (c) => [c.r, c.g, c.b]),
+        Extend: [true, true],
+      });
+    const name = `Sh${++this.counter}`;
+    this.shadings[name] = shading(false);
+
+    let mask: PdfRef | undefined;
+    if (stops.some((s) => s.color.a < 1)) {
+      // 软蒙版：亮度就是透明度。蒙版在设置它那一刻的坐标系里画，也就是节点的本地坐标
+      const pad = Math.max(bounds.w, bounds.h, 1);
+      const alphaName = `Sh${++this.counter}`;
+      mask = this.writer.stream(
+        {
+          Type: pdfName('XObject'),
+          Subtype: pdfName('Form'),
+          BBox: [bounds.x - pad, bounds.y - pad, bounds.x + bounds.w + pad, bounds.y + bounds.h + pad],
+          Group: { Type: pdfName('Group'), S: pdfName('Transparency'), CS: pdfName('DeviceGray') },
+          Resources: { Shading: { [alphaName]: shading(true) } },
+        },
+        new ContentStream().raw(`/${alphaName} sh`).toBytes(),
+      );
+    }
+
+    content.save();
+    this.clipTo(content, outline);
+    const state = this.state(paint.opacity, 1, paint.blend, false, mask);
+    if (state) content.graphicsState(state);
+    // 椭圆的径向渐变：先裁好形状，再把坐标压扁，正圆的渐变画出来就是椭圆
+    const ellipse = radialEllipseMatrix(fill, bounds);
+    if (ellipse) content.transform(ellipse);
+    content.raw(`/${name} sh`);
+    content.restore();
   }
 
   // ───────────── 图片 ─────────────
@@ -941,6 +1025,39 @@ function decorationLines(ck: CanvasKit, run: SkGlyphRun, style: CharacterStyle):
     lines.push({ x0, x1, y: baseline + position + thickness / 2, thickness });
   }
   return lines;
+}
+
+/**
+ * 色标 → PDF 的函数：相邻两个色标之间是一段直线过渡（指数为 1 的插值函数），几段拼起来（拼接函数）。
+ * 第一个色标之前、最后一个之后延续首尾的颜色；两个色标在同一位置（硬过渡）就是两段的分界
+ */
+function stopFunction(stops: readonly GradientStop[], channels: (color: Color) => number[]): PdfDict {
+  const segment = (a: Color, b: Color): PdfDict => ({
+    FunctionType: 2,
+    Domain: [0, 1],
+    C0: channels(a),
+    C1: channels(b),
+    N: 1,
+  });
+  const pieces: { from: number; to: number; fn: PdfDict }[] = [];
+  const first = stops[0]!;
+  const last = stops[stops.length - 1]!;
+  if (first.offset > 0) pieces.push({ from: 0, to: first.offset, fn: segment(first.color, first.color) });
+  for (let i = 1; i < stops.length; i++) {
+    const a = stops[i - 1]!;
+    const b = stops[i]!;
+    if (b.offset > a.offset) pieces.push({ from: a.offset, to: b.offset, fn: segment(a.color, b.color) });
+  }
+  if (last.offset < 1) pieces.push({ from: last.offset, to: 1, fn: segment(last.color, last.color) });
+  if (pieces.length === 0) return segment(last.color, last.color);
+  if (pieces.length === 1) return pieces[0]!.fn;
+  return {
+    FunctionType: 3,
+    Domain: [0, 1],
+    Functions: pieces.map((p) => p.fn),
+    Bounds: pieces.slice(1).map((p) => p.from),
+    Encode: pieces.flatMap(() => [0, 1]),
+  };
 }
 
 function sameIds(a: ArrayLike<number>, b: ArrayLike<number>): boolean {

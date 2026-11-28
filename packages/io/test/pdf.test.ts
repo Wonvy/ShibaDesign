@@ -7,6 +7,7 @@ import {
   rotationOf,
   validateDocument,
   type Asset,
+  type GradientFill,
   type SceneNode,
   type TextNode,
 } from '@shiba/core';
@@ -143,6 +144,15 @@ const OBJECTS: Record<string, string | Uint8Array> = {
   shading:
     '<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 200 0] ' +
     '/Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> /Extend [true true] >>',
+  // 从黄到绿的径向渐变，圆心在原点、半径 30；通过图案的矩阵挪到 (60, 50)
+  radial:
+    '<< /ShadingType 3 /ColorSpace /DeviceRGB /Coords [0 0 0 0 0 30] ' +
+    '/Function << /FunctionType 2 /Domain [0 1] /C0 [1 1 0] /C1 [0 0.5 0] /N 1 >> /Extend [true true] >>',
+  glow: '<< /PatternType 2 /Shading {radial} /Matrix [1 0 0 1 60 50] >>',
+  // 从白到黑、半径 20 的径向渐变
+  whiteBlack:
+    '<< /ShadingType 3 /ColorSpace /DeviceRGB /Coords [0 0 0 0 0 20] ' +
+    '/Function << /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [0 0 0] /N 1 >> /Extend [true true] >>',
   // 透明组：两个互相重叠的方块
   pair: stream(
     '/Type /XObject /Subtype /Form /BBox [0 0 40 40] /Matrix [1 0 0 1 100 10] /Group << /S /Transparency >>',
@@ -173,7 +183,8 @@ const OBJECTS: Record<string, string | Uint8Array> = {
 const RESOURCES =
   '/Font << /F1 {helvetica} /HB {helveticaBold} /TR {times} /T3 {type3} /Song {song} >> ' +
   '/XObject << /Im {image} /Wide {wide} /Mask {mask} /Pair {pair} /Single {single} >> ' +
-  '/ExtGState << /Half {half} /Multiply {multiply} >> /Shading << /Sh {shading} >> /Properties << /Layer {layer} >>';
+  '/ExtGState << /Half {half} /Multiply {multiply} >> /Shading << /Sh {shading} /Radial {whiteBlack} >> /Pattern << /Glow {glow} >> ' +
+  '/Properties << /Layer {layer} >>';
 
 // ───────────── 页面和画板 ─────────────
 
@@ -308,14 +319,55 @@ describe('PDF 导入：形状', () => {
     expect(subpathsOf(path)).toHaveLength(2);
   });
 
-  it('渐变改成它的平均色，并记进报告', async () => {
+  it('线性渐变还原成渐变填充，几何换算到形状自己的坐标里', async () => {
     const result = await convert(`q ${roundedRect(20, 20, 100, 60, 8)} W n /Sh sh Q`);
     const [card] = result.on();
-    // 用圆角矩形裁剪后铺渐变：还原成一个圆角矩形，而不是一个被裁剪的大色块
+    // 用圆角矩形裁剪后铺渐变：还原成一个填了渐变的圆角矩形，而不是一个被裁剪的大色块
     expect(card).toMatchObject({ type: 'rect', size: [100, 60] });
     expect(radiusOf(card)).toBeCloseTo(8, 1);
-    expect(card).toMatchObject({ fill: { color: { r: 0.5, g: 0, b: 0.5, a: 1 } } });
-    expect(result.report.issues).toMatchObject({ gradients: 1, clips: 0 });
+    // 渐变从页面上 x = 0 到 200：相对这个 100 宽、从 x = 20 开始的形状，就是 -0.2 到 1.8
+    expect(card).toMatchObject({
+      fill: {
+        type: 'gradient',
+        kind: 'linear',
+        start: { x: -0.2, y: 1.333333 },
+        end: { x: 1.8, y: 1.333333 },
+        stops: [
+          { offset: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+          { offset: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+        ],
+      },
+    });
+    expect(result.report.issues).toMatchObject({ gradients: 0, clips: 0 });
+  });
+
+  it('图案里的径向渐变：矩阵相对页面，圆心和半径换算到形状上', async () => {
+    const result = await convert('/Pattern cs /Glow scn 30 20 60 60 re f');
+    const [shape] = result.on();
+    expect(shape).toMatchObject({
+      type: 'rect',
+      size: [60, 60],
+      fill: { type: 'gradient', kind: 'radial', start: { x: 0.5, y: 0.5 }, end: { x: 1, y: 0.5 } },
+    });
+    const { stops } = (shape as unknown as { fill: { stops: { color: unknown }[] } }).fill;
+    expect(stops[0]!.color).toEqual({ r: 1, g: 1, b: 0, a: 1 });
+    expect(result.report.issues.gradients).toBe(0);
+  });
+
+  it('压扁的径向渐变还原成椭圆；半透明编组里的渐变，透明度乘进色标', async () => {
+    // 径向渐变在宽 2 高 1 的坐标里画：圆变成横着的椭圆
+    const result = await convert(
+      'q 10 10 80 40 re W n 2 0 0 1 50 30 cm /Radial sh Q /Half gs 120 10 60 40 re W n /Sh sh',
+    );
+    const [oval, faded] = result.on() as (SceneNode & { fill: GradientFill })[];
+    expect(oval!.fill).toMatchObject({ kind: 'radial', start: { x: 0.5, y: 0.5 }, end: { x: 1, y: 0.5 }, aspect: 0.5 });
+    expect(faded!.fill.stops.every((stop) => Math.abs(stop.color.a - 0.5) < 1e-6)).toBe(true);
+  });
+
+  it('铺满整页的渐变变成画板的渐变背景', async () => {
+    const result = await convert('/Sh sh 0 0 1 rg 10 10 20 20 re f');
+    expect(result.boards[0]).toMatchObject({ fill: { type: 'gradient', kind: 'linear' } });
+    expect(result.on()).toHaveLength(1);
   });
 });
 

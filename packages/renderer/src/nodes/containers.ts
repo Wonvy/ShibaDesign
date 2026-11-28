@@ -1,5 +1,6 @@
 import type { ArtboardNode, GroupNode, PageNode } from '@shiba/core';
 import type { NodeTypeDef } from '../node-types';
+import { drawGradient } from '../gradient';
 import { toSkColor } from '../skia';
 
 export const pageType: NodeTypeDef<PageNode> = {
@@ -35,11 +36,16 @@ export const artboardType: NodeTypeDef<ArtboardNode> = {
     builder.delete();
     return path;
   },
-  draw(node, { ck, canvas, outline, paint, opacity, blendMode }) {
+  draw(node, ctx) {
+    const { ck, canvas, outline, paint, opacity, blendMode } = ctx;
     if (!node.fill) return;
     paint.setStyle(ck.PaintStyle.Fill);
-    paint.setColor(toSkColor(ck, node.fill.color, opacity));
     paint.setBlendMode(blendMode);
+    if (node.fill.type === 'gradient') {
+      drawGradient(node.fill, ctx);
+      return;
+    }
+    paint.setColor(toSkColor(ck, node.fill.color, opacity));
     canvas.drawPath(outline, paint);
   },
 };

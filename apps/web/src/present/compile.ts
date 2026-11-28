@@ -2,6 +2,7 @@ import {
   multiply,
   scheduleAnimations,
   slides,
+  gradientCss,
   toCssColor,
   transformRect,
   translation,
@@ -82,7 +83,11 @@ export async function compilePresentation(
     compiled.push({
       width,
       height,
-      background: slide.fill ? toCssColor(slide.fill.color) : 'transparent',
+      background: !slide.fill
+        ? 'transparent'
+        : slide.fill.type === 'gradient'
+          ? gradientCss(slide.fill, width, height)
+          : toCssColor(slide.fill.color),
       layers,
       steps: schedule.steps.map((step) => step.map(({ target, ...rest }) => ({ layer: target, ...rest }))),
       transition: slide.deck?.transition ?? { effect: 'none', duration: 0 },

@@ -10,3 +10,4 @@ export * from './validate';
 export * from './animation';
 export * from './text-appearance';
 export * from './text-spans';
+export * from './gradient';

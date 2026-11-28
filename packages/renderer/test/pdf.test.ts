@@ -9,12 +9,15 @@ import {
   GLYPH_LIBRARY_MIME,
   createNode,
   encodeGlyphLibrary,
+  gradientColorAt,
   rgba,
   setCharacterStyle,
   solid,
   textAppearanceBasis,
   type ArtboardNode,
   type DocumentData,
+  type GradientFill,
+  type GradientStop,
   type ImageFill,
   type SceneNode,
   type TextNode,
@@ -438,6 +441,83 @@ describe('导出 PDF', () => {
     // 去色之后红色变成灰色
     expect(desaturated[0]).toBe(desaturated[1]);
     expect(desaturated[1]).toBe(desaturated[2]);
+  });
+
+  it('渐变写成 PDF 原生的渐变：线性、径向、画板背景，带透明度的色标读回来还是同样的渐变', async () => {
+    const env = setup();
+    const linear = (stops: GradientStop[]) => ({
+      type: 'gradient' as const,
+      kind: 'linear' as const,
+      start: { x: 0, y: 0.5 },
+      end: { x: 1, y: 0.5 },
+      stops,
+    });
+    env.store.transact('bg', (tx) =>
+      tx.update(env.board.id, {
+        fill: linear([
+          { offset: 0, color: rgba(1, 1, 1) },
+          { offset: 1, color: rgba(0.8, 0.8, 1) },
+        ]),
+      }),
+    );
+    env.add(
+      createNode('rect', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 20, 20],
+        size: [200, 100],
+        cornerRadius: 0,
+        fill: linear([
+          { offset: 0, color: rgba(1, 0, 0) },
+          { offset: 0.5, color: rgba(0, 1, 0) },
+          { offset: 1, color: rgba(0, 0, 1) },
+        ]),
+        stroke: null,
+      }),
+    );
+    env.add(
+      createNode('ellipse', {
+        ...env.on(),
+        transform: [1, 0, 0, 1, 250, 50],
+        size: [100, 100],
+        fill: {
+          type: 'gradient',
+          kind: 'radial',
+          start: { x: 0.5, y: 0.5 },
+          end: { x: 1, y: 0.5 },
+          stops: [
+            { offset: 0, color: rgba(1, 1, 0, 0) },
+            { offset: 1, color: rgba(1, 0.5, 0, 1) },
+          ],
+        },
+        stroke: null,
+      }),
+    );
+
+    const { ops, bytes } = await exportAndOpen(env);
+    expect(ops.fnArray.filter((fn) => fn === pdfjs.OPS.shadingFill).length).toBeGreaterThanOrEqual(3);
+
+    const back = await reimport(bytes);
+    expect(back.result.report.issues).toMatchObject({ gradients: 0, softMasks: 0 });
+    expect(back.board).toMatchObject({ fill: { type: 'gradient', kind: 'linear' } });
+    const [rect, ellipse] = back.items as (SceneNode & { fill: GradientFill })[];
+    expect(rect).toMatchObject({
+      type: 'rect',
+      fill: { kind: 'linear', start: { x: 0, y: 0.5 }, end: { x: 1, y: 0.5 } },
+    });
+    const quarter = gradientColorAt(rect!.fill.stops, 0.25);
+    expect([quarter.r, quarter.g, quarter.b]).toEqual([
+      expect.closeTo(0.5, 1),
+      expect.closeTo(0.5, 1),
+      expect.closeTo(0, 1),
+    ]);
+    // 透明度写成软蒙版，读回来又乘回色标里
+    expect(ellipse).toMatchObject({
+      type: 'ellipse',
+      fill: { kind: 'radial', start: { x: 0.5, y: 0.5 }, end: { x: 1, y: 0.5 } },
+    });
+    expect(gradientColorAt(ellipse!.fill.stops, 0).a).toBeCloseTo(0, 1);
+    expect(gradientColorAt(ellipse!.fill.stops, 0.5).a).toBeCloseTo(0.5, 1);
+    expect(gradientColorAt(ellipse!.fill.stops, 1).a).toBeCloseTo(1, 1);
   });
 
   it('不知道怎么写成矢量的节点画成图片放进去', async () => {

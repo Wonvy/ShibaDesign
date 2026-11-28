@@ -104,7 +104,38 @@ export const NO_ADJUSTMENTS: ImageAdjustments = {
   blur: 0,
 };
 
-export type Fill = SolidFill | ImageFill;
+export const GRADIENT_KINDS = ['linear', 'radial'] as const;
+/** linear：线性渐变；radial：径向渐变 */
+export type GradientKind = (typeof GRADIENT_KINDS)[number];
+
+export interface GradientStop {
+  /** 位置，0 到 1 */
+  offset: number;
+  color: Color;
+}
+
+/**
+ * 渐变填充。起点终点按节点外框的相对位置记（0 到 1，可以超出），形状缩放时渐变跟着缩放；
+ * 但渐变本身在节点的本地坐标里画：线性渐变的色带总是垂直于起点到终点的连线，径向渐变总是正圆。
+ * 这和 PDF、SVG 的渐变一一对应，导入导出时不失真。见 gradient.ts
+ */
+export interface GradientFill {
+  type: 'gradient';
+  kind: GradientKind;
+  /** 线性：起点；径向：圆心 */
+  start: { x: number; y: number };
+  /** 线性：终点；径向：圆周上的一点，到圆心的距离就是半径 */
+  end: { x: number; y: number };
+  /**
+   * 径向渐变压扁成椭圆：垂直于圆心到 end 方向的半径，是 end 方向半径的多少倍。省略表示 1，正圆。
+   * 设计软件里常把径向渐变拉成椭圆，导入 PDF 时用得上
+   */
+  aspect?: number;
+  /** 色标，至少两个，按位置从小到大。颜色在相邻色标之间直线过渡，透明度和颜色分开过渡 */
+  stops: readonly GradientStop[];
+}
+
+export type Fill = SolidFill | ImageFill | GradientFill;
 
 export interface Stroke {
   color: Color;
@@ -155,7 +186,8 @@ export interface SlideDeck {
 
 export interface ArtboardNode extends BaseNode {
   type: 'artboard';
-  fill: SolidFill | null;
+  /** 背景：纯色或渐变 */
+  fill: SolidFill | GradientFill | null;
   /** 有这个字段就是一页幻灯片；order 是幻灯片顺序的分数索引 */
   deck: SlideDeck | null;
 }

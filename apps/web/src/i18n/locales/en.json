@@ -93,7 +93,10 @@
       "blendMode": "Blend mode",
       "add": "Add",
       "remove": "Remove",
-      "rotation": "Rotation"
+      "rotation": "Rotation",
+      "fillSolid": "Solid",
+      "fillGradient": "Gradient",
+      "fillImage": "Image"
     },
     "blend": {
       "normal": "Normal",
@@ -332,6 +335,15 @@
         "fallbackText": "text without embedded fonts ×{{count}} (default font used)",
         "images": "unreadable images ×{{count}}"
       }
+    },
+    "gradient": {
+      "kind": "Gradient type",
+      "linear": "Linear",
+      "radial": "Radial",
+      "reverse": "Reverse",
+      "stop": "Color stop",
+      "addStop": "Click the bar to add a stop; drag a stop to move it",
+      "removeStop": "Remove stop"
     }
   }
 }

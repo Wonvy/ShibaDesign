@@ -1,5 +1,8 @@
 import {
   AssetStore,
+  IDENTITY,
+  applyToPoint,
+  normalizeStops,
   DOCUMENT_VERSION,
   GLYPH_LIBRARY_MIME,
   GLYPH_PATH_ARITY,
@@ -15,12 +18,14 @@ import {
   rgba,
   solid,
   type Asset,
+  type ArtboardNode,
   type BlendMode,
   type CharacterStyle,
   type Color,
   type DocumentData,
   type Fill,
   type GlyphRun,
+  type GradientFill,
   type ImageFill,
   type Matrix,
   type NodeId,
@@ -53,6 +58,7 @@ import {
   type PathData,
   type PdfClip,
   type PdfGlyph,
+  type PdfGradient,
   type PdfGroupItem,
   type PdfImageItem,
   type PdfImageSource,
@@ -115,6 +121,51 @@ interface Library {
 function sameColor(a: Color, b: Color): boolean {
   const close = (x: number, y: number): boolean => Math.abs(x - y) < 1e-3;
   return close(a.r, b.r) && close(a.g, b.g) && close(a.b, b.b) && close(a.a, b.a);
+}
+
+/**
+ * PDF 的渐变 → 节点的渐变填充。渐变的几何先换到节点的本地坐标，再按节点外框换成相对位置。
+ * 径向渐变：我们的是从圆心开始的正圆，PDF 的是两个圆之间的过渡。两个圆同心时把色标按半径重新排就完全一样；
+ * 圆心不同（焦点偏移）时近似成以外圆为准的同心圆。节点没有面积、或者坐标算不出来时返回 null
+ */
+function gradientFill(gradient: PdfGradient, transform: Matrix, size: readonly [number, number]): GradientFill | null {
+  const inverse = invert(transform);
+  const [w, h] = size;
+  if (!inverse || !(w > 0) || !(h > 0)) return null;
+  const m = multiply(inverse, gradient.matrix);
+  const unit = (x: number, y: number): { x: number; y: number } => {
+    const [lx, ly] = applyToPoint(m, x, y);
+    return { x: fine(lx / w), y: fine(ly / h) };
+  };
+  let stops = gradient.stops.map((s) => ({ offset: s.offset, color: s.color }));
+  let start: { x: number; y: number };
+  let end: { x: number; y: number };
+  let aspect: number | undefined;
+  if (gradient.kind === 'radial') {
+    // 正圆经过线性变换是椭圆：长短轴的长度和方向就是变换的奇异值和奇异向量
+    const [a, b, c, d] = m;
+    const p = a * a + c * c;
+    const q = a * b + c * d;
+    const r = b * b + d * d;
+    const spread = Math.sqrt(((p - r) / 2) ** 2 + q * q);
+    const major = Math.sqrt(Math.max(0, (p + r) / 2 + spread));
+    const minor = Math.sqrt(Math.max(0, (p + r) / 2 - spread));
+    const angle = Math.atan2(2 * q, p - r) / 2;
+    const radius = gradient.r1 * major;
+    const [cx, cy] = applyToPoint(m, gradient.x1, gradient.y1);
+    start = { x: fine(cx / w), y: fine(cy / h) };
+    end = { x: fine((cx + radius * Math.cos(angle)) / w), y: fine((cy + radius * Math.sin(angle)) / h) };
+    if (major > 0 && minor / major < 0.999) aspect = fine(minor / major);
+    const { r0, r1 } = gradient;
+    if (r0 > 0 && r1 > r0) stops = stops.map((s) => ({ ...s, offset: fine((r0 + s.offset * (r1 - r0)) / r1) }));
+  } else {
+    start = unit(gradient.x0, gradient.y0);
+    end = unit(gradient.x1, gradient.y1);
+  }
+  const values = [start.x, start.y, end.x, end.y];
+  if (!values.every((v) => Number.isFinite(v) && Math.abs(v) < MAX_COORDINATE)) return null;
+  const fill: GradientFill = { type: 'gradient', kind: gradient.kind, start, end, stops: normalizeStops(stops) };
+  return aspect === undefined ? fill : { ...fill, aspect };
 }
 
 function isFiniteData(data: ArrayLike<number>): boolean {
@@ -291,10 +342,12 @@ export class PdfDocumentBuilder {
     // 很多 PDF（演示软件导出的尤其如此）先画一个铺满整页的矩形当底色：把它变成画板的背景色，
     // 而不是一个盖住整页、一点就选中的大矩形。我们自己导出的 PDF 也是这样写画板背景的
     let items = page.items;
-    let background = rgba(1, 1, 1);
+    let background: ArtboardNode['fill'] = solid(rgba(1, 1, 1));
     const first = items[0];
     if (first?.kind === 'path' && this.isBackground(first, width, height)) {
-      background = first.fill!;
+      // 铺满整页的渐变也能当背景：画板的背景支持渐变
+      const gradient = first.gradient ? gradientFill(first.gradient, IDENTITY, [width, height]) : null;
+      background = gradient ?? solid(first.fill!);
       items = items.slice(1);
     }
     const board = createNode('artboard', {
@@ -303,7 +356,7 @@ export class PdfDocumentBuilder {
       seq: ++this.pages,
       transform: [1, 0, 0, 1, this.nextX, 0],
       size: [width, height],
-      fill: solid(background),
+      fill: background,
       deck: { order: this.lastOrder, notes: '' },
     });
     this.nodes[board.id] = board;
@@ -316,6 +369,7 @@ export class PdfDocumentBuilder {
   /** 不透明、没有描边、正常混合、铺满整页的矩形 */
   private isBackground(item: PdfPathItem, width: number, height: number): boolean {
     if (!item.fill || item.fill.a < 1 || item.stroke || item.blendMode !== 'normal') return false;
+    if (item.gradient && item.gradient.stops.some((s) => s.color.a < 1)) return false;
     const covers = (box: Box): boolean =>
       box.x0 <= PAGE_SLACK && box.y0 <= PAGE_SLACK && box.x1 >= width - PAGE_SLACK && box.y1 >= height - PAGE_SLACK;
     if (item.clip && !(item.clip.exact && covers(item.clip))) return false;
@@ -440,7 +494,7 @@ export class PdfDocumentBuilder {
       }
     }
 
-    return this.shapeNode(data, fillRule, text === undefined, {
+    const node = this.shapeNode(data, fillRule, text === undefined, {
       parent,
       index: '',
       name: text === undefined ? undefined : cleanText(text).slice(0, MAX_NAME) || undefined,
@@ -448,6 +502,13 @@ export class PdfDocumentBuilder {
       fill: item.fill ? solid(item.fill) : null,
       stroke,
     });
+    // 渐变要等形状的位置和大小定下来，才能换算到它的本地坐标里
+    if (node && item.kind === 'path' && item.gradient && 'fill' in node) {
+      const fill = gradientFill(item.gradient, node.transform, node.size);
+      if (fill) return { ...node, fill } as Draft;
+      this.issues.gradients++;
+    }
+    return node;
   }
 
   /**

@@ -57,10 +57,33 @@ interface PdfItemBase {
   clip: PdfClip | null;
 }
 
+/**
+ * 线性或径向渐变（PDF 的 axial / radial shading）。几何留在渐变自己的坐标里，matrix 把它换到页面坐标，
+ * 生成节点时再换算到节点的本地坐标
+ */
+export interface PdfGradient {
+  kind: 'linear' | 'radial';
+  /** 色标，按位置排好；透明度已经乘上了当时的填充透明度 */
+  stops: { offset: number; color: Color }[];
+  /** 线性：起点、终点；径向：起始圆和结束圆的圆心 */
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** 径向：起始圆和结束圆的半径 */
+  r0: number;
+  r1: number;
+  /** 渐变坐标 → 页面坐标 */
+  matrix: Matrix;
+}
+
 export interface PdfPathItem extends PdfItemBase {
   kind: 'path';
   data: PathData;
+  /** 填充色；用渐变填充时是渐变的平均色，供不支持渐变的地方使用 */
   fill: Color | null;
+  /** 用渐变填充时的渐变 */
+  gradient?: PdfGradient;
   fillRule: 'nonzero' | 'evenodd';
   stroke: PdfStroke | null;
 }
@@ -172,7 +195,7 @@ export type PdfItem = PdfPathItem | PdfTextItem | PdfImageItem | PdfGroupItem;
 export interface PdfIssues {
   /** 被裁剪、但裁剪没有还原的对象 */
   clips: number;
-  /** 渐变填充，已改成它的平均色 */
+  /** 没法还原的渐变（网格渐变、函数渐变，以及描边和文字上的渐变），已改成它的平均色 */
   gradients: number;
   /** 图案填充，已去掉填充 */
   patterns: number;

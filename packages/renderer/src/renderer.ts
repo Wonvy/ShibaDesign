@@ -17,6 +17,7 @@ import {
 } from '@shiba/core';
 import { adjustmentMatrix } from './adjust';
 import type { GeometryCache } from './geometry';
+import { drawGradient } from './gradient';
 import { makeImageShader, type ImageCache } from './images';
 import type { DrawContext, NodeTypeDef, NodeTypeRegistry } from './node-types';
 import { toSkBlendMode, toSkColor, toSkMatrix } from './skia';
@@ -376,6 +377,9 @@ function drawShape(node: SceneNode, ctx: DrawContext): void {
     paint.setStyle(ck.PaintStyle.Fill);
     paint.setColor(toSkColor(ck, node.fill.color, ctx.opacity));
     canvas.drawPath(outline, paint);
+  } else if (node.fill?.type === 'gradient') {
+    paint.setStyle(ck.PaintStyle.Fill);
+    drawGradient(node.fill, ctx);
   } else if (node.fill?.type === 'image') {
     paint.setStyle(ck.PaintStyle.Fill);
     const image = ctx.images?.get(node.fill.assetId) ?? null;

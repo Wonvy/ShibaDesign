@@ -183,3 +183,48 @@ describe('导出 PNG', () => {
     expect(renderer.renderToPng('nope', 1)).toBeNull();
   });
 });
+
+describe('渐变填充', () => {
+  it('线性渐变从起点的颜色过渡到终点的颜色；径向渐变从圆心向外', async () => {
+    const { store, renderer } = await setup();
+    const stops = [
+      { offset: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+      { offset: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+    ];
+    const linear = store.transact('shape', (tx) =>
+      tx.create(
+        createNode('rect', {
+          parent: store.root.id,
+          index: store.indexOnTop(store.root.id),
+          seq: 1,
+          size: [100, 20],
+          fill: { type: 'gradient', kind: 'linear', start: { x: 0, y: 0.5 }, end: { x: 1, y: 0.5 }, stops },
+          stroke: null,
+          cornerRadius: 0,
+        }),
+      ),
+    );
+    const bitmap = renderer.renderToBitmap(linear.id, 100, 20)!;
+    expect(pixel(bitmap, 0, 10)[0]).toBeGreaterThan(245);
+    expect(pixel(bitmap, 99, 10)[2]).toBeGreaterThan(245);
+    const middle = pixel(bitmap, 50, 10);
+    expect(middle[0]).toBeGreaterThan(110);
+    expect(middle[0]).toBeLessThan(145);
+
+    const radial = store.transact('shape', (tx) =>
+      tx.create(
+        createNode('ellipse', {
+          parent: store.root.id,
+          index: store.indexOnTop(store.root.id),
+          seq: 1,
+          size: [40, 40],
+          fill: { type: 'gradient', kind: 'radial', start: { x: 0.5, y: 0.5 }, end: { x: 1, y: 0.5 }, stops },
+          stroke: null,
+        }),
+      ),
+    );
+    const disc = renderer.renderToBitmap(radial.id, 40, 40)!;
+    expect(pixel(disc, 20, 20)[0]).toBeGreaterThan(240);
+    expect(pixel(disc, 37, 20)[2]).toBeGreaterThan(200);
+  });
+});

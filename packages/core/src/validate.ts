@@ -1,3 +1,4 @@
+import { MAX_GRADIENT_STOPS } from './gradient';
 import { DOCUMENT_VERSION, type DocumentData } from './model';
 
 /**
@@ -144,7 +145,22 @@ function isFill(value: unknown): boolean {
     if (value.adjust === undefined) return true;
     return isObject(value.adjust) && Object.values(value.adjust).every(isFiniteNumber);
   }
+  if (value.type === 'gradient') {
+    if (typeof value.kind !== 'string' || !isPoint(value.start) || !isPoint(value.end)) return false;
+    if (value.aspect !== undefined && !(isFiniteNumber(value.aspect) && value.aspect > 0)) return false;
+    const stops = value.stops;
+    return (
+      Array.isArray(stops) &&
+      stops.length >= 2 &&
+      stops.length <= MAX_GRADIENT_STOPS &&
+      stops.every((s) => isObject(s) && isFiniteNumber(s.offset) && s.offset >= 0 && s.offset <= 1 && isColor(s.color))
+    );
+  }
   return false;
+}
+
+function isPoint(value: unknown): boolean {
+  return isObject(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y);
 }
 
 function isDeck(value: unknown): boolean {

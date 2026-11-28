@@ -93,7 +93,10 @@
       "blendMode": "混合模式",
       "add": "添加",
       "remove": "移除",
-      "rotation": "旋转"
+      "rotation": "旋转",
+      "fillSolid": "纯色",
+      "fillGradient": "渐变",
+      "fillImage": "图片"
     },
     "blend": {
       "normal": "正常",
@@ -332,6 +335,15 @@
         "fallbackText": "未内嵌字体的文字 {{count}} 段（已换成默认字体）",
         "images": "无法读取的图片 {{count}} 张"
       }
+    },
+    "gradient": {
+      "kind": "渐变类型",
+      "linear": "线性",
+      "radial": "径向",
+      "reverse": "反向",
+      "stop": "色标",
+      "addStop": "点击色条添加色标，拖动色标改位置",
+      "removeStop": "删除色标"
     }
   }
 }

@@ -4,17 +4,21 @@ import { useTranslation } from 'react-i18next';
 import {
   BLEND_MODES,
   IMAGE_FITS,
+  defaultGradient,
   hasShapeStyle,
   solid,
   type BlendMode,
   type Color,
   type Fill,
+  type GradientFill,
   type ImageFit,
+  type Rect,
   type SceneNode,
 } from '@shiba/core';
 import { DEFAULT_FILL, DEFAULT_STROKE, type Editor } from '@shiba/editor';
 import { pickImageFill } from '../files';
 import { ColorField, IconButton, NumberField } from '../ui/controls';
+import { GradientEditor } from './GradientEditor';
 import type { PanelProps } from './registry';
 
 /** 有填充的节点。文本的颜色可以按字设置，放在文本面板里改，这里不管 */
@@ -23,6 +27,14 @@ const hasFill = (node: SceneNode): node is Extract<SceneNode, { fill: unknown }>
 
 /** 能用图片作填充的节点：形状类。画板和文本目前只支持纯色 */
 const canHoldImage = (node: SceneNode): boolean => hasShapeStyle(node);
+
+type FillKind = Fill['type'];
+
+const FILL_LABELS: Record<FillKind, string> = {
+  solid: 'prop.fillSolid',
+  gradient: 'prop.fillGradient',
+  image: 'prop.fillImage',
+};
 
 const FIT_LABELS: Record<ImageFit, string> = {
   cover: 'image.fitCover',
@@ -92,47 +104,66 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
       </IconButton>
     );
 
+  /** 选中的每个节点按自己的外框算出新的渐变 */
+  const updateGradient = (next: (fill: GradientFill, bounds: Rect) => GradientFill, mergeKey?: string): void =>
+    editor.updateSelection(
+      'fill',
+      (node) =>
+        hasFill(node) && node.fill?.type === 'gradient'
+          ? ({ fill: next(node.fill, editor.geometry.localBounds(node)) } as { fill: Fill })
+          : null,
+      mergeKey,
+    );
+
+  /** 换填充的种类：纯色和渐变之间互换时保留颜色，换成图片时先选图片 */
+  const switchFill = (kind: FillKind): void => {
+    if (kind === fill?.type) return;
+    if (kind === 'image') {
+      void pickImageFill(editor);
+      return;
+    }
+    editor.updateSelection('fill', (node) => {
+      if (!hasFill(node)) return null;
+      const current = node.fill;
+      const color =
+        current?.type === 'solid'
+          ? current.color
+          : current?.type === 'gradient'
+            ? current.stops[0]!.color
+            : DEFAULT_FILL;
+      if (kind === 'solid') return { fill: solid(color) } as { fill: Fill };
+      const bounds = editor.geometry.localBounds(node);
+      return { fill: defaultGradient(color, 'linear', bounds.w, bounds.h) } as { fill: Fill };
+    });
+    seal();
+  };
+  const kinds: FillKind[] = imageAllowed ? ['solid', 'gradient', 'image'] : ['solid', 'gradient'];
+
   return (
     <div className="appearance">
       {fillable.length > 0 && (
         <div className="prop-row">
           <span className="prop-label">{t('prop.fill')}</span>
           <div className="prop-controls">
-            {fill?.type === 'solid' && (
+            {fill ? (
               <>
-                <ColorField
-                  label={t('prop.fill')}
-                  value={fill.color}
-                  onChange={(color) => setFill(solid(color), 'fill-color')}
-                  onCommit={seal}
-                />
-                {chooseImage(t('image.useAsFill'), <ImagePlus size={14} />)}
-                {removeFill}
-              </>
-            )}
-            {fill?.type === 'image' && (
-              <>
-                <AssetThumb editor={editor} assetId={fill.assetId} />
-                <select
-                  className="select"
-                  aria-label={t('image.fit')}
-                  value={fill.fit}
-                  onChange={(e) => {
-                    setFill({ ...fill, fit: e.target.value as ImageFit });
-                    seal();
-                  }}
-                >
-                  {IMAGE_FITS.map((fit) => (
-                    <option key={fit} value={fit}>
-                      {t(FIT_LABELS[fit])}
-                    </option>
+                <div className="segmented segmented-small" role="radiogroup" aria-label={t('prop.fill')}>
+                  {kinds.map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      role="radio"
+                      aria-checked={fill.type === kind}
+                      className={fill.type === kind ? 'is-active' : ''}
+                      onClick={() => switchFill(kind)}
+                    >
+                      {t(FILL_LABELS[kind])}
+                    </button>
                   ))}
-                </select>
-                {chooseImage(t('image.replace'), <Replace size={14} />)}
+                </div>
                 {removeFill}
               </>
-            )}
-            {!fill && (
+            ) : (
               <>
                 <IconButton
                   title={t('prop.add')}
@@ -146,6 +177,57 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
                 {chooseImage(t('image.useAsFill'), <ImagePlus size={14} />)}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {fill?.type === 'solid' && (
+        <div className="prop-row">
+          <span className="prop-label" />
+          <div className="prop-controls">
+            <ColorField
+              label={t('prop.fill')}
+              value={fill.color}
+              onChange={(color) => setFill(solid(color), 'fill-color')}
+              onCommit={seal}
+            />
+          </div>
+        </div>
+      )}
+
+      {fill?.type === 'gradient' && fillable[0] && (
+        <div className="prop-row">
+          <span className="prop-label" />
+          <GradientEditor
+            fill={fill}
+            bounds={editor.geometry.localBounds(fillable[0])}
+            update={updateGradient}
+            seal={seal}
+          />
+        </div>
+      )}
+
+      {fill?.type === 'image' && (
+        <div className="prop-row">
+          <span className="prop-label" />
+          <div className="prop-controls">
+            <AssetThumb editor={editor} assetId={fill.assetId} />
+            <select
+              className="select"
+              aria-label={t('image.fit')}
+              value={fill.fit}
+              onChange={(e) => {
+                setFill({ ...fill, fit: e.target.value as ImageFit });
+                seal();
+              }}
+            >
+              {IMAGE_FITS.map((fit) => (
+                <option key={fit} value={fit}>
+                  {t(FIT_LABELS[fit])}
+                </option>
+              ))}
+            </select>
+            {chooseImage(t('image.replace'), <Replace size={14} />)}
           </div>
         </div>
       )}

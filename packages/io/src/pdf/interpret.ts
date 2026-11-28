@@ -1,4 +1,13 @@
-import { BLEND_MODES, IDENTITY, multiply, parseHex, type BlendMode, type Color, type Matrix } from '@shiba/core';
+import {
+  BLEND_MODES,
+  IDENTITY,
+  gradientColorAt,
+  multiply,
+  parseHex,
+  type BlendMode,
+  type Color,
+  type Matrix,
+} from '@shiba/core';
 import { asAxisRect, boxContains, controlBounds, intersectBoxes, scaleOf, transformPath } from './geometry';
 import {
   CLOSE,
@@ -9,6 +18,7 @@ import {
   type PathData,
   type PdfClip,
   type PdfGlyph,
+  type PdfGradient,
   type PdfGroupItem,
   type PdfImageSource,
   type PdfItem,
@@ -75,12 +85,15 @@ export interface PdfViewport {
 
 type Paint =
   | { kind: 'color'; r: number; g: number; b: number }
-  | { kind: 'gradient'; r: number; g: number; b: number }
+  /** 渐变：平均色，以及能还原时的渐变本身（透明度还没乘） */
+  | { kind: 'gradient'; r: number; g: number; b: number; gradient: PdfGradient | null }
   | { kind: 'pattern' }
   | { kind: 'none' };
 
 interface State {
   ctm: Matrix;
+  /** 图案坐标的基准：页面开始时的坐标变换，在表单里是表单的坐标。图案渐变的矩阵相对它 */
+  base: Matrix;
   fill: Paint;
   stroke: Paint;
   fillAlpha: number;
@@ -89,6 +102,8 @@ interface State {
   lineWidth: number;
   dashed: boolean;
   softMask: boolean;
+  /** 软蒙版画出来的内容。只有"一个灰度渐变"这种能还原成渐变透明度的蒙版才用得上 */
+  mask: PdfItem[] | null;
   clip: PdfClip | null;
   font: PdfFont | null;
   fontSize: number;
@@ -155,7 +170,70 @@ function colorPaint(hex: unknown): Paint {
   return color ? { kind: 'color', r: color.r, g: color.g, b: color.b } : BLACK;
 }
 
-/** 渐变的平均色。模型里还没有渐变填充，先用一个最接近的纯色顶上 */
+/** 一个渐变最多留多少个色标。pdf.js 把渐变函数采样成色标，复杂的函数会有几百个 */
+const MAX_STOPS = 256;
+
+/**
+ * 读出线性、径向渐变：色标和几何。读不懂的（网格渐变、函数渐变）返回 null，用平均色顶上。
+ * 渐变两头不延伸时，pdf.js 在两头补一个透明色标，这里照样留着：透明的那一头正好就是"不延伸"
+ */
+function parseGradient(ir: unknown, matrix: Matrix): PdfGradient | null {
+  if (!Array.isArray(ir) || ir[0] !== 'RadialAxial' || !Array.isArray(ir[3])) return null;
+  const [, type, , rawStops, p0, p1, r0, r1] = ir as [
+    unknown,
+    unknown,
+    unknown,
+    unknown[],
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+  ];
+  if (!Array.isArray(p0) || !Array.isArray(p1)) return null;
+  const numbers = [p0[0], p0[1], p1[0], p1[1]];
+  if (!numbers.every((n) => typeof n === 'number' && Number.isFinite(n))) return null;
+  const stops: { offset: number; color: Color | null }[] = [];
+  for (const stop of rawStops) {
+    if (!Array.isArray(stop) || typeof stop[0] !== 'number' || !Number.isFinite(stop[0])) continue;
+    const color = typeof stop[1] === 'string' && stop[1] !== 'transparent' ? parseHex(stop[1]) : null;
+    stops.push({ offset: Math.min(1, Math.max(0, stop[0])), color });
+  }
+  // 透明色标借用旁边色标的颜色，只把透明度设成 0，免得过渡时混进黑色
+  const solid = stops.filter((s) => s.color);
+  if (solid.length === 0) return null;
+  const resolved = stops.map((s, i) => {
+    if (s.color) return { offset: s.offset, color: s.color };
+    const neighbor = stops.slice(i + 1).find((n) => n.color) ?? [...stops.slice(0, i)].reverse().find((n) => n.color);
+    return { offset: s.offset, color: { ...neighbor!.color!, a: 0 } };
+  });
+  resolved.sort((a, b) => a.offset - b.offset);
+  let kept = resolved;
+  if (kept.length > MAX_STOPS) {
+    const step = (kept.length - 1) / (MAX_STOPS - 1);
+    kept = Array.from({ length: MAX_STOPS }, (_, i) => resolved[Math.round(i * step)]!);
+  }
+  const radial = type === 'radial';
+  const radius = (value: unknown): number =>
+    typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+  return {
+    kind: radial ? 'radial' : 'linear',
+    stops: kept,
+    x0: numbers[0] as number,
+    y0: numbers[1] as number,
+    x1: numbers[2] as number,
+    y1: numbers[3] as number,
+    r0: radial ? radius(r0) : 0,
+    r1: radial ? radius(r1) : 0,
+    matrix,
+  };
+}
+
+function withAlpha(gradient: PdfGradient, alpha: number): PdfGradient {
+  if (alpha >= 1) return gradient;
+  return { ...gradient, stops: gradient.stops.map((s) => ({ ...s, color: { ...s.color, a: s.color.a * alpha } })) };
+}
+
+/** 渐变的平均色。没法还原成渐变的地方（文字、描边、网格渐变）用一个最接近的纯色顶上 */
 function shadingColor(ir: unknown): { r: number; g: number; b: number } | null {
   if (!Array.isArray(ir)) return null;
   if (ir[0] === 'RadialAxial' && Array.isArray(ir[3])) {
@@ -272,6 +350,8 @@ class Interpreter {
   private readonly crops = new WeakMap<PdfImageSource, Map<string, PdfImageSource | null>>();
   /** Type3 字形的轮廓，按字体和字形缓存；null 表示这个字形不能当普通字形处理 */
   private readonly type3Outlines = new Map<string, PathData | null>();
+  /** 最近一个软蒙版组画出来的内容，见 endGroup */
+  private lastMask: PdfItem[] | null = null;
 
   constructor(
     private readonly resources: PdfResources,
@@ -284,6 +364,7 @@ class Interpreter {
   private initialState(): State {
     return {
       ctm: this.viewport.transform,
+      base: this.viewport.transform,
       fill: BLACK,
       stroke: BLACK,
       fillAlpha: 1,
@@ -292,6 +373,7 @@ class Interpreter {
       lineWidth: 1,
       dashed: false,
       softMask: false,
+      mask: null,
       clip: null,
       font: null,
       fontSize: 0,
@@ -443,6 +525,7 @@ class Interpreter {
       this.save();
       if (a[0]) this.transform(toMatrix(a[0]));
       if (a[1]) this.clipBox(a[1]);
+      this.state.base = this.state.ctm;
     });
     on('paintFormXObjectEnd', () => this.restore());
     on('beginGroup', (a) => this.beginGroup(a[0] ?? {}));
@@ -456,6 +539,7 @@ class Interpreter {
       if (a[1]) this.clipBox(a[1]);
       if (a[2]) this.transform(toMatrix(a[2]));
       if (a[3]) this.transform(toMatrix(a[3]));
+      this.state.base = this.state.ctm;
     });
     on('endAnnotation', () => {
       const depth = this.annotations.pop();
@@ -507,16 +591,22 @@ class Interpreter {
       else if (key === 'CA') s.strokeAlpha = clamp01(value);
       else if (key === 'ca') s.fillAlpha = clamp01(value);
       else if (key === 'BM') s.blendMode = value === 'source-over' ? 'normal' : toBlendMode(value);
-      else if (key === 'SMask') s.softMask = Boolean(value);
-      else if (key === 'D') s.dashed = (value?.[0]?.length ?? 0) > 0;
+      else if (key === 'SMask') {
+        s.softMask = Boolean(value);
+        // 蒙版的内容在设置它之前已经作为一个蒙版组画过了，见 endGroup
+        s.mask = value ? this.lastMask : null;
+      } else if (key === 'D') s.dashed = (value?.[0]?.length ?? 0) > 0;
       else if (key === 'Font') this.setFont(value?.[0], value?.[1]);
     }
   }
 
   private patternPaint(args: Args): Paint {
     if (args[0] === 'Shading' && typeof args[1] === 'string') {
-      const color = shadingColor(this.resources.shading(args[1]));
-      if (color) return { kind: 'gradient', ...color };
+      const ir = this.resources.shading(args[1]);
+      const color = shadingColor(ir);
+      // 图案的矩阵相对图案坐标的基准（页面开始时，或者表单的坐标），不是当前的坐标变换
+      const matrix = args[2] ? multiply(this.state.base, toMatrix(args[2])) : this.state.base;
+      if (color) return { kind: 'gradient', ...color, gradient: parseGradient(ir, matrix) };
     }
     return { kind: 'pattern' };
   }
@@ -553,20 +643,52 @@ class Interpreter {
 
   // ───────────── 输出对象 ─────────────
 
-  private emit(item: PdfItem): void {
-    if (this.state.softMask) this.issues.softMasks++;
+  /** @param masked 软蒙版已经在这个对象上还原了（渐变的透明度），不算没还原 */
+  private emit(item: PdfItem, masked = false): void {
+    if (this.state.softMask && !masked) this.issues.softMasks++;
     this.current.push(item);
   }
 
-  private fillColor(): Color | null {
+  /**
+   * 渐变填充遇到软蒙版：蒙版要是一个几何完全相同的灰度渐变（很多软件就是这样写"渐变的透明度"的，我们自己导出也是），
+   * 把蒙版的亮度乘进色标的透明度里，就是一个带透明度的渐变。别的蒙版还原不了，返回 null
+   */
+  private maskedGradient(gradient: PdfGradient): PdfGradient | null {
+    const mask = this.state.mask;
+    const only = mask?.length === 1 ? mask[0] : null;
+    const m = only?.kind === 'path' ? only.gradient : undefined;
+    if (!m || m.kind !== gradient.kind) return null;
+    const close = (a: number, b: number): boolean => Math.abs(a - b) <= 1e-4 * Math.max(1, Math.abs(a), Math.abs(b));
+    const geometry = [m.x0, m.y0, m.x1, m.y1, m.r0, m.r1, ...m.matrix];
+    const expected = [gradient.x0, gradient.y0, gradient.x1, gradient.y1, gradient.r0, gradient.r1, ...gradient.matrix];
+    if (!geometry.every((v, i) => close(v, expected[i]!))) return null;
+    const offsets = [...new Set([...gradient.stops, ...m.stops].map((s) => s.offset))].sort((a, b) => a - b);
+    const stops = offsets.map((offset) => {
+      const color = gradientColorAt(gradient.stops, offset);
+      const lum = gradientColorAt(m.stops, offset);
+      const luminance = (0.3 * lum.r + 0.59 * lum.g + 0.11 * lum.b) * lum.a;
+      return { offset, color: { ...color, a: color.a * luminance } };
+    });
+    return { ...gradient, stops };
+  }
+
+  /** @param gradientOk 用到的地方能用渐变本身（形状的填充）：这时渐变不算没还原 */
+  private fillColor(gradientOk = false): Color | null {
     const { fill, fillAlpha } = this.state;
     if (fillAlpha <= 0 || fill.kind === 'none') return null;
     if (fill.kind === 'pattern') {
       this.issues.patterns++;
       return null;
     }
-    if (fill.kind === 'gradient') this.issues.gradients++;
+    if (fill.kind === 'gradient' && !(gradientOk && fill.gradient)) this.issues.gradients++;
     return { r: fill.r, g: fill.g, b: fill.b, a: fillAlpha };
+  }
+
+  /** 当前的填充是可以还原的渐变时，返回它（透明度乘好了） */
+  private fillGradient(): PdfGradient | null {
+    const { fill, fillAlpha } = this.state;
+    if (fill.kind !== 'gradient' || !fill.gradient || fillAlpha <= 0) return null;
+    return withAlpha(fill.gradient, fillAlpha);
   }
 
   private strokeStyle(): PdfStroke | null {
@@ -585,31 +707,56 @@ class Interpreter {
 
   private paintPath(data: PathData, fill: boolean, stroke: boolean, fillRule: 'nonzero' | 'evenodd'): void {
     if (!this.visible) return;
-    const fillColor = fill ? this.fillColor() : null;
+    const fillColor = fill ? this.fillColor(true) : null;
+    let gradient = fill ? this.fillGradient() : null;
     const strokeStyle = stroke ? this.strokeStyle() : null;
     if (!fillColor && !strokeStyle) return;
     const { blendMode, clip } = this.state;
-    this.emit({ kind: 'path', data, fill: fillColor, fillRule, stroke: strokeStyle, blendMode, clip });
+    const masked = gradient && this.state.softMask && !strokeStyle ? this.maskedGradient(gradient) : null;
+    if (masked) gradient = masked;
+    this.emit(
+      {
+        kind: 'path',
+        data,
+        fill: fillColor,
+        ...(gradient ? { gradient } : {}),
+        fillRule,
+        stroke: strokeStyle,
+        blendMode,
+        clip,
+      },
+      masked !== null,
+    );
   }
 
   /** 用渐变填满当前的裁剪范围 */
   private shadingFill(id: unknown): void {
     if (!this.visible || typeof id !== 'string') return;
-    const color = shadingColor(this.resources.shading(id));
+    const ir = this.resources.shading(id);
+    const color = shadingColor(ir);
     const alpha = this.state.fillAlpha;
     const page = this.pageBox();
     const box = this.state.clip ? intersectBoxes(this.state.clip, page) : page;
     if (!color || alpha <= 0 || box.x1 <= box.x0 || box.y1 <= box.y0) return;
-    this.issues.gradients++;
-    this.emit({
-      kind: 'path',
-      data: [MOVE, box.x0, box.y0, LINE, box.x1, box.y0, LINE, box.x1, box.y1, LINE, box.x0, box.y1, CLOSE],
-      fill: { ...color, a: alpha },
-      fillRule: 'nonzero',
-      stroke: null,
-      blendMode: this.state.blendMode,
-      clip: this.state.clip,
-    });
+    // sh 指令里渐变的坐标就是当前的用户空间
+    const parsed = parseGradient(ir, this.state.ctm);
+    let gradient = parsed ? withAlpha(parsed, alpha) : null;
+    if (!gradient) this.issues.gradients++;
+    const masked = gradient && this.state.softMask ? this.maskedGradient(gradient) : null;
+    if (masked) gradient = masked;
+    this.emit(
+      {
+        kind: 'path',
+        data: [MOVE, box.x0, box.y0, LINE, box.x1, box.y0, LINE, box.x1, box.y1, LINE, box.x0, box.y1, CLOSE],
+        fill: { ...color, a: alpha },
+        ...(gradient ? { gradient } : {}),
+        fillRule: 'nonzero',
+        stroke: null,
+        blendMode: this.state.blendMode,
+        clip: this.state.clip,
+      },
+      masked !== null,
+    );
   }
 
   private paintImage(
@@ -684,7 +831,12 @@ class Interpreter {
     if (!frame || this.containers.length < 2) return;
     const items = this.containers.pop()!;
     this.restore();
-    if (frame.mask || items.length === 0 || frame.opacity <= 0) return;
+    if (frame.mask) {
+      // 软蒙版的内容不画出来，留给接下来设置蒙版的那一步
+      this.lastMask = items;
+      return;
+    }
+    if (items.length === 0 || frame.opacity <= 0) return;
 
     const plain = frame.opacity >= 0.999 && frame.blendMode === 'normal';
     if (plain) {
@@ -1076,11 +1228,14 @@ function foldOpacity(item: PdfItem, opacity: number): PdfItem | null {
   if (item.kind === 'image') return { ...item, opacity: item.opacity * opacity };
   if (item.kind === 'group') return { ...item, opacity: item.opacity * opacity } satisfies PdfGroupItem;
   if (item.fill && item.stroke) return null;
-  return {
+  const folded = {
     ...item,
     fill: item.fill && { ...item.fill, a: item.fill.a * opacity },
     stroke: item.stroke && { ...item.stroke, color: { ...item.stroke.color, a: item.stroke.color.a * opacity } },
   };
+  // 渐变的透明度在色标上，也要一起乘
+  if (folded.kind === 'path' && folded.gradient) folded.gradient = withAlpha(folded.gradient, opacity);
+  return folded;
 }
 
 /** 解释一页的绘图指令，得到页面上的对象列表 */
