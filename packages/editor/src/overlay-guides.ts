@@ -1,4 +1,4 @@
-import { toCssColor, type Rect } from '@shiba/core';
+import { stripeBands, toCssColor, type Rect } from '@shiba/core';
 import type { Editor } from './editor';
 import { RULER_SIZE, rulerStep } from './guides';
 import { measureBetween, type SpacingMark } from './snap';
@@ -59,6 +59,61 @@ export function drawPixelGrid(ctx: CanvasRenderingContext2D, editor: Editor): vo
   }
   ctx.stroke();
   ctx.restore();
+}
+
+/**
+ * 画框和画板上的版面网格：列和行画成半透明的色带，方格画成细线，都裁在容器里面。
+ * 容器转过角度时网格跟着转（直接把容器的变换叠到画布上画）
+ */
+export function drawLayoutGrids(ctx: CanvasRenderingContext2D, editor: Editor): void {
+  if (!editor.view.layoutGrids) return;
+  const { zoom, x: camX, y: camY } = editor.camera;
+  for (const { node, world, grids } of editor.layoutGridContainers()) {
+    const [w, h] = node.size;
+    ctx.save();
+    // 本地坐标 → 屏幕坐标：相机乘上容器的世界变换
+    ctx.transform(
+      zoom * world[0],
+      zoom * world[1],
+      zoom * world[2],
+      zoom * world[3],
+      zoom * world[4] + camX,
+      zoom * world[5] + camY,
+    );
+    const scale = Math.hypot(zoom * world[0], zoom * world[1]) || 1;
+    ctx.beginPath();
+    ctx.rect(0, 0, w, h);
+    ctx.clip();
+    for (const grid of grids) {
+      const { r, g, b, a } = grid.color;
+      const rgb = `${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}`;
+      if (grid.type === 'grid') {
+        // 方格太密时（屏幕上不到 4 像素）不画
+        if (grid.size * scale < 4) continue;
+        // 细线比色带淡得看不清，透明度放大一些
+        ctx.strokeStyle = `rgba(${rgb}, ${Math.min(1, a * 3)})`;
+        ctx.lineWidth = 1 / scale;
+        ctx.beginPath();
+        for (let x = grid.size; x < w; x += grid.size) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+        }
+        for (let y = grid.size; y < h; y += grid.size) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+        }
+        ctx.stroke();
+        continue;
+      }
+      ctx.fillStyle = `rgba(${rgb}, ${a})`;
+      const columns = grid.type === 'columns';
+      for (const band of stripeBands(grid, columns ? w : h)) {
+        if (columns) ctx.fillRect(band.start, 0, band.size, h);
+        else ctx.fillRect(0, band.start, w, band.size);
+      }
+    }
+    ctx.restore();
+  }
 }
 
 export function drawGuides(ctx: CanvasRenderingContext2D, editor: Editor): void {

@@ -257,7 +257,13 @@ function toggle(key: ViewToggle): MenuItemDef {
 }
 
 function showItems(): MenuItemDef {
-  return sub('show', 'menu.show', () => [toggle('rulers'), toggle('guides'), toggle('pixelGrid'), toggle('sizeLabel')]);
+  return sub('show', 'menu.show', () => [
+    toggle('rulers'),
+    toggle('guides'),
+    toggle('pixelGrid'),
+    toggle('layoutGrids'),
+    toggle('sizeLabel'),
+  ]);
 }
 
 function snapItems(): MenuItemDef {
@@ -632,6 +638,7 @@ export function registerBuiltinMenus(): void {
     toggle('guides'),
     toggle('guidesLocked'),
     toggle('pixelGrid'),
+    toggle('layoutGrids'),
     toggle('sizeLabel'),
     snapItems(),
     cmd('guides.clearAll'),

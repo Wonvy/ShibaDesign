@@ -7,6 +7,7 @@ import { ComponentPanel, showComponentPanel } from './ComponentPanel';
 import { EffectsPanel } from './EffectsPanel';
 import { FramePanel } from './FramePanel';
 import { ImagePanel } from './ImagePanel';
+import { LayoutGridPanel } from './LayoutGridPanel';
 import { PathPanel } from './PathPanel';
 import { PolygonPanel } from './PolygonPanel';
 import { TextPanel } from './TextPanel';
@@ -76,6 +77,13 @@ export function registerBuiltinPanels(): void {
     component: TextPanel,
   });
   registerPanel({ id: 'appearance', titleKey: 'panel.appearance', order: 50, component: AppearancePanel });
+  registerPanel({
+    id: 'layoutGrids',
+    titleKey: 'panel.layoutGrids',
+    order: 57,
+    when: ({ nodes }) => nodes.every((n) => n.type === 'frame' || n.type === 'artboard'),
+    component: LayoutGridPanel,
+  });
   registerPanel({
     id: 'effects',
     titleKey: 'panel.effects',

@@ -42,9 +42,17 @@ export const setViewMode: Command<ViewMode> = {
 };
 
 export type ViewToggle =
-  'rulers' | 'guides' | 'guidesLocked' | 'pixelGrid' | 'sizeLabel' | 'snapObjects' | 'snapGuides' | 'snapPixels';
+  | 'rulers'
+  | 'guides'
+  | 'guidesLocked'
+  | 'pixelGrid'
+  | 'layoutGrids'
+  | 'sizeLabel'
+  | 'snapObjects'
+  | 'snapGuides'
+  | 'snapPixels';
 
-/** 打开或关掉一个视图选项（标尺 ⇧R、辅助线 ⌘;、锁定辅助线 ⌥⌘;、像素网格 ⌘'、吸附的几项） */
+/** 打开或关掉一个视图选项（标尺 ⇧R、辅助线 ⌘;、锁定辅助线 ⌥⌘;、像素网格 ⌘'、版面网格 ⇧G、吸附的几项） */
 export const toggleView: Command<ViewToggle> = {
   id: 'view.toggle',
   run(editor, key) {

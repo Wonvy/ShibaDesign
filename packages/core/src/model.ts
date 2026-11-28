@@ -2,6 +2,7 @@ import type { AutoLayout, ItemLayoutSizing } from './auto-layout';
 import type { Constraints } from './constraints';
 import type { CornerStyle } from './corners';
 import type { Effect } from './effects';
+import type { LayoutGrid } from './layout-grid';
 import type { ArrowHead } from './stroke';
 /**
  * 文档数据模型。
@@ -282,6 +283,8 @@ export interface ArtboardNode extends BaseNode {
   deck: SlideDeck | null;
   /** 画板上的辅助线，坐标相对画板。省略表示没有 */
   guides?: readonly Guide[];
+  /** 版面网格（列、行、方格），只在编辑时画。省略表示没有。见 layout-grid.ts */
+  layoutGrids?: readonly LayoutGrid[];
 }
 
 export interface RectNode extends BaseNode, ShapeStyle {
@@ -314,6 +317,8 @@ export interface FrameNode extends BaseNode, ShapeStyle {
   clip: boolean;
   /** 自动布局：里面的东西按方向自动排列。省略表示没有。见 auto-layout.ts */
   layout?: AutoLayout;
+  /** 版面网格，同画板 */
+  layoutGrids?: readonly LayoutGrid[];
 }
 
 /** 多边形（sides 条边）或星形（有 innerRatio 时，sides 个角）。画在外框里，见 polygon.ts */

@@ -62,7 +62,8 @@
       "notes": "Notes",
       "polygon": "Polygon",
       "frame": "Frame",
-      "effects": "Effects"
+      "effects": "Effects",
+      "layoutGrids": "Layout grids"
     },
     "slide": {
       "add": "New slide",
@@ -889,7 +890,8 @@
       "showSlide": "Unhide slide",
       "moveLayers": "Move layers",
       "reorderSlides": "Reorder slides",
-      "scaleUniform": "Scale proportionally"
+      "scaleUniform": "Scale proportionally",
+      "layoutGrids": "Layout grids"
     },
     "guide": {
       "vertical": "Vertical guide",
@@ -943,6 +945,26 @@
       "radius": "Radius",
       "add": "Add effect",
       "mixed": "The selected objects have different effects; editing applies this set to all of them."
+    },
+    "grids": {
+      "columns": "Columns",
+      "rows": "Rows",
+      "grid": "Grid",
+      "count": "Count",
+      "gutter": "Gutter",
+      "margin": "Margin",
+      "size": "Width",
+      "sizeHint": "Empty means stretch",
+      "cellSize": "Cell size",
+      "align": "Position",
+      "align_start": "Start",
+      "align_center": "Center",
+      "align_end": "End",
+      "color": "Grid color",
+      "add": "Add grid",
+      "show": "Show this grid",
+      "hide": "Hide this grid",
+      "type": "Grid type"
     }
   }
 }

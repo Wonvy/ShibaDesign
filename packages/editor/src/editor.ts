@@ -12,11 +12,13 @@ import {
   isEnterable,
   isInstanceCopy,
   hasShapeStyle,
+  stripeBands,
   rectContainsPoint,
   slides,
   unionRects,
   worldTransform,
   type ArtboardNode,
+  type LayoutGrid,
   type PageNode,
   type AssetMeta,
   type ImageFill,
@@ -667,11 +669,57 @@ export class Editor {
       }
     }
     const guides = view.snapGuides && view.guides ? this.worldGuides() : [];
+    // 显示着的版面网格：列和行的两条边也是吸附的候选
+    const gridLines = view.layoutGrids && view.snapGuides ? this.layoutGridLines() : [];
     return buildTargets({
       rects,
       boards,
-      guides: guides.map((g) => ({ axis: g.axis, value: g.value, range: g.range })),
+      guides: [...guides, ...gridLines].map((g) => ({ axis: g.axis, value: g.value, range: g.range })),
     });
+  }
+
+  /** 当前视图里带着版面网格的画板和画框（看得见的），以及它们的世界变换 */
+  layoutGridContainers(): { node: SceneNode; world: Matrix; grids: readonly LayoutGrid[] }[] {
+    const out: { node: SceneNode; world: Matrix; grids: readonly LayoutGrid[] }[] = [];
+    const { store } = this;
+    const visit = (node: SceneNode): void => {
+      if (!node.visible) return;
+      if (node.type === 'frame' || node.type === 'artboard') {
+        const grids = (node.layoutGrids ?? []).filter((g) => !g.hidden);
+        if (grids.length > 0) out.push({ node, world: worldTransform(store, node.id), grids });
+      }
+      if (node.type === 'artboard' || node.type === 'frame' || node.type === 'group' || node.type === 'page') {
+        store.children(node.id).forEach(visit);
+      }
+    };
+    for (const id of this.roots()) {
+      const root = store.get(id);
+      if (root) visit(root);
+    }
+    return out;
+  }
+
+  /** 版面网格里列和行的边，世界坐标。只算没转角度的容器（转过的容器的边不和画布对齐） */
+  private layoutGridLines(): { axis: 'x' | 'y'; value: number; range: Rect }[] {
+    const lines: { axis: 'x' | 'y'; value: number; range: Rect }[] = [];
+    for (const { node, world, grids } of this.layoutGridContainers()) {
+      if (Math.abs(world[1]) > 1e-9 || Math.abs(world[2]) > 1e-9 || world[0] <= 0 || world[3] <= 0) continue;
+      const range = this.geometry.worldBounds(node);
+      for (const grid of grids) {
+        if (grid.type === 'grid') continue;
+        const columns = grid.type === 'columns';
+        for (const band of stripeBands(grid, columns ? node.size[0] : node.size[1])) {
+          for (const edge of [band.start, band.start + band.size]) {
+            lines.push({
+              axis: columns ? 'x' : 'y',
+              value: columns ? world[4] + edge * world[0] : world[5] + edge * world[3],
+              range,
+            });
+          }
+        }
+      }
+    }
+    return lines;
   }
 
   /** 当前视图里的辅助线，换算到世界坐标：页面的辅助线画满画布，画板的辅助线只画在画板里 */

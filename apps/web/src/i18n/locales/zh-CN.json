@@ -62,7 +62,8 @@
       "notes": "备注",
       "polygon": "多边形",
       "frame": "画框",
-      "effects": "效果"
+      "effects": "效果",
+      "layoutGrids": "版面网格"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -889,7 +890,8 @@
       "showSlide": "取消隐藏幻灯片",
       "moveLayers": "移动图层",
       "reorderSlides": "调整幻灯片顺序",
-      "scaleUniform": "等比缩放"
+      "scaleUniform": "等比缩放",
+      "layoutGrids": "版面网格"
     },
     "guide": {
       "vertical": "竖辅助线",
@@ -943,6 +945,26 @@
       "radius": "半径",
       "add": "添加效果",
       "mixed": "选中的对象效果不一样，改了会统一成这一套。"
+    },
+    "grids": {
+      "columns": "列",
+      "rows": "行",
+      "grid": "方格",
+      "count": "数量",
+      "gutter": "间隔",
+      "margin": "边距",
+      "size": "宽度",
+      "sizeHint": "空着是拉伸",
+      "cellSize": "格子大小",
+      "align": "位置",
+      "align_start": "靠前",
+      "align_center": "居中",
+      "align_end": "靠后",
+      "color": "网格颜色",
+      "add": "添加网格",
+      "show": "显示这个网格",
+      "hide": "暂时关掉这个网格",
+      "type": "网格类型"
     }
   }
 }

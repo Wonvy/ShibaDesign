@@ -122,6 +122,7 @@ export const COMMAND_LABELS: Record<string, string> = {
   'view.toggle|"guides"': 'menu.guides',
   'view.toggle|"guidesLocked"': 'menu.lockGuides',
   'view.toggle|"pixelGrid"': 'menu.pixelGrid',
+  'view.toggle|"layoutGrids"': 'menu.layoutGrids',
   'view.toggle|"sizeLabel"': 'menu.sizeLabel',
   'view.toggle|"snapObjects"': 'menu.snapObjects',
   'view.toggle|"snapGuides"': 'menu.snapGuides',

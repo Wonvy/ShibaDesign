@@ -1,6 +1,7 @@
 import { isAutoLayout, isItemSizing } from './auto-layout';
 import { isConstraints } from './constraints';
 import { isEffectList } from './effects';
+import { isLayoutGridList } from './layout-grid';
 import { CORNER_STYLES } from './corners';
 import { CURVE_CHANNELS, MAX_CURVE_POINTS } from './curves';
 import { MAX_GRADIENT_STOPS } from './gradient';
@@ -220,6 +221,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       if (!isCornerLook(node)) fail('cornerStyle');
       if (typeof node.clip !== 'boolean') fail('clip');
       if (node.layout !== undefined && !isAutoLayout(node.layout)) fail('layout');
+      if (node.layoutGrids !== undefined && !isLayoutGridList(node.layoutGrids)) fail('layoutGrids');
       break;
     case 'polygon':
       if (!isFiniteNumber(node.sides) || node.sides < 3 || node.sides > 60) fail('sides');
@@ -242,6 +244,7 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
     case 'artboard':
       if (node.deck !== null && !isDeck(node.deck)) fail('deck');
       if (node.guides !== undefined && !isGuideList(node.guides)) fail('guides');
+      if (node.layoutGrids !== undefined && !isLayoutGridList(node.layoutGrids)) fail('layoutGrids');
       break;
     case 'group':
       if (node.mask !== undefined && typeof node.mask !== 'string') fail('mask');

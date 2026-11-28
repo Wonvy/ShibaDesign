@@ -37,6 +37,8 @@ export interface ViewOptions {
   guidesLocked: boolean;
   /** 放大到 800% 以上时画出像素格 */
   pixelGrid: boolean;
+  /** 显示画框和画板上的版面网格（显示时也吸附到列和行的边） */
+  layoutGrids: boolean;
   /** 选区框下面的"宽 × 高"标签 */
   sizeLabel: boolean;
   /** 吸附到对象和画板 */
@@ -52,6 +54,7 @@ export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
   guides: true,
   guidesLocked: false,
   pixelGrid: true,
+  layoutGrids: true,
   sizeLabel: true,
   snapObjects: true,
   snapGuides: true,

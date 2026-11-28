@@ -26,3 +26,4 @@ export * from './arrows';
 export * from './constraints';
 export * from './effects';
 export * from './auto-layout';
+export * from './layout-grid';

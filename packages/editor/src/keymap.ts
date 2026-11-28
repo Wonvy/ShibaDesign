@@ -142,6 +142,7 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
   { key: 'mod+;', command: 'view.toggle', args: 'guides' },
   { key: 'mod+alt+;', command: 'view.toggle', args: 'guidesLocked' },
   { key: "mod+'", command: 'view.toggle', args: 'pixelGrid' },
+  { key: 'shift+g', command: 'view.toggle', args: 'layoutGrids' },
 
   // 选择
   { key: 'enter', command: 'select.children' },

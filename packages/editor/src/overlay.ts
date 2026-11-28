@@ -19,6 +19,7 @@ import { drawCornerWidgets } from './corner-handles';
 import { drawMotionPaths } from './motion-handles';
 import {
   drawGuides,
+  drawLayoutGrids,
   drawMeasure,
   drawPill,
   drawPixelGrid,
@@ -105,6 +106,7 @@ export class Overlay {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     drawPixelGrid(ctx, editor);
+    drawLayoutGrids(ctx, editor);
     drawGuides(ctx, editor);
     this.drawArtboardLabels();
     this.drawHover();
