@@ -2,6 +2,7 @@ import {
   align,
   artboardOf,
   distribute,
+  isInstanceCopy,
   keyBetween,
   sortByZOrder,
   topLevelOnly,
@@ -67,16 +68,19 @@ export const distributeSelection: Command<DistributeMode> = {
 
 export type OrderMode = 'front' | 'forward' | 'backward' | 'back';
 
+/** 能调层序的对象：画板以外的；实例里的副本不行，它们的顺序跟着主组件 */
+const orderable = (node: SceneNode): boolean => node.type !== 'artboard' && !isInstanceCopy(node);
+
 export const orderSelection: Command<OrderMode> = {
   id: 'arrange.order',
-  enabled: (editor) => targets(editor).some((n) => n.type !== 'artboard'),
+  enabled: (editor) => targets(editor).some(orderable),
   run(editor, mode) {
     const { store } = editor;
     const selected = new Set(editor.selection);
     const ordered = sortByZOrder(
       store,
       targets(editor)
-        .filter((n) => n.type !== 'artboard')
+        .filter(orderable)
         .map((n) => n.id),
     );
     // 往上移时从最上面的开始处理，往下移时从最下面的开始，保持选中对象之间的相对顺序

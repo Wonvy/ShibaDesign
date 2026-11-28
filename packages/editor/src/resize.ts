@@ -197,6 +197,7 @@ function applyInWorld(
 /**
  * 把节点的内容相对它自己的原点缩放 (sx, sy)。
  * 只改几何（尺寸、锚点、子节点的位置），不往变换矩阵里塞缩放，这样描边粗细、圆角、字号都不会跟着变形。
+ * 组件实例例外，见下面的 group 分支。
  */
 function scaleContent(
   tx: Transaction,
@@ -238,6 +239,13 @@ function scaleContent(
       else tx.update(id, { size: orig.size, sizing: orig.sizing });
       break;
     case 'group':
+      // 组件实例整体缩放：写进自己的变换矩阵，描边、圆角、字号按比例变，里面的副本和主组件保持一样，照样同步
+      if (orig.instanceOf !== undefined) {
+        const current = tx.get(id) ?? orig;
+        tx.update(id, { transform: multiply(current.transform, scaling(sx, sy)) });
+        break;
+      }
+    // falls through
     case 'boolean':
       for (const child of store.children(id)) {
         const c = originals.get(child.id);

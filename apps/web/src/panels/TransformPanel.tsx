@@ -38,7 +38,7 @@ function tidyAngle(radians: number): number {
 /**
  * 位置、大小与旋转。
  * 位置是选区外接矩形的左上角；画板里的对象相对所在画板计算，和幻灯片软件的习惯一致。
- * 只选一个对象时，宽高是对象自己的宽高（不受旋转影响）；多选时是整体外接矩形的宽高。
+ * 只选一个对象时，宽高是对象自己的宽高（不受旋转影响，组件实例算上它的整体缩放）；多选时是整体外接矩形的宽高。
  */
 export function TransformPanel({ editor, nodes }: PanelProps): ReactNode {
   const { t } = useTranslation();
@@ -52,8 +52,11 @@ export function TransformPanel({ editor, nodes }: PanelProps): ReactNode {
   const board = first.type === 'artboard' ? null : artboardOf(store, first.id);
   const origin = board ? editor.geometry.worldBounds(board) : { x: 0, y: 0 };
   const ids = topLevelOnly(store, editor.selection);
-  const width = single ? single.box.w : bounds.w;
-  const height = single ? single.box.h : bounds.h;
+  // 只选一个对象时按它在画布上的实际大小显示：组件实例整体缩放过（缩放写在变换矩阵里），本地的宽高要乘上缩放
+  const scaleX = single ? Math.hypot(single.world[0], single.world[1]) || 1 : 1;
+  const scaleY = single ? Math.hypot(single.world[2], single.world[3]) || 1 : 1;
+  const width = single ? single.box.w * scaleX : bounds.w;
+  const height = single ? single.box.h * scaleY : bounds.h;
   const angle = single ? tidyAngle(rotationOf(single.world)) : 0;
 
   const moveBy = (dx: number, dy: number): void => {
@@ -64,7 +67,8 @@ export function TransformPanel({ editor, nodes }: PanelProps): ReactNode {
   const resizeTo = (w: number, h: number): void => {
     const originals = captureOriginals(store, ids, (node) => editor.textLayouts.get(node).width);
     store.transact('resize', (tx) => {
-      if (single) resizeLocal(tx, store, originals, single.id, single.box, { ...single.box, w, h });
+      if (single)
+        resizeLocal(tx, store, originals, single.id, single.box, { ...single.box, w: w / scaleX, h: h / scaleY });
       else resizeInWorld(tx, store, originals, ids, bounds, { ...bounds, w, h });
     });
     store.sealHistory();

@@ -32,6 +32,7 @@ import type { TextToggle } from '@shiba/editor';
 import { useEditorState } from '../editor/context';
 import { ColorField, IconButton, NumberField } from '../ui/controls';
 import type { PanelProps } from './registry';
+import { ColorStyleField, TextStyleRow } from './StylePickers';
 
 const ALIGN: { align: TextAlign; icon: LucideIcon; labelKey: string }[] = [
   { align: 'left', icon: TextAlignStart, labelKey: 'text.alignLeft' },
@@ -155,6 +156,7 @@ export function TextPanel({ editor, nodes }: PanelProps): ReactNode {
           {t(target.start < target.end ? 'text.scopeSelection' : caret ? 'text.scopeCaret' : 'text.scopeAll')}
         </p>
       )}
+      <TextStyleRow editor={editor} node={first} />
       {fontSelect('latin', t('text.fontLatin'))}
       {fontSelect('cjk', t('text.fontCjk'))}
 
@@ -191,9 +193,13 @@ export function TextPanel({ editor, nodes }: PanelProps): ReactNode {
       <div className="prop-row">
         <span className="prop-label">{t('text.color')}</span>
         <div className="prop-controls">
-          <ColorField
+          <ColorStyleField
+            editor={editor}
+            target="fill"
             label={t('text.color')}
             value={style.color ?? rgba(0, 0, 0)}
+            // 颜色样式管的是整段的颜色：在改一部分字时显示这几个字自己的颜色
+            linked={target ? undefined : first.fill?.colorStyle}
             onChange={(color) => setChars({ color }, { mergeKey: 'text-color' })}
             onCommit={sealHistory}
           />

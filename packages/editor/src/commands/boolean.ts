@@ -2,6 +2,7 @@ import {
   createNode,
   hasShapeStyle,
   invert,
+  isInstanceCopy,
   keysBetween,
   multiply,
   nextSeq,
@@ -17,12 +18,13 @@ import {
 import type { Editor } from '../editor';
 import { DEFAULT_FILL } from '../ops';
 import type { Command } from './command';
+import { structureEditable } from './group';
 
-/** 可以参与布尔运算的节点：矩形、椭圆、路径，以及别的布尔组 */
+/** 可以参与布尔运算的节点：矩形、椭圆、路径，以及别的布尔组。实例里的不行 */
 function operands(editor: Editor): SceneNode[] {
   const ids = topLevelOnly(editor.store, editor.selection);
   const nodes = sortByZOrder(editor.store, ids);
-  return nodes.every(hasShapeStyle) ? nodes : [];
+  return nodes.every(hasShapeStyle) && structureEditable(editor, nodes) ? nodes : [];
 }
 
 /**
@@ -73,13 +75,14 @@ export const createBoolean: Command<BooleanOp> = {
 /** 解散布尔组：子节点回到原来的层级，位置不变 */
 export const releaseBoolean: Command = {
   id: 'boolean.release',
-  enabled: (editor) => editor.selectedNodes().some((n) => n.type === 'boolean'),
+  enabled: (editor) => editor.selectedNodes().some((n) => n.type === 'boolean' && !isInstanceCopy(n)),
   run(editor) {
     const { store } = editor;
     const released: NodeId[] = [];
     store.transact('release', (tx) => {
       for (const group of editor.selectedNodes()) {
-        if (group.type !== 'boolean' || !group.parent) continue;
+        // 实例里的布尔组不能解散：实例的结构由主组件决定
+        if (group.type !== 'boolean' || !group.parent || isInstanceCopy(group)) continue;
         const siblings = store.children(group.parent);
         const above = siblings[siblings.findIndex((s) => s.id === group.id) + 1];
         const children = store.children(group.id);

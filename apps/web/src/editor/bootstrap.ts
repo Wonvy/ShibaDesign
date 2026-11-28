@@ -19,7 +19,7 @@ export async function createApp(): Promise<Editor> {
   registerFonts(editor.fonts);
 
   // 内核不产生给人看的文字，节点的默认名由界面层按当前语言生成
-  editor.labelOf = (node) => displayName(node, i18n.t.bind(i18n));
+  editor.labelOf = (node) => displayName(node, i18n.t.bind(i18n), store);
   i18n.on('languageChanged', () => editor.requestRender());
   subscribeTheme(() => editor.setTheme(currentTheme().canvas));
   enableDraftAutosave(store, assets);

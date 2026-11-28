@@ -39,7 +39,9 @@ export function Inspector(): ReactNode {
   return (
     <aside className="inspector">
       <div className="inspector-header">
-        {nodes.length === 1 ? displayName(nodes[0]!, t) : t('inspector.multiple', { count: nodes.length })}
+        {nodes.length === 1
+          ? displayName(nodes[0]!, t, editor.store)
+          : t('inspector.multiple', { count: nodes.length })}
       </div>
       {listPanels()
         .filter((panel) => panel.when?.(props) ?? true)

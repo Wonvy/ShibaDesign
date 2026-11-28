@@ -1,6 +1,8 @@
 import {
   Circle,
+  Component,
   Crop,
+  Diamond,
   Eye,
   EyeOff,
   Frame,
@@ -15,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { DocStore, NodeId, SceneNode } from '@shiba/core';
+import { isComponent, isInstance, type DocStore, type NodeId, type SceneNode } from '@shiba/core';
 import { isMaskNode } from '@shiba/editor';
 import { useEditor, useEditorState } from '../editor/context';
 import { displayName } from '../names';
@@ -46,6 +48,7 @@ function buildRows(store: DocStore, rootId: NodeId, depth = 0, out: Row[] = []):
   return out;
 }
 
+/** 图层列表。标题（和"资源"切换的标签）在 Sidebar 里 */
 export function LayersPanel(): ReactNode {
   const editor = useEditor();
   const { t } = useTranslation();
@@ -67,7 +70,7 @@ export function LayersPanel(): ReactNode {
     setRenaming(null);
     const name = value.trim();
     const node = editor.store.get(id);
-    if (!node || name === displayName(node, t)) return;
+    if (!node || name === displayName(node, t, editor.store)) return;
     editor.store.transact('rename', (tx) => tx.update(id, { name: name || undefined }));
     editor.store.sealHistory();
   };
@@ -78,74 +81,77 @@ export function LayersPanel(): ReactNode {
   };
 
   return (
-    <div className="panel layers">
-      <h2 className="panel-title">{t('panel.layers')}</h2>
-      <div className="panel-body">
-        {rows.length === 0 && <p className="empty-note">{t('layers.empty')}</p>}
-        {rows.map(({ node, depth }) => {
-          const isImage = 'fill' in node && node.fill?.type === 'image';
-          // 蒙版组和组里当蒙版的那个对象用自己的图标，一眼看出谁遮住谁
-          const isMask = isMaskNode(editor, node);
-          const Icon = isMask
-            ? SquareDashed
-            : node.type === 'group' && node.mask
-              ? Crop
-              : isImage
-                ? Image
-                : (ICONS[node.type] ?? Square);
-          const name = displayName(node, t);
-          return (
-            <div
-              key={node.id}
-              className={`layer-row${selected.has(node.id) ? ' is-selected' : ''}${node.visible ? '' : ' is-hidden'}`}
-              style={{ paddingLeft: 8 + depth * 14 }}
-            >
-              {renaming === node.id ? (
-                <input
-                  className="field-input layer-rename"
-                  defaultValue={name}
-                  autoFocus
-                  aria-label={t('layers.renameHint')}
-                  onFocus={(e) => e.target.select()}
-                  onBlur={(e) => rename(node.id, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.currentTarget.blur();
-                    if (e.key === 'Escape') setRenaming(null);
-                  }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="layer-main"
-                  title={t('layers.renameHint')}
-                  onClick={(e) => {
-                    if (e.shiftKey) {
-                      editor.select(
-                        selected.has(node.id) ? selection.filter((id) => id !== node.id) : [...selection, node.id],
-                      );
-                    } else {
-                      editor.select([node.id]);
-                    }
-                  }}
-                  onDoubleClick={() => setRenaming(node.id)}
-                >
-                  <Icon size={14} className="layer-icon" />
-                  <span className="layer-name">{name}</span>
-                </button>
-              )}
+    <div className="panel-body" role="tabpanel">
+      {rows.length === 0 && <p className="empty-note">{t('layers.empty')}</p>}
+      {rows.map(({ node, depth }) => {
+        const isImage = 'fill' in node && node.fill?.type === 'image';
+        // 蒙版组和组里当蒙版的那个对象用自己的图标，一眼看出谁遮住谁
+        const isMask = isMaskNode(editor, node);
+        const Icon = isMask
+          ? SquareDashed
+          : isComponent(node)
+            ? Component
+            : isInstance(node)
+              ? Diamond
+              : node.type === 'group' && node.mask
+                ? Crop
+                : isImage
+                  ? Image
+                  : (ICONS[node.type] ?? Square);
+        const name = displayName(node, t, editor.store);
+        // 主组件、实例和实例里的东西用组件色标出来
+        const tone = isComponent(node) || isInstance(node) || node.source !== undefined ? ' is-component' : '';
+        return (
+          <div
+            key={node.id}
+            className={`layer-row${selected.has(node.id) ? ' is-selected' : ''}${node.visible ? '' : ' is-hidden'}${tone}`}
+            style={{ paddingLeft: 8 + depth * 14 }}
+          >
+            {renaming === node.id ? (
+              <input
+                className="field-input layer-rename"
+                defaultValue={name}
+                autoFocus
+                aria-label={t('layers.renameHint')}
+                onFocus={(e) => e.target.select()}
+                onBlur={(e) => rename(node.id, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                  if (e.key === 'Escape') setRenaming(null);
+                }}
+              />
+            ) : (
               <button
                 type="button"
-                className="layer-eye"
-                title={node.visible ? t('action.hide') : t('action.show')}
-                aria-label={`${node.visible ? t('action.hide') : t('action.show')}: ${name}`}
-                onClick={() => toggleVisible(node)}
+                className="layer-main"
+                title={t('layers.renameHint')}
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    editor.select(
+                      selected.has(node.id) ? selection.filter((id) => id !== node.id) : [...selection, node.id],
+                    );
+                  } else {
+                    editor.select([node.id]);
+                  }
+                }}
+                onDoubleClick={() => setRenaming(node.id)}
               >
-                {node.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                <Icon size={14} className="layer-icon" />
+                <span className="layer-name">{name}</span>
               </button>
-            </div>
-          );
-        })}
-      </div>
+            )}
+            <button
+              type="button"
+              className="layer-eye"
+              title={node.visible ? t('action.hide') : t('action.show')}
+              aria-label={`${node.visible ? t('action.hide') : t('action.show')}: ${name}`}
+              onClick={() => toggleVisible(node)}
+            >
+              {node.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

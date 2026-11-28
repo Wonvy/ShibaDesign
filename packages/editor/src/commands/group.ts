@@ -1,6 +1,10 @@
 import {
+  breaksComponentRules,
   createNode,
+  detachInstance,
   invert,
+  isInstance,
+  isInstanceCopy,
   keysBetween,
   multiply,
   nextSeq,
@@ -14,10 +18,26 @@ import {
 import type { Editor } from '../editor';
 import type { Command } from './command';
 
-/** 可以编进组里的对象：除了画板和页面之外的一切，从下到上排好 */
+/**
+ * 可以编进组里的对象：除了画板和页面之外的一切，从下到上排好。
+ * 实例里的东西不能编组（实例的结构由主组件决定）；编组会把对象挪进最下面那个对象所在的容器，
+ * 挪进去违反组件规则的（比如把主组件自己的实例挪进主组件）也不行，这两种情况返回空列表
+ */
 export function groupMembers(editor: Editor): SceneNode[] {
   const ids = topLevelOnly(editor.store, editor.selection);
-  return sortByZOrder(editor.store, ids).filter((n) => n.type !== 'artboard' && n.type !== 'page');
+  const nodes = sortByZOrder(editor.store, ids).filter((n) => n.type !== 'artboard' && n.type !== 'page');
+  return structureEditable(editor, nodes) ? nodes : [];
+}
+
+/**
+ * 能不能把这些对象挪到最下面那个对象所在的容器里，再改它们的结构（编组、布尔运算、蒙版）
+ */
+export function structureEditable(editor: Editor, nodes: readonly SceneNode[]): boolean {
+  if (nodes.some(isInstanceCopy)) return false;
+  const parent = nodes[0]?.parent;
+  if (!parent) return true;
+  const movers = nodes.filter((n) => n.parent !== parent).map((n) => n.id);
+  return movers.length === 0 || !breaksComponentRules(editor.store, movers, parent);
 }
 
 /**
@@ -64,20 +84,24 @@ export const createGroup: Command = {
 /** 取消编组：成员回到组原来所在的层级，位置和样子不变（组的旋转会留在每个成员身上） */
 export const releaseGroup: Command = {
   id: 'group.release',
-  enabled: (editor) => editor.selectedNodes().some((n) => n.type === 'group'),
+  enabled: (editor) => editor.selectedNodes().some((n) => n.type === 'group' && !isInstanceCopy(n)),
   run(editor) {
     const { store } = editor;
     const released: NodeId[] = [];
     store.transact('ungroup', (tx) => {
-      for (const group of editor.selectedNodes()) {
-        if (group.type !== 'group' || !group.parent) continue;
-        const siblings = store.children(group.parent);
+      for (const selected of editor.selectedNodes()) {
+        if (selected.type !== 'group' || !selected.parent || isInstanceCopy(selected)) continue;
+        // 取消实例的编组：先分离成普通编组，里面的东西才能变成普通对象
+        if (isInstance(selected)) detachInstance(tx, store, selected.id);
+        const group = tx.get(selected.id)!;
+        const parentId = selected.parent;
+        const siblings = store.children(parentId);
         const above = siblings[siblings.findIndex((s) => s.id === group.id) + 1];
         const children = store.children(group.id);
         const indices = keysBetween(group.index, above?.index ?? null, children.length);
         children.forEach((child, i) => {
           tx.update(child.id, {
-            parent: group.parent,
+            parent: parentId,
             index: indices[i]!,
             transform: multiply(group.transform, child.transform),
           });

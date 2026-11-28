@@ -11,6 +11,7 @@
 import type { SlideAnimation, SlideTransition } from './animation';
 import type { ParagraphOverride } from './paragraphs';
 import type { StrokeCap, StrokeJoin } from './stroke';
+import type { ColorStyleDef, TextStyleDef } from './styles';
 
 export type NodeId = string;
 
@@ -49,6 +50,8 @@ export type BlendMode = (typeof BLEND_MODES)[number];
 export interface SolidFill {
   type: 'solid';
   color: Color;
+  /** 链接的颜色样式的 id，见 styles.ts。color 始终是样式当前的颜色，改样式时跟着改。省略表示没有链接 */
+  colorStyle?: string;
 }
 
 export const IMAGE_FITS = ['cover', 'contain', 'stretch'] as const;
@@ -181,6 +184,8 @@ export interface Stroke {
   dashOffset?: number;
   cap?: StrokeCap;
   join?: StrokeJoin;
+  /** 描边颜色链接的颜色样式，和 SolidFill.colorStyle 一样 */
+  colorStyle?: string;
 }
 
 export interface BaseNode {
@@ -203,6 +208,13 @@ export interface BaseNode {
   blendMode: BlendMode;
   visible: boolean;
   locked: boolean;
+  /**
+   * 组件实例里的副本：对应主组件（或嵌套的那一层）里的哪个节点。内容由那个节点决定，同步时照它改。
+   * 省略表示不是实例里的副本。见 components.ts
+   */
+  source?: NodeId;
+  /** 实例里的副本上改过的属性名：同步时保留自己的值，不跟主组件走。省略表示没改过 */
+  overrides?: readonly string[];
 }
 
 export interface ShapeStyle {
@@ -210,8 +222,15 @@ export interface ShapeStyle {
   stroke: Stroke | null;
 }
 
+/**
+ * 页面。文档的根节点是一个页面，文档级的数据也记在它上面：颜色样式和文字样式（见 styles.ts）。
+ */
 export interface PageNode extends BaseNode {
   type: 'page';
+  /** 颜色样式，按显示顺序。省略表示没有 */
+  colorStyles?: readonly ColorStyleDef[];
+  /** 文字样式，按显示顺序。省略表示没有 */
+  textStyles?: readonly TextStyleDef[];
 }
 
 export interface SlideDeck {
@@ -346,6 +365,8 @@ export interface TextNode extends BaseNode {
    * 有保真外观时，size 就是原文件里这段文字占的范围（自动宽度也一样）。
    */
   appearance?: TextAppearance;
+  /** 链接的文字样式的 id，见 styles.ts。style 始终是样式当前的值，改样式时跟着改。省略表示没有链接 */
+  textStyle?: string;
 }
 
 /**
@@ -389,6 +410,13 @@ export interface GroupNode extends BaseNode {
   type: 'group';
   /** 省略表示普通编组 */
   mask?: MaskMode;
+  /**
+   * 主组件：子节点就是组件的内容，所有实例照着它显示。见 components.ts。
+   * 组件和实例都是编组，渲染、导出、选中、缩放这些按编组处理的地方不用另外认它们
+   */
+  component?: boolean;
+  /** 组件实例：主组件的 id。子节点是主组件内容的副本（带 source），主组件改了跟着同步 */
+  instanceOf?: NodeId;
 }
 
 /** 节点类型表。其他模块可以通过声明合并扩展它 */

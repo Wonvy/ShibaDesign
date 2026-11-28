@@ -1,5 +1,7 @@
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
+import { syncComponents } from './components';
 import { DOCUMENT_VERSION, createNode, type DocumentData, type NodeId, type NodePatch, type SceneNode } from './model';
+import { syncStyles } from './styles';
 import { validateDocument } from './validate';
 
 /** 一个节点在一次修改前后的样子；创建时 before 为空，删除时 after 为空 */
@@ -26,6 +28,17 @@ interface HistoryEntry {
 }
 
 type Listener = (change: StoreChange) => void;
+
+/**
+ * 整理器：每次事务的 fn 执行完、记进撤销历史之前调用，在同一个事务里补上派生的修改，
+ * 比如改了颜色样式之后把所有链接它的对象一起改掉、改了主组件之后同步所有实例。
+ * 这样一次修改连同它带出来的修改是一步撤销；撤销、重做是整体换回快照，不再调用整理器。
+ * @param userPatches fn 自己做的修改（不含整理器补的），用来分辨哪些是用户改的
+ */
+export type Normalizer = (tx: Transaction, store: DocStore, userPatches: readonly Patch[]) => void;
+
+/** 内置的整理器，按顺序执行：先让样式落到对象上，再把主组件的变化同步给实例 */
+const BUILTIN_NORMALIZERS: readonly Normalizer[] = [syncStyles, syncComponents];
 
 const HISTORY_LIMIT = 200;
 
@@ -57,6 +70,15 @@ export class Transaction {
     this.record(id, before, after);
     this.nodes.set(id, after);
     return after;
+  }
+
+  /** 整个换掉一个节点（可以去掉字段、换类型）。id 必须不变 */
+  replace(node: SceneNode): SceneNode {
+    const before = this.nodes.get(node.id);
+    if (!before) throw new Error(`节点 ${node.id} 不存在`);
+    this.record(node.id, before, node);
+    this.nodes.set(node.id, node);
+    return node;
   }
 
   /** 删除节点及其所有后代 */
@@ -91,6 +113,7 @@ export class DocStore {
   private childrenCache: Map<NodeId, SceneNode[]> | null = null;
   private sealed = true;
   private _version = 0;
+  private normalizers: Normalizer[] = [...BUILTIN_NORMALIZERS];
 
   private constructor(data: DocumentData) {
     this.rootId = data.rootId;
@@ -186,6 +209,8 @@ export class DocStore {
     let result: R;
     try {
       result = fn(tx);
+      const userPatches = [...tx.patches.values()].filter((p) => p.before !== p.after).map((p) => ({ ...p }));
+      if (userPatches.length > 0) for (const normalize of this.normalizers) normalize(tx, this, userPatches);
     } catch (error) {
       this.apply(tx.patches.values(), 'before');
       throw error;
@@ -247,6 +272,14 @@ export class DocStore {
     this.sealed = true;
     this.emit({ patches: [...entry.patches.values()], source: 'redo' });
     return true;
+  }
+
+  /** 加一个整理器，排在已有的后面。返回取消的函数 */
+  addNormalizer(normalizer: Normalizer): () => void {
+    this.normalizers.push(normalizer);
+    return () => {
+      this.normalizers = this.normalizers.filter((n) => n !== normalizer);
+    };
   }
 
   subscribe(listener: Listener): () => void {

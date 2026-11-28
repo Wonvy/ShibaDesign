@@ -4,7 +4,7 @@ import { slides } from '@shiba/core';
 import type { Editor } from '@shiba/editor';
 import { CanvasHost } from './components/CanvasHost';
 import { Inspector } from './components/Inspector';
-import { LayersPanel } from './components/LayersPanel';
+import { Sidebar } from './components/Sidebar';
 import { SlideStrip } from './components/SlideStrip';
 import { TopBar } from './components/TopBar';
 import { createApp } from './editor/bootstrap';
@@ -43,7 +43,7 @@ function Workspace(): ReactNode {
       <div className="workspace">
         <aside className="sidebar">
           {viewMode === 'slides' && <SlideStrip />}
-          <LayersPanel />
+          <Sidebar />
         </aside>
         <CanvasHost />
         <Inspector />

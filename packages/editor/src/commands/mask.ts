@@ -1,4 +1,4 @@
-import { MASK_MODES, maskParts, type MaskMode, type SceneNode } from '@shiba/core';
+import { MASK_MODES, isInstance, maskParts, type MaskMode, type SceneNode } from '@shiba/core';
 import { isPlainShape } from '@shiba/renderer';
 import type { Editor } from '../editor';
 import type { Command } from './command';
@@ -9,8 +9,9 @@ import { groupMembers, groupNodes } from './group';
  * 创建时用最上面的那个对象当蒙版——形状盖在图片上面，再点"创建蒙版"，图片就被裁成这个形状，和 Illustrator 的剪切蒙版一样。
  */
 
+/** 选中的蒙版组。实例的蒙版方式跟着主组件，不能单独改，不算在内 */
 function maskGroups(editor: Editor): SceneNode[] {
-  return editor.selectedNodes().filter((n) => n.type === 'group' && n.mask);
+  return editor.selectedNodes().filter((n) => n.type === 'group' && n.mask && !(isInstance(n) && !n.source));
 }
 
 /** 新蒙版用什么模式：普通形状按轮廓裁剪（干净、导出时是矢量的）；文字、图片、编组按透明度遮 */

@@ -27,6 +27,7 @@ export type ThemeVar =
   | '--accent-soft'
   | '--accent-text'
   | '--danger'
+  | '--component'
   | '--shadow';
 
 export const THEMES: ThemeDef[] = [
@@ -46,6 +47,7 @@ export const THEMES: ThemeDef[] = [
       '--accent-soft': 'rgba(37, 99, 235, 0.12)',
       '--accent-text': '#ffffff',
       '--danger': '#d92d20',
+      '--component': '#7c3aed',
       '--shadow': '0 8px 28px rgba(15, 23, 42, 0.16)',
     },
     canvas: {
@@ -71,6 +73,7 @@ export const THEMES: ThemeDef[] = [
       '--accent-soft': 'rgba(91, 147, 255, 0.18)',
       '--accent-text': '#0b1220',
       '--danger': '#ff6b5e',
+      '--component': '#b197fc',
       '--shadow': '0 8px 28px rgba(0, 0, 0, 0.5)',
     },
     canvas: {

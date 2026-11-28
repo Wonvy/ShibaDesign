@@ -1,4 +1,13 @@
-import { cloneSubtree, keyBetween, nextSeq, topLevelOnly, translated, type NodeId, type NodeType } from '@shiba/core';
+import {
+  cloneSubtree,
+  isInstanceCopy,
+  keyBetween,
+  nextSeq,
+  topLevelOnly,
+  translated,
+  type NodeId,
+  type NodeType,
+} from '@shiba/core';
 import type { Editor } from '../editor';
 import { translateNode } from '../ops';
 import { pruneAnimations } from './animation';
@@ -21,29 +30,39 @@ export const redo: Command = {
   run: (editor) => void editor.store.redo(),
 };
 
+/**
+ * 删除选中的对象。实例里的东西删不掉（实例的结构由主组件决定），删除等于把它隐藏，
+ * 这是一项覆盖，重置实例就回来了
+ */
 export const deleteSelection: Command = {
   id: 'edit.delete',
   enabled: hasSelection,
   run(editor) {
     const ids = topLevelOnly(editor.store, editor.selection);
     editor.store.transact('delete', (tx) => {
-      ids.forEach((id) => tx.remove(id));
+      for (const id of ids) {
+        const node = tx.get(id);
+        if (!node) continue;
+        if (isInstanceCopy(node)) tx.update(id, { visible: false });
+        else tx.remove(id);
+      }
       pruneAnimations(tx, editor.store);
     });
     editor.store.sealHistory();
   },
 };
 
+/** 复制选中的对象。实例里的东西不能复制（会往实例里加东西），跳过 */
 export const duplicate: Command = {
   id: 'edit.duplicate',
-  enabled: hasSelection,
+  enabled: (editor) => editor.selectedNodes().some((n) => !isInstanceCopy(n)),
   run(editor) {
     const { store } = editor;
     const created: NodeId[] = [];
     store.transact('duplicate', (tx) => {
       for (const id of topLevelOnly(store, editor.selection)) {
         const source = store.get(id);
-        if (!source || !source.parent) continue;
+        if (!source || !source.parent || isInstanceCopy(source)) continue;
         if (source.type === 'artboard') {
           created.push(duplicateArtboard(editor, tx, source.id));
           continue;

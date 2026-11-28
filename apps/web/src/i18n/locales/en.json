@@ -45,7 +45,9 @@
       "image": "Image adjustments",
       "animation": "Animation",
       "mask": "Mask",
-      "path": "Path"
+      "path": "Path",
+      "assets": "Assets",
+      "component": "Component"
     },
     "slide": {
       "add": "New slide",
@@ -142,7 +144,9 @@
       "text": "Text",
       "image": "Image",
       "group": "Group",
-      "maskGroup": "Mask group"
+      "maskGroup": "Mask group",
+      "component": "Component",
+      "instance": "Instance"
     },
     "inspector": {
       "empty": "Nothing selected",
@@ -517,6 +521,47 @@
       "seconds": "s",
       "export": "Export",
       "cancel": "Cancel"
+    },
+    "component": {
+      "title": "Components",
+      "create": "Create component",
+      "empty": "Select objects and click \"Create component\" to reuse them from here",
+      "placeHint": "Click to place an instance in the middle, or drag it onto the canvas; double-click to rename",
+      "place": "Place an instance",
+      "main": "Main component",
+      "instances": "Instances: {{count}}",
+      "instanceOf": "Instance of \"{{name}}\"",
+      "missing": "The main component has been deleted",
+      "overrides": "{{count}} overridden, kept when the main component changes",
+      "goToMain": "Go to main component",
+      "reset": "Reset instance",
+      "resetItem": "Reset this layer",
+      "detach": "Detach instance",
+      "copyHint": "This layer is part of the instance \"{{name}}\": you can change its colors, text and visibility, and your changes are kept; adding, removing and ordering follow the main component.",
+      "findInMain": "Find in main component"
+    },
+    "style": {
+      "colors": "Color styles",
+      "texts": "Text styles",
+      "colorName": "Color {{n}}",
+      "textName": "Text {{n}}",
+      "addColor": "New color style (from the selected fill)",
+      "addText": "New text style from the selected text",
+      "addTextHint": "Select some text first",
+      "noColors": "No color styles yet",
+      "noTexts": "No text styles yet",
+      "applyHint": "Click to apply to the selection, double-click to rename",
+      "renameHint": "Double-click to rename",
+      "editColor": "Edit color",
+      "delete": "Delete style",
+      "redefine": "Update style from the selected text",
+      "pickColor": "Color styles",
+      "newFromColor": "New style from this color",
+      "linkedTo": "Linked to the color style \"{{name}}\": follows changes to the style",
+      "detach": "Detach style",
+      "textStyle": "Text style",
+      "none": "None",
+      "newFromText": "New text style from this text"
     }
   }
 }

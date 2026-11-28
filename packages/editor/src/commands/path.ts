@@ -5,6 +5,7 @@ import {
   createId,
   createNode,
   hasShapeStyle,
+  isInstanceCopy,
   keyBetween,
   keysBetween,
   multiply,
@@ -30,10 +31,13 @@ import type { Command } from './command';
  * 所以原来加在它上面的动画、和别的幻灯片之间的平滑切换都还接得上；整个替换是一步撤销。
  */
 
-/** 能做路径运算的形状：矩形、椭圆、钢笔路径、布尔组。布尔组里的运算对象不算，它们自己的描边本来就不画 */
+/**
+ * 能做路径运算的形状：矩形、椭圆、钢笔路径、布尔组。布尔组里的运算对象不算，它们自己的描边本来就不画。
+ * 实例里的也不算：这几个命令都会换掉对象或者新加对象，实例的结构由主组件决定
+ */
 function shapes(editor: Editor): Extract<SceneNode, { stroke: unknown }>[] {
   return editor.selectedNodes().filter((node): node is Extract<SceneNode, { stroke: unknown }> => {
-    if (!hasShapeStyle(node) || node.locked) return false;
+    if (!hasShapeStyle(node) || node.locked || isInstanceCopy(node)) return false;
     const parent = node.parent ? editor.store.get(node.parent) : undefined;
     return parent?.type !== 'boolean';
   });
@@ -44,7 +48,9 @@ function strokedShapes(editor: Editor): Extract<SceneNode, { stroke: unknown }>[
 }
 
 function selectedTexts(editor: Editor): TextNode[] {
-  return editor.selectedNodes().filter((node): node is TextNode => node.type === 'text' && !node.locked);
+  return editor
+    .selectedNodes()
+    .filter((node): node is TextNode => node.type === 'text' && !node.locked && !isInstanceCopy(node));
 }
 
 /**

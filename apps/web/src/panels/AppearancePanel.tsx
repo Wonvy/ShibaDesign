@@ -26,6 +26,7 @@ import { useEditorState } from '../editor/context';
 import { pickImageFill } from '../files';
 import { ColorField, IconButton, NumberField } from '../ui/controls';
 import { GradientEditor } from './GradientEditor';
+import { ColorStyleField } from './StylePickers';
 import type { PanelProps } from './registry';
 
 /** 有填充的节点。文本的颜色可以按字设置，放在文本面板里改，这里不管 */
@@ -252,9 +253,12 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
         <div className="prop-row">
           <span className="prop-label" />
           <div className="prop-controls">
-            <ColorField
+            <ColorStyleField
+              editor={editor}
+              target="fill"
               label={t('prop.fill')}
               value={fill.color}
+              linked={fill.colorStyle}
               onChange={(color) => setFill(solid(color), 'fill-color')}
               onCommit={seal}
             />
@@ -314,9 +318,12 @@ export function AppearancePanel({ editor, nodes }: PanelProps): ReactNode {
           <div className="prop-controls">
             {stroke ? (
               <>
-                <ColorField
+                <ColorStyleField
+                  editor={editor}
+                  target="stroke"
                   label={t('prop.stroke')}
                   value={stroke.color}
+                  linked={stroke.colorStyle}
                   onChange={(c) => patchStroke({ color: c }, 'stroke-color')}
                   onCommit={seal}
                 />

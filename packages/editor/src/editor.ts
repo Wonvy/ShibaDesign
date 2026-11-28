@@ -498,6 +498,46 @@ export class Editor {
     return [hit, ...ancestors(this.store, hit.id)].find((n) => n.parent === containerId) ?? null;
   }
 
+  /**
+   * 选中一个节点，并让它出现在视口里：幻灯片视图里切到它所在的那一页（不在幻灯片上时切回画布视图），
+   * 画布视图里它不在视口里时把它挪到中间，放不下时缩小到正好放下
+   */
+  reveal(id: NodeId): void {
+    const node = this.store.get(id);
+    if (!node) return;
+    if (this.state.viewMode === 'slides') {
+      const board = artboardOf(this.store, id);
+      if (board?.deck) this.setActiveArtboard(board.id);
+      else this.setViewMode('canvas');
+    }
+    this.select([id]);
+    if (this.state.viewMode !== 'canvas') return;
+    const bounds = this.geometry.worldBounds(node);
+    const topLeft = this.screenToWorld(0, 0);
+    const bottomRight = this.screenToWorld(this.viewport.width, this.viewport.height);
+    const visible =
+      bounds.x >= topLeft.x &&
+      bounds.y >= topLeft.y &&
+      bounds.x + bounds.w <= bottomRight.x &&
+      bounds.y + bounds.h <= bottomRight.y;
+    if (visible) return;
+    const fits =
+      bounds.w * this.camera.zoom <= this.viewport.width - FIT_PADDING * 2 &&
+      bounds.h * this.camera.zoom <= this.viewport.height - FIT_PADDING * 2;
+    if (!fits) {
+      this.zoomToFit(bounds);
+      return;
+    }
+    const { zoom } = this.camera;
+    this.autoFit = false;
+    this.camera = {
+      zoom,
+      x: this.viewport.width / 2 - (bounds.x + bounds.w / 2) * zoom,
+      y: this.viewport.height / 2 - (bounds.y + bounds.h / 2) * zoom,
+    };
+    this.requestRender();
+  }
+
   /** 新建对象时应该放进哪个容器：所在画板，否则是页面 */
   containerAt(world: Point): SceneNode {
     if (this.state.viewMode === 'slides') return this.activeArtboard ?? this.store.root;
@@ -713,7 +753,10 @@ export class Editor {
       ...ids.map((id) => this.fontsReady(id)),
     ]);
     // 字体加载完之后再取节点：等的这段时间里可能改过
-    const nodes = ids.map((id) => this.store.get(id)).filter((node): node is TextNode => node?.type === 'text');
+    // 实例里的文字不能换成路径：实例的结构由主组件决定
+    const nodes = ids
+      .map((id) => this.store.get(id))
+      .filter((node): node is TextNode => node?.type === 'text' && node.source === undefined);
     const results = await outlineTexts(
       { ck: this.ck, layouts: this.textLayouts, fonts: this.fonts, appearances: this.textAppearances },
       nodes,

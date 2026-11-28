@@ -45,7 +45,9 @@
       "image": "图片调整",
       "animation": "动画",
       "mask": "蒙版",
-      "path": "路径"
+      "path": "路径",
+      "assets": "资源",
+      "component": "组件"
     },
     "slide": {
       "add": "新建幻灯片",
@@ -142,7 +144,9 @@
       "text": "文本",
       "image": "图片",
       "group": "编组",
-      "maskGroup": "蒙版组"
+      "maskGroup": "蒙版组",
+      "component": "组件",
+      "instance": "实例"
     },
     "inspector": {
       "empty": "未选中对象",
@@ -517,6 +521,47 @@
       "seconds": "秒",
       "export": "导出",
       "cancel": "取消"
+    },
+    "component": {
+      "title": "组件",
+      "create": "创建组件",
+      "empty": "选中对象，点\"创建组件\"，就能在这里反复使用",
+      "placeHint": "单击放一个实例到画布中间，也可以拖到画布上；双击改名",
+      "place": "放一个实例",
+      "main": "主组件",
+      "instances": "{{count}} 个实例",
+      "instanceOf": "「{{name}}」的实例",
+      "missing": "主组件已经删掉了",
+      "overrides": "改过 {{count}} 项，主组件改了也保留",
+      "goToMain": "跳到主组件",
+      "reset": "重置实例",
+      "resetItem": "重置这一项",
+      "detach": "分离实例",
+      "copyHint": "这是实例「{{name}}」里的对象：颜色、文字、显示隐藏都可以改，改过的会保留；增删和顺序跟着主组件。",
+      "findInMain": "在主组件里找到它"
+    },
+    "style": {
+      "colors": "颜色样式",
+      "texts": "文字样式",
+      "colorName": "颜色 {{n}}",
+      "textName": "文字 {{n}}",
+      "addColor": "新建颜色样式（用选中对象的填充色）",
+      "addText": "用选中的文字新建文字样式",
+      "addTextHint": "先选中一段文字",
+      "noColors": "还没有颜色样式",
+      "noTexts": "还没有文字样式",
+      "applyHint": "单击套用到选中的对象，双击改名",
+      "renameHint": "双击改名",
+      "editColor": "改颜色",
+      "delete": "删除样式",
+      "redefine": "用选中的文字更新样式",
+      "pickColor": "颜色样式",
+      "newFromColor": "用这个颜色新建样式",
+      "linkedTo": "链接到颜色样式「{{name}}」：改样式时跟着变",
+      "detach": "断开样式",
+      "textStyle": "文字样式",
+      "none": "无",
+      "newFromText": "用这段文字新建文字样式"
     }
   }
 }

@@ -3,6 +3,7 @@ import { slideLayerOf } from '@shiba/editor';
 import { AnimationPanel } from './AnimationPanel';
 import { AppearancePanel } from './AppearancePanel';
 import { AlignPanel, BooleanPanel, MaskPanel, OrderPanel } from './ArrangePanels';
+import { ComponentPanel, showComponentPanel } from './ComponentPanel';
 import { ImagePanel } from './ImagePanel';
 import { PathPanel } from './PathPanel';
 import { TextPanel } from './TextPanel';
@@ -11,6 +12,13 @@ import { registerPanel } from './registry';
 
 /** 注册内置的属性面板。顺序由 order 决定 */
 export function registerBuiltinPanels(): void {
+  registerPanel({
+    id: 'component',
+    titleKey: 'panel.component',
+    order: 5,
+    when: ({ editor, nodes }) => showComponentPanel(editor, nodes),
+    component: ComponentPanel,
+  });
   registerPanel({ id: 'align', titleKey: 'panel.align', order: 10, component: AlignPanel });
   registerPanel({
     id: 'order',

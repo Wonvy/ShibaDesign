@@ -3,6 +3,7 @@ import { MAX_GRADIENT_STOPS } from './gradient';
 import { DOCUMENT_VERSION, TEXT_ALIGNS, type DocumentData } from './model';
 import { LIST_KINDS, MAX_LIST_LEVEL } from './paragraphs';
 import { MAX_DASH_SEGMENTS, STROKE_CAPS, STROKE_JOINS } from './stroke';
+import { MAX_STYLE_NAME, MAX_STYLES } from './styles';
 
 /**
  * 文档数据校验。文档可能来自用户打开的文件，是不可信输入：
@@ -60,7 +61,68 @@ export function validateDocument(data: unknown): DocumentData {
     for (const visited of path) reachesRoot.add(visited);
   }
 
+  checkComponents(nodes as Record<string, Record<string, unknown>>);
   return data as unknown as DocumentData;
+}
+
+/**
+ * 组件的规则（见 components.ts）：主组件不能放在主组件里；主组件里不能直接或间接出现自己的实例，
+ * 否则同步时会无限长下去
+ */
+function checkComponents(nodes: Record<string, Record<string, unknown>>): void {
+  const enclosing = (id: string | null): string | null => {
+    for (let current = id; current !== null;) {
+      const node = nodes[current]!;
+      if (node.component === true) return current;
+      current = node.parent as string | null;
+    }
+    return null;
+  };
+  /** 主组件 → 它里面的实例用到的组件 */
+  const uses = new Map<string, Set<string>>();
+  for (const [id, node] of Object.entries(nodes)) {
+    if (node.component === true && enclosing(node.parent as string | null) !== null) {
+      throw new DocumentError('badNode', `${id}: component inside component`);
+    }
+    if (typeof node.instanceOf !== 'string') continue;
+    const host = enclosing(node.parent as string | null);
+    if (host === null) continue;
+    let set = uses.get(host);
+    if (!set) uses.set(host, (set = new Set()));
+    set.add(node.instanceOf);
+  }
+  // 深度优先找环：0 没访问过，1 在当前路径上，2 查完了
+  const state = new Map<string, number>();
+  const visit = (id: string): void => {
+    state.set(id, 1);
+    for (const next of uses.get(id) ?? []) {
+      const s = state.get(next) ?? 0;
+      if (s === 1) throw new DocumentError('cycle', `component ${next}`);
+      if (s === 0) visit(next);
+    }
+    state.set(id, 2);
+  };
+  for (const id of uses.keys()) if (!state.has(id)) visit(id);
+}
+
+function isStringList(value: unknown, max: number): boolean {
+  return Array.isArray(value) && value.length <= max && value.every((v) => typeof v === 'string' && v.length <= 64);
+}
+
+function isStyleList(value: unknown, check: (style: Record<string, unknown>) => boolean): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length <= MAX_STYLES &&
+    value.every(
+      (s) =>
+        isObject(s) &&
+        typeof s.id === 'string' &&
+        s.id.length <= 64 &&
+        typeof s.name === 'string' &&
+        s.name.length <= MAX_STYLE_NAME &&
+        check(s),
+    )
+  );
 }
 
 function checkNode(id: string, node: Record<string, unknown>, nodes: Record<string, unknown>): void {
@@ -79,12 +141,14 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
   if (!isFiniteNumber(node.opacity)) fail('opacity');
   if (typeof node.blendMode !== 'string') fail('blendMode');
   if (typeof node.visible !== 'boolean' || typeof node.locked !== 'boolean') fail('visible/locked');
+  if (node.source !== undefined && typeof node.source !== 'string') fail('source');
+  if (node.overrides !== undefined && !isStringList(node.overrides, 100)) fail('overrides');
 
   if ('fill' in node && node.fill !== null && !isFill(node.fill)) fail('fill');
   if ('stroke' in node && node.stroke !== null) {
     const stroke = node.stroke;
     if (!isObject(stroke) || !isColor(stroke.color) || !isFiniteNumber(stroke.width)) fail('stroke');
-    const { dash, dashOffset, cap, join } = stroke as Record<string, unknown>;
+    const { dash, dashOffset, cap, join, colorStyle } = stroke as Record<string, unknown>;
     if (
       (dash !== undefined &&
         !(
@@ -94,7 +158,8 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
         )) ||
       (dashOffset !== undefined && !isFiniteNumber(dashOffset)) ||
       (cap !== undefined && !(STROKE_CAPS as readonly unknown[]).includes(cap)) ||
-      (join !== undefined && !(STROKE_JOINS as readonly unknown[]).includes(join))
+      (join !== undefined && !(STROKE_JOINS as readonly unknown[]).includes(join)) ||
+      (colorStyle !== undefined && typeof colorStyle !== 'string')
     ) {
       fail('stroke');
     }
@@ -115,23 +180,22 @@ function checkNode(id: string, node: Record<string, unknown>, nodes: Record<stri
       break;
     case 'group':
       if (node.mask !== undefined && typeof node.mask !== 'string') fail('mask');
+      if (node.component !== undefined && typeof node.component !== 'boolean') fail('component');
+      if (node.instanceOf !== undefined && typeof node.instanceOf !== 'string') fail('instanceOf');
+      if (node.component === true && node.instanceOf !== undefined) fail('component/instanceOf');
+      break;
+    case 'page':
+      if (node.colorStyles !== undefined && !isStyleList(node.colorStyles, (s) => isColor(s.color))) {
+        fail('colorStyles');
+      }
+      if (node.textStyles !== undefined && !isStyleList(node.textStyles, (s) => isTextStyle(s.style))) {
+        fail('textStyles');
+      }
       break;
     case 'text': {
       if (typeof node.text !== 'string' || node.text.length > MAX_TEXT_LENGTH) fail('text');
-      const style = node.style;
-      if (
-        !isObject(style) ||
-        !isObject(style.fontFamily) ||
-        typeof style.fontFamily.latin !== 'string' ||
-        typeof style.fontFamily.cjk !== 'string' ||
-        !isFiniteNumber(style.fontSize) ||
-        !isFiniteNumber(style.fontWeight) ||
-        !isFiniteNumber(style.lineHeight) ||
-        !isFiniteNumber(style.letterSpacing) ||
-        !['italic', 'underline', 'strikethrough'].every((k) => style[k] === undefined || typeof style[k] === 'boolean')
-      ) {
-        fail('style');
-      }
+      if (!isTextStyle(node.style)) fail('style');
+      if (node.textStyle !== undefined && typeof node.textStyle !== 'string') fail('textStyle');
       if (typeof node.align !== 'string' || typeof node.sizing !== 'string') fail('align/sizing');
       if (node.spans !== undefined && !isSpans(node.spans, (node.text as string).length)) fail('spans');
       if (node.paragraphs !== undefined && !isParagraphs(node.paragraphs, node.text as string)) fail('paragraphs');
@@ -168,13 +232,29 @@ function isCurves(value: unknown): boolean {
   });
 }
 
+function isTextStyle(style: unknown): boolean {
+  return (
+    isObject(style) &&
+    isObject(style.fontFamily) &&
+    typeof style.fontFamily.latin === 'string' &&
+    typeof style.fontFamily.cjk === 'string' &&
+    isFiniteNumber(style.fontSize) &&
+    isFiniteNumber(style.fontWeight) &&
+    isFiniteNumber(style.lineHeight) &&
+    isFiniteNumber(style.letterSpacing) &&
+    ['italic', 'underline', 'strikethrough'].every((k) => style[k] === undefined || typeof style[k] === 'boolean')
+  );
+}
+
 function isColor(value: unknown): boolean {
   return isObject(value) && [value.r, value.g, value.b, value.a].every(isFiniteNumber);
 }
 
 function isFill(value: unknown): boolean {
   if (!isObject(value)) return false;
-  if (value.type === 'solid') return isColor(value.color);
+  if (value.type === 'solid') {
+    return isColor(value.color) && (value.colorStyle === undefined || typeof value.colorStyle === 'string');
+  }
   if (value.type === 'image') {
     if (typeof value.assetId !== 'string' || typeof value.fit !== 'string') return false;
     for (const key of ['zoom', 'panX', 'panY']) {
