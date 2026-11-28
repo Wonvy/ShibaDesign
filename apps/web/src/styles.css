@@ -978,6 +978,26 @@ button {
   color: var(--text-dim);
 }
 
+/* ───────── 演讲者备注 ───────── */
+
+.slide-notes {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--panel-2);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.slide-notes:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
 /* ───────── 演示模式 ───────── */
 
 .presenter {
@@ -1003,11 +1023,16 @@ button {
   pointer-events: none;
 }
 
-.presenter-close {
+.presenter-actions {
   position: absolute;
   top: 12px;
   right: 12px;
   z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+
+.presenter-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1020,9 +1045,210 @@ button {
   opacity: 0.35;
 }
 
-.presenter-close:hover,
-.presenter-close:focus-visible {
+.presenter-button:hover,
+.presenter-button:focus-visible {
   opacity: 1;
+}
+
+/* ───────── 演讲者视图（单独的窗口，样式表从主窗口搬过去） ───────── */
+
+.presenter-view-body {
+  margin: 0;
+  overflow: hidden;
+  background: #121316;
+}
+
+.pv {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #121316;
+  color: #e8eaed;
+  font-size: 14px;
+}
+
+.pv-header,
+.pv-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pv-timer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pv-elapsed {
+  min-width: 4.5ch;
+  font-size: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pv-elapsed.is-paused {
+  color: #f0b429;
+}
+
+.pv-clock {
+  flex: 1;
+  color: #9aa0a9;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pv-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+
+.pv-icon:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.pv-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pv-exit,
+.pv-nav {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+
+.pv-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  font-size: 15px;
+}
+
+.pv-nav.is-primary {
+  margin-left: auto;
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.pv-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pv-main {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.pv-current,
+.pv-side,
+.pv-next,
+.pv-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.pv-side {
+  gap: 16px;
+}
+
+.pv-current {
+  justify-content: center;
+}
+
+.pv-next {
+  flex: none;
+}
+
+.pv-notes {
+  flex: 1;
+}
+
+.pv-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #9aa0a9;
+  font-size: 13px;
+}
+
+.pv-steps {
+  color: #6f7682;
+}
+
+.pv-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #000;
+}
+
+.pv-frame.is-clickable {
+  cursor: pointer;
+}
+
+/* 镜像播放器只用来看：点击交给外面的框，按键在窗口上统一处理 */
+.pv-player {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pv-end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa0a9;
+}
+
+.pv-notes-size {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.pv-notes-text {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: #1c1e22;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.pv-notes-empty {
+  color: #6f7682;
+  font-size: 14px;
 }
 
 /* ───────── 渐变编辑器 ───────── */

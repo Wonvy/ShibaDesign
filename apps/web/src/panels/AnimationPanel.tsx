@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, Repeat, Trash2 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ANIMATION_KINDS,
@@ -18,7 +18,7 @@ import {
   type SlideTransition,
   type TransitionEffect,
 } from '@shiba/core';
-import { slideLayerOf, type Editor } from '@shiba/editor';
+import { setSlideNotes, slideLayerOf, type Editor } from '@shiba/editor';
 import { displayName } from '../names';
 import { IconButton, NumberField, Section } from '../ui/controls';
 import { toast } from '../ui/toast';
@@ -236,7 +236,33 @@ export function AnimationPanel({ editor, nodes }: PanelProps): ReactNode {
   );
 }
 
-/** 没有选中任何对象时显示的幻灯片设置：这一页的切换效果，以及完整的动画列表 */
+/**
+ * 这一页的演讲者备注：演示时显示在演讲者视图里。打字时直接写进文档，一次编辑（从点进去到离开）是一步撤销
+ */
+function SlideNotes({ editor, slide }: { editor: Editor; slide: ArtboardNode }): ReactNode {
+  const { t } = useTranslation();
+  const mergeKey = useRef<string | null>(null);
+  const finish = (): void => {
+    if (!mergeKey.current) return;
+    mergeKey.current = null;
+    editor.store.sealHistory();
+  };
+  return (
+    <textarea
+      className="slide-notes"
+      aria-label={t('presenterView.notes')}
+      placeholder={t('presenterView.notesPlaceholder')}
+      value={slide.deck?.notes ?? ''}
+      onFocus={() => {
+        mergeKey.current = editor.newMergeKey('notes');
+      }}
+      onChange={(e) => setSlideNotes(editor, slide.id, e.target.value, mergeKey.current ?? undefined)}
+      onBlur={finish}
+    />
+  );
+}
+
+/** 没有选中任何对象时显示的幻灯片设置：这一页的切换效果、演讲者备注，以及完整的动画列表 */
 export function SlidePanel({ editor, slide }: { editor: Editor; slide: ArtboardNode }): ReactNode {
   const { t } = useTranslation();
   const transition = slide.deck?.transition ?? DEFAULT_TRANSITION;
@@ -301,6 +327,9 @@ export function SlidePanel({ editor, slide }: { editor: Editor; slide: ArtboardN
           )}
         </div>
         {transition.effect === 'smooth' && <p className="menu-hint smooth-hint">{t('transition.smoothHint')}</p>}
+      </Section>
+      <Section title={t('presenterView.notes')}>
+        <SlideNotes key={slide.id} editor={editor} slide={slide} />
       </Section>
       <Section title={t('panel.animation')}>
         <AnimationList editor={editor} slide={slide} highlight={new Set()} />

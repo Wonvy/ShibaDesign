@@ -185,6 +185,17 @@ export const drawAnimationPath: Command = {
   },
 };
 
+/**
+ * 改一页的演讲者备注。打字时每次输入调用一次，同一次编辑传同一个 mergeKey，合成一步撤销；编辑结束时调用方 sealHistory
+ */
+export function setSlideNotes(editor: Editor, slideId: NodeId, notes: string, mergeKey?: string): void {
+  const slide = slideById(editor.store, slideId);
+  if (!slide || slide.deck!.notes === notes) return;
+  editor.store.transact('slide notes', (tx) => tx.update(slide.id, { deck: { ...slide.deck!, notes } }), {
+    mergeKey,
+  });
+}
+
 /** 设置进入某一页时的切换效果；effect 为 none 时去掉这个字段 */
 export const setTransition: Command<{ slideId: NodeId; transition: SlideTransition }> = {
   id: 'slide.setTransition',

@@ -21,6 +21,8 @@ import type { PlayerLayer, PlayerSlide, PresentationData } from '@shiba/player';
 
 export interface CompiledPresentation {
   data: PresentationData;
+  /** 每一页对应的画板 id，和 data.slides 一一对应。演讲者视图按它读备注（备注不写进播放器的数据，导出的网页里没有） */
+  slideIds: NodeId[];
   /** 释放预览时创建的临时图片地址 */
   dispose(): void;
 }
@@ -78,6 +80,7 @@ export async function compilePresentation(
         );
 
   const compiled: PlayerSlide[] = [];
+  const slideIds: NodeId[] = [];
   let fonts = '';
   try {
     for (const slide of visibleSlides) {
@@ -118,6 +121,7 @@ export async function compilePresentation(
       const hidden = new Set(schedule.hiddenAtStart);
       for (const layer of layers) layer.hidden = hidden.has(layer.id);
 
+      slideIds.push(slide.id);
       compiled.push({
         width,
         height,
@@ -137,6 +141,7 @@ export async function compilePresentation(
   }
   return {
     data: { title, slides: compiled, fonts: fonts || undefined },
+    slideIds,
     dispose: () => urls.forEach((url) => URL.revokeObjectURL(url)),
   };
 }

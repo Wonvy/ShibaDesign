@@ -143,3 +143,28 @@ describe('文档校验', () => {
     expect(() => validateDocument(documentWith([1, 2]))).toThrow(/badNode/);
   });
 });
+
+describe('备注的校验', () => {
+  it('备注只能是文字', () => {
+    const store = DocStore.create();
+    store.transact('board', (tx) =>
+      tx.create(
+        createNode('artboard', {
+          parent: store.root.id,
+          index: 'a0',
+          seq: 1,
+          size: [100, 100],
+          fill: null,
+          deck: { order: 'a0', notes: '提示' },
+        }),
+      ),
+    );
+    const data = JSON.parse(JSON.stringify(store.toJSON()));
+    expect(() => validateDocument(data)).not.toThrow();
+    const board = Object.values(data.nodes).find((n) => (n as { type: string }).type === 'artboard') as {
+      deck: Record<string, unknown>;
+    };
+    board.deck.notes = { html: '<b>x</b>' };
+    expect(() => validateDocument(data)).toThrow(/badNode/);
+  });
+});

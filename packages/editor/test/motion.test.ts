@@ -217,3 +217,21 @@ describe('钢笔工具（和画动作路径共用一套画法）', () => {
     expect(editor.geometry.worldBounds(path)).toMatchObject({ x: 300, y: 500, w: 100, h: 20 });
   });
 });
+
+describe('演讲者备注', () => {
+  it('打字时连续写进文档，一次编辑是一步撤销；内容没变时不写', async () => {
+    const { setSlideNotes } = await import('../src');
+    const { editor, store, slide } = setup();
+    const key = editor.newMergeKey('notes');
+    setSlideNotes(editor, slide().id, '第', key);
+    setSlideNotes(editor, slide().id, '第一', key);
+    setSlideNotes(editor, slide().id, '第一点', key);
+    store.sealHistory();
+    expect(slide().deck!.notes).toBe('第一点');
+    const version = store.version;
+    setSlideNotes(editor, slide().id, '第一点');
+    expect(store.version).toBe(version);
+    store.undo();
+    expect(slide().deck!.notes).toBe('');
+  });
+});

@@ -211,7 +211,9 @@ function isPoint(value: unknown): boolean {
 
 function isDeck(value: unknown): boolean {
   if (!isObject(value) || typeof value.order !== 'string') return false;
-  const { transition, animations } = value;
+  const { transition, animations, notes } = value;
+  // 备注会显示在演讲者视图里：只能是文字，长度有上限
+  if (notes !== undefined && (typeof notes !== 'string' || notes.length > MAX_TEXT_LENGTH)) return false;
   if (transition !== undefined) {
     if (!isObject(transition) || typeof transition.effect !== 'string' || !isFiniteNumber(transition.duration)) {
       return false;
